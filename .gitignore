@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Generated plugin registrant files (flutter pub get/run)
+linux/flutter/generated_plugin_registrant.*
+linux/flutter/generated_plugins.cmake
+macos/Flutter/GeneratedPluginRegistrant.*
+windows/flutter/generated_plugin_registrant.*
+windows/flutter/generated_plugins.cmake
+**/flutter/ephemeral/
