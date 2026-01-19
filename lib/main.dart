@@ -120,13 +120,23 @@ class MyApp extends StatelessWidget {
       bodyColor: const Color(0xFFEFE7D8),
       displayColor: const Color(0xFFF5EEDA),
     );
+    final scaledTextTheme = textTheme.copyWith(
+      bodySmall: textTheme.bodySmall?.copyWith(fontSize: 13.5),
+      bodyMedium: textTheme.bodyMedium?.copyWith(fontSize: 15.5),
+      bodyLarge: textTheme.bodyLarge?.copyWith(fontSize: 17),
+      titleSmall: textTheme.titleSmall?.copyWith(fontSize: 15),
+      titleMedium: textTheme.titleMedium?.copyWith(fontSize: 17.5),
+      titleLarge: textTheme.titleLarge?.copyWith(fontSize: 20),
+      headlineSmall: textTheme.headlineSmall?.copyWith(fontSize: 24),
+      headlineMedium: textTheme.headlineMedium?.copyWith(fontSize: 28),
+    );
 
     return MaterialApp(
       title: 'TCG Tracker',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: colorScheme,
-        textTheme: textTheme,
+        textTheme: scaledTextTheme,
         scaffoldBackgroundColor: colorScheme.background,
         cardColor: const Color(0xFF171411),
         appBarTheme: const AppBarTheme(
@@ -2654,108 +2664,106 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             : () => _showCardActions(entry),
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: _cardTintDecoration(context, entry),
-                            child: Row(
-                              children: [
-                                _buildSetIcon(entry.setCode),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleMedium,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
+                          child: Stack(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: _cardTintDecoration(context, entry),
+                                child: Row(
+                                  children: [
+                                    _buildSetIcon(entry.setCode),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Expanded(
-                                            child: Text(
-                                              entry.setName.isNotEmpty
-                                                  ? entry.setName
-                                                  : entry.setCode
-                                                      .toUpperCase(),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color:
-                                                        const Color(0xFFBFAE95),
-                                                  ),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
+                                          Text(
+                                            entry.name,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .titleMedium,
                                           ),
-                                          if (entry.rarity
-                                              .trim()
-                                              .isNotEmpty) ...[
-                                            const SizedBox(width: 8),
-                                            _raritySquare(entry.rarity),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              _formatRarity(entry.rarity),
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: const Color(
-                                                        0xFFE9C46A),
-                                                  ),
-                                            ),
-                                          ],
+                                          const SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  entry.setName.isNotEmpty
+                                                      ? entry.setName
+                                                      : entry.setCode
+                                                          .toUpperCase(),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: const Color(
+                                                            0xFFBFAE95),
+                                                      ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (entry.rarity
+                                                  .trim()
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(width: 8),
+                                                _raritySquare(entry.rarity),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  _rarityInitial(entry.rarity),
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: const Color(
+                                                            0xFFE9C46A),
+                                                      ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         ],
                                       ),
+                                    ),
+                                    if (isMissing)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF1C1713),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                          border: Border.all(
+                                              color: const Color(0xFF3A2F24)),
+                                        ),
+                                        child: Text(
+                                          'Missing',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall,
+                                        ),
+                                      ),
+                                    if (widget.isSetCollection) ...[
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        tooltip: 'Add one',
+                                        icon: const Icon(
+                                            Icons.add_circle_outline),
+                                        color: const Color(0xFFE9C46A),
+                                        onPressed: () => _quickAddCard(entry),
+                                      ),
                                     ],
-                                  ),
+                                  ],
                                 ),
-                                if (entry.quantity > 1)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF2A221B),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: const Color(0xFF3A2F24)),
-                                    ),
-                                    child: Text(
-                                      'x${entry.quantity}',
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                  )
-                                else if (isMissing)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1C1713),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                          color: const Color(0xFF3A2F24)),
-                                    ),
-                                    child: Text(
-                                      'Missing',
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall,
-                                    ),
-                                  ),
-                                if (widget.isSetCollection) ...[
-                                  const SizedBox(width: 8),
-                                  IconButton(
-                                    tooltip: 'Add one',
-                                    icon: const Icon(Icons.add_circle_outline),
-                                    color: const Color(0xFFE9C46A),
-                                    onPressed: () => _quickAddCard(entry),
-                                  ),
-                                ],
-                              ],
-                            ),
+                              ),
+                              if (entry.quantity > 1)
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: _cornerQuantityBadge(entry.quantity),
+                                ),
+                            ],
                           ),
                         ),
                       );
@@ -2782,149 +2790,168 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             : () => _showCardActions(entry),
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
-                          child: Container(
-                            decoration: _cardTintDecoration(context, entry),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(16),
-                                    ),
-                                    child: Stack(
-                                      fit: StackFit.expand,
-                                      children: [
-                                        entry.imageUri == null
-                                            ? Container(
-                                                color: const Color(0xFF201A14),
-                                                child: const Icon(
-                                                  Icons.image_not_supported,
-                                                  color: Color(0xFFBFAE95),
-                                                ),
-                                              )
-                                            : Image.network(
-                                                entry.imageUri!,
-                                                fit: BoxFit.cover,
-                                              ),
-                                        if (entry.foil || entry.altArt)
-                                          Positioned(
-                                            top: 10,
-                                            right: 10,
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
-                                              children: [
-                                                if (entry.foil)
-                                                  _buildBadge('Foil'),
-                                                if (entry.foil && entry.altArt)
-                                                  const SizedBox(height: 6),
-                                                if (entry.altArt)
-                                                  _buildBadge('Alt Art'),
-                                              ],
-                                            ),
-                                          ),
-                                        if (isMissing)
-                                          Positioned(
-                                            top: 10,
-                                            left: 10,
-                                            child: _buildBadge('Missing'),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        entry.name,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodyMedium,
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Row(
-                                        children: [
-                                          _buildSetIcon(entry.setCode, size: 22),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  entry.setName.isNotEmpty
-                                                      ? entry.setName
-                                                      : entry.setCode
-                                                          .toUpperCase(),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(
-                                                        color: const Color(
-                                                            0xFFBFAE95),
-                                                      ),
-                                                ),
-                                                if (entry.rarity
-                                                    .trim()
-                                                    .isNotEmpty)
-                                                  Row(
-                                                    children: [
-                                                      _raritySquare(
-                                                          entry.rarity),
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        _formatRarity(
-                                                            entry.rarity),
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              color: const Color(
-                                                                  0xFFE9C46A),
-                                                            ),
-                                                      ),
-                                                    ],
+                          child: Stack(
+                            children: [
+                              Container(
+                                decoration: _cardTintDecoration(context, entry),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    Expanded(
+                                      child: ClipRRect(
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                          top: Radius.circular(16),
+                                        ),
+                                        child: Stack(
+                                          fit: StackFit.expand,
+                                          children: [
+                                            entry.imageUri == null
+                                                ? Container(
+                                                    color:
+                                                        const Color(0xFF201A14),
+                                                    child: const Icon(
+                                                      Icons.image_not_supported,
+                                                      color: Color(0xFFBFAE95),
+                                                    ),
+                                                  )
+                                                : Image.network(
+                                                    entry.imageUri!,
+                                                    fit: BoxFit.cover,
                                                   ),
-                                              ],
-                                            ),
-                                          ),
-                                          if (entry.quantity > 1)
-                                            Text(
-                                              'x${entry.quantity}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall,
-                                            ),
-                                          if (widget.isSetCollection) ...[
-                                            const SizedBox(width: 6),
-                                            IconButton(
-                                              tooltip: 'Add one',
-                                              icon: const Icon(
-                                                Icons.add_circle_outline,
-                                                size: 18,
+                                            if (entry.foil || entry.altArt)
+                                              Positioned(
+                                                top: 10,
+                                                right: entry.quantity > 1
+                                                    ? null
+                                                    : 10,
+                                                left: entry.quantity > 1
+                                                    ? 10
+                                                    : null,
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      entry.quantity > 1
+                                                          ? CrossAxisAlignment
+                                                              .start
+                                                          : CrossAxisAlignment
+                                                              .end,
+                                                  children: [
+                                                    if (entry.foil)
+                                                      _buildBadge('Foil'),
+                                                    if (entry.foil &&
+                                                        entry.altArt)
+                                                      const SizedBox(height: 6),
+                                                    if (entry.altArt)
+                                                      _buildBadge('Alt Art'),
+                                                  ],
+                                                ),
                                               ),
-                                              color: const Color(0xFFE9C46A),
-                                              onPressed: () =>
-                                                  _quickAddCard(entry),
-                                            ),
+                                            if (isMissing)
+                                              Positioned(
+                                                top: 10,
+                                                left: 10,
+                                                child: _buildBadge('Missing'),
+                                              ),
                                           ],
+                                        ),
+                                      ),
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            entry.name,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium,
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              _buildSetIcon(entry.setCode,
+                                                  size: 22),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      entry.setName.isNotEmpty
+                                                          ? entry.setName
+                                                          : entry.setCode
+                                                              .toUpperCase(),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall
+                                                          ?.copyWith(
+                                                            color: const Color(
+                                                                0xFFBFAE95),
+                                                          ),
+                                                    ),
+                                                    if (entry.rarity
+                                                        .trim()
+                                                        .isNotEmpty)
+                                                      Row(
+                                                        children: [
+                                                          _raritySquare(
+                                                              entry.rarity),
+                                                          const SizedBox(
+                                                              width: 6),
+                                                          Text(
+                                                            _rarityInitial(
+                                                                entry.rarity),
+                                                            style: Theme.of(
+                                                                    context)
+                                                                .textTheme
+                                                                .bodySmall
+                                                                ?.copyWith(
+                                                                  color: const Color(
+                                                                      0xFFE9C46A),
+                                                                ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                              if (widget.isSetCollection) ...[
+                                                const SizedBox(width: 6),
+                                                IconButton(
+                                                  tooltip: 'Add one',
+                                                  icon: const Icon(
+                                                    Icons.add_circle_outline,
+                                                    size: 18,
+                                                  ),
+                                                  color:
+                                                      const Color(0xFFE9C46A),
+                                                  onPressed: () =>
+                                                      _quickAddCard(entry),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
                                         ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                              if (entry.quantity > 1)
+                                Positioned(
+                                  top: 0,
+                                  right: 0,
+                                  child: _cornerQuantityBadge(entry.quantity),
+                                ),
+                            ],
                           ),
                         ),
                       );
@@ -4263,6 +4290,59 @@ String _formatRarity(String raw) {
     return '';
   }
   return value[0].toUpperCase() + value.substring(1);
+}
+
+String _rarityInitial(String raw) {
+  final formatted = _formatRarity(raw);
+  if (formatted.isEmpty) {
+    return '';
+  }
+  return formatted[0];
+}
+
+Widget _cornerQuantityBadge(int quantity) {
+  return CustomPaint(
+    painter: _CornerBadgePainter(),
+    child: SizedBox(
+      width: 36,
+      height: 36,
+      child: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 6, right: 6),
+          child: Text(
+            'x$quantity',
+            style: const TextStyle(
+              fontSize: 10,
+              color: Color(0xFFE9C46A),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _CornerBadgePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFF2A221B);
+    final border = Paint()
+      ..color = const Color(0xFF3A2F24)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+    canvas.drawPath(path, border);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 List<Color> _manaAccentColors(String? cardJson) {

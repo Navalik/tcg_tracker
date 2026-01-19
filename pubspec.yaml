@@ -48,6 +48,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
   build_runner: ^2.4.10
   drift_dev: ^2.18.0
 
@@ -75,6 +77,23 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/textures/paper-fibers.svg
+    - assets/branding/app_icon.png
+    - assets/branding/app_icon_foreground.png
+    - assets/branding/splash_icon.png
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: assets/branding/app_icon.png
+  adaptive_icon_background: "#0E0A08"
+  adaptive_icon_foreground: assets/branding/app_icon_foreground.png
+
+flutter_native_splash:
+  color: "#0E0A08"
+  image: assets/branding/splash_icon.png
+  android_12:
+    color: "#0E0A08"
+    image: assets/branding/splash_icon.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
