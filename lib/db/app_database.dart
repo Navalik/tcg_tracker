@@ -1,0 +1,717 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+// ignore: unused_import
+import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
+
+import '../models.dart';
+
+part 'app_database.g.dart';
+
+class Cards extends Table {
+  TextColumn get id => text()();
+  TextColumn get oracleId => text().nullable()();
+  TextColumn get name => text()();
+  TextColumn get setCode => text().nullable()();
+  TextColumn get collectorNumber => text().nullable()();
+  TextColumn get rarity => text().nullable()();
+  TextColumn get typeLine => text().nullable()();
+  TextColumn get manaCost => text().nullable()();
+  TextColumn get lang => text().nullable()();
+  TextColumn get releasedAt => text().nullable()();
+  TextColumn get imageUris => text().nullable()();
+  TextColumn get cardFaces => text().nullable()();
+  TextColumn get cardJson => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+class Collections extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+}
+
+class CollectionCards extends Table {
+  IntColumn get collectionId => integer()();
+  TextColumn get cardId => text()();
+  IntColumn get quantity => integer().withDefault(const Constant(1))();
+  BoolColumn get foil => boolean().withDefault(const Constant(false))();
+  BoolColumn get altArt => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {collectionId, cardId};
+}
+
+LazyDatabase _openConnection() {
+  return LazyDatabase(() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final dbFile = File(path.join(directory.path, 'scryfall.db'));
+    return NativeDatabase(
+      dbFile,
+      setup: (db) {
+        db.execute('PRAGMA journal_mode=WAL');
+        db.execute('PRAGMA synchronous=NORMAL');
+        db.execute('PRAGMA busy_timeout=5000');
+      },
+    );
+  });
+}
+
+@DriftDatabase(tables: [Cards, Collections, CollectionCards])
+class AppDatabase extends _$AppDatabase {
+  AppDatabase() : super(_openConnection());
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+          await _createIndexes();
+          await _createFts();
+        },
+        onUpgrade: (m, from, to) async {},
+        beforeOpen: (details) async {},
+      );
+
+  Future<void> _createIndexes() async {
+    await customStatement('CREATE INDEX IF NOT EXISTS cards_name_idx ON cards(name)');
+    await customStatement('CREATE INDEX IF NOT EXISTS cards_set_idx ON cards(set_code)');
+    await customStatement('CREATE INDEX IF NOT EXISTS cards_number_idx ON cards(collector_number)');
+    await customStatement('CREATE INDEX IF NOT EXISTS cards_oracle_idx ON cards(oracle_id)');
+  }
+
+  Future<void> _createFts() async {
+    await customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts
+      USING fts5(
+        name,
+        lang,
+        content='cards',
+        content_rowid='rowid'
+      )
+    ''');
+  }
+
+  Future<void> rebuildFts() async {
+    await customStatement("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')");
+  }
+}
+
+class ScryfallDatabase {
+  ScryfallDatabase._();
+
+  static final ScryfallDatabase instance = ScryfallDatabase._();
+
+  static const _prefsKeyRegenerated = 'db_regenerated_v1';
+  static const _prefsKeyAvailableLanguages = 'available_languages';
+
+  AppDatabase? _db;
+
+  Future<AppDatabase> open() async {
+    if (_db != null) {
+      return _db!;
+    }
+    await _ensureRegenerated();
+    _db = AppDatabase();
+    return _db!;
+  }
+
+  Future<void> close() async {
+    final db = _db;
+    if (db == null) {
+      return;
+    }
+    await db.close();
+    _db = null;
+  }
+
+  Future<void> hardReset() async {
+    await close();
+    final prefs = await SharedPreferences.getInstance();
+    final directory = await getApplicationDocumentsDirectory();
+    final dbFile = File(path.join(directory.path, 'scryfall.db'));
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
+    await prefs.remove(_prefsKeyAvailableLanguages);
+    await prefs.setBool(_prefsKeyRegenerated, false);
+  }
+
+  Future<void> _ensureRegenerated() async {
+    final prefs = await SharedPreferences.getInstance();
+    final regenerated = prefs.getBool(_prefsKeyRegenerated) ?? false;
+    if (regenerated) {
+      return;
+    }
+    final directory = await getApplicationDocumentsDirectory();
+    final dbFile = File(path.join(directory.path, 'scryfall.db'));
+    if (await dbFile.exists()) {
+      await dbFile.delete();
+    }
+    await prefs.remove(_prefsKeyAvailableLanguages);
+    await prefs.setBool(_prefsKeyRegenerated, true);
+  }
+
+  Future<List<CollectionInfo>> fetchCollections() async {
+    final db = await open();
+    final rows = await (db.select(db.collections)
+          ..orderBy([(tbl) => OrderingTerm.asc(tbl.id)]))
+        .get();
+    final counts = await _fetchCollectionCounts(db);
+    return rows
+        .map(
+          (row) => CollectionInfo(
+            id: row.id,
+            name: row.name,
+            cardCount: counts[row.id] ?? 0,
+          ),
+        )
+        .toList();
+  }
+
+  Future<Map<int, int>> _fetchCollectionCounts(AppDatabase db) async {
+    final rows = await db.customSelect(
+      '''
+      SELECT collection_id AS collection_id,
+             SUM(quantity) AS total
+      FROM collection_cards
+      GROUP BY collection_id
+      ''',
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<int>('collection_id'): row.read<int>('total')
+    };
+  }
+
+  Future<int> addCollection(String name) async {
+    final db = await open();
+    return db.into(db.collections).insert(CollectionsCompanion.insert(name: name));
+  }
+
+  Future<void> renameCollection(int id, String name) async {
+    final db = await open();
+    await (db.update(db.collections)..where((tbl) => tbl.id.equals(id)))
+        .write(CollectionsCompanion(name: Value(name)));
+  }
+
+  Future<void> deleteCollection(int id) async {
+    final db = await open();
+    await db.transaction(() async {
+      await (db.delete(db.collectionCards)
+            ..where((tbl) => tbl.collectionId.equals(id)))
+          .go();
+      await (db.delete(db.collections)..where((tbl) => tbl.id.equals(id))).go();
+    });
+  }
+
+  Future<List<CollectionCardEntry>> fetchCollectionCards(int collectionId) async {
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        collection_cards.card_id AS card_id,
+        collection_cards.quantity AS quantity,
+        collection_cards.foil AS foil,
+        collection_cards.alt_art AS alt_art,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM collection_cards
+      JOIN cards ON cards.id = collection_cards.card_id
+      WHERE collection_cards.collection_id = ?
+      ORDER BY cards.name ASC
+      ''',
+      variables: [Variable.withInt(collectionId)],
+    ).get();
+
+    return rows
+        .map(
+          (row) => CollectionCardEntry(
+            cardId: row.read<String>('card_id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            quantity: row.read<int>('quantity'),
+            foil: row.read<int>('foil') == 1,
+            altArt: row.read<int>('alt_art') == 1,
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<CollectionCardEntry>> fetchOwnedCards() async {
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        collection_cards.card_id AS card_id,
+        SUM(collection_cards.quantity) AS quantity,
+        MAX(collection_cards.foil) AS foil,
+        MAX(collection_cards.alt_art) AS alt_art,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM collection_cards
+      JOIN cards ON cards.id = collection_cards.card_id
+      GROUP BY collection_cards.card_id
+      ORDER BY cards.name ASC
+      ''',
+    ).get();
+
+    return rows
+        .map(
+          (row) => CollectionCardEntry(
+            cardId: row.read<String>('card_id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            quantity: row.read<int>('quantity'),
+            foil: row.read<int>('foil') == 1,
+            altArt: row.read<int>('alt_art') == 1,
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<CollectionCardEntry>> fetchSetCollectionCards(
+    int collectionId,
+    String setCode,
+  ) async {
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        cards.id AS card_id,
+        COALESCE(collection_cards.quantity, 0) AS quantity,
+        COALESCE(collection_cards.foil, 0) AS foil,
+        COALESCE(collection_cards.alt_art, 0) AS alt_art,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM cards
+      LEFT JOIN collection_cards
+        ON collection_cards.card_id = cards.id
+        AND collection_cards.collection_id = ?
+      WHERE cards.set_code = ?
+      ORDER BY cards.name ASC
+      ''',
+      variables: [
+        Variable.withInt(collectionId),
+        Variable.withString(setCode),
+      ],
+    ).get();
+
+    return rows
+        .map(
+          (row) => CollectionCardEntry(
+            cardId: row.read<String>('card_id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            quantity: row.read<int>('quantity'),
+            foil: row.read<int>('foil') == 1,
+            altArt: row.read<int>('alt_art') == 1,
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> addCardToCollection(int collectionId, String cardId) async {
+    final db = await open();
+    await db.transaction(() async {
+      final existing = await (db.select(db.collectionCards)
+            ..where((tbl) =>
+                tbl.collectionId.equals(collectionId) &
+                tbl.cardId.equals(cardId))
+            ..limit(1))
+          .getSingleOrNull();
+      if (existing != null) {
+        final updated = existing.quantity + 1;
+        await (db.update(db.collectionCards)
+              ..where((tbl) =>
+                  tbl.collectionId.equals(collectionId) &
+                  tbl.cardId.equals(cardId)))
+            .write(CollectionCardsCompanion(quantity: Value(updated)));
+      } else {
+        await db.into(db.collectionCards).insert(
+              CollectionCardsCompanion.insert(
+                collectionId: collectionId,
+                cardId: cardId,
+                quantity: const Value(1),
+                foil: const Value(false),
+                altArt: const Value(false),
+              ),
+            );
+      }
+    });
+  }
+
+  Future<void> upsertCollectionCard(
+    int collectionId,
+    String cardId, {
+    required int quantity,
+    required bool foil,
+    required bool altArt,
+  }) async {
+    final db = await open();
+    if (quantity <= 0) {
+      await deleteCollectionCard(collectionId, cardId);
+      return;
+    }
+    await db.into(db.collectionCards).insert(
+          CollectionCardsCompanion.insert(
+            collectionId: collectionId,
+            cardId: cardId,
+            quantity: Value(quantity),
+            foil: Value(foil),
+            altArt: Value(altArt),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  Future<void> updateCollectionCard(
+    int collectionId,
+    String cardId, {
+    int? quantity,
+    bool? foil,
+    bool? altArt,
+  }) async {
+    final db = await open();
+    final values = CollectionCardsCompanion(
+      quantity: quantity == null ? const Value.absent() : Value(quantity),
+      foil: foil == null ? const Value.absent() : Value(foil),
+      altArt: altArt == null ? const Value.absent() : Value(altArt),
+    );
+    await (db.update(db.collectionCards)
+          ..where((tbl) =>
+              tbl.collectionId.equals(collectionId) &
+              tbl.cardId.equals(cardId)))
+        .write(values);
+  }
+
+  Future<void> deleteCollectionCard(int collectionId, String cardId) async {
+    final db = await open();
+    await (db.delete(db.collectionCards)
+          ..where((tbl) =>
+              tbl.collectionId.equals(collectionId) &
+              tbl.cardId.equals(cardId)))
+        .go();
+  }
+
+  Future<void> rebuildCardsFts() async {
+    final db = await open();
+    await db.rebuildFts();
+  }
+
+  Future<int> countCards() async {
+    final db = await open();
+    for (var attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        final row = await db.customSelect(
+          'SELECT COUNT(*) AS count FROM cards',
+        ).getSingle();
+        return row.read<int>('count');
+      } catch (_) {
+        if (attempt == 2) {
+          rethrow;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+    return 0;
+  }
+
+  Future<int> countOwnedCards() async {
+    final db = await open();
+    final row = await db.customSelect(
+      'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards',
+    ).getSingle();
+    return row.read<int>('total');
+  }
+
+  Future<void> deleteAllCards(AppDatabase db) async {
+    await db.customStatement('DELETE FROM cards');
+  }
+
+  Future<void> insertCardsBatch(
+    AppDatabase db,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final companions = items.map(_mapCardCompanion).toList();
+    await db.batch((batch) {
+      batch.insertAll(
+        db.cards,
+        companions,
+        mode: InsertMode.insertOrReplace,
+      );
+    });
+  }
+
+  Future<List<SetInfo>> fetchAvailableSets() async {
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT set_code AS set_code, card_json AS card_json
+      FROM cards
+      WHERE set_code IS NOT NULL AND set_code != ''
+      GROUP BY set_code
+      ORDER BY set_code ASC
+      ''',
+    ).get();
+
+    final results = <SetInfo>[];
+    for (final row in rows) {
+      final code = row.read<String>('set_code');
+      final setName = _extractSetName(row.readNullable<String>('card_json'));
+      results.add(SetInfo(code: code, name: setName.isEmpty ? code : setName));
+    }
+    results.sort((a, b) => a.name.compareTo(b.name));
+    return results;
+  }
+
+  Future<Map<String, String>> fetchSetNamesForCodes(
+    List<String> setCodes,
+  ) async {
+    if (setCodes.isEmpty) {
+      return {};
+    }
+    final db = await open();
+    final placeholders = List.filled(setCodes.length, '?').join(', ');
+    final rows = await db.customSelect(
+      '''
+      SELECT set_code AS set_code, card_json AS card_json
+      FROM cards
+      WHERE set_code IN ($placeholders)
+      GROUP BY set_code
+      ''',
+      variables: setCodes.map(Variable.withString).toList(),
+    ).get();
+
+    final result = <String, String>{};
+    for (final row in rows) {
+      final code = row.read<String>('set_code');
+      final setName = _extractSetName(row.readNullable<String>('card_json'));
+      result[code] = setName.isEmpty ? code : setName;
+    }
+    return result;
+  }
+
+  Future<List<CardSearchResult>> searchCardsByName(
+    String query, {
+    int limit = 80,
+    List<String>? languages,
+  }) async {
+    final matchQuery = _buildFtsQuery(query);
+    if (matchQuery.isEmpty) {
+      return [];
+    }
+    final db = await open();
+    final whereArgs = <Variable>[Variable.withString(matchQuery)];
+    final where = StringBuffer('cards_fts MATCH ?');
+    if (languages != null && languages.isNotEmpty) {
+      final placeholders = List.filled(languages.length, '?').join(', ');
+      where.write(' AND cards.lang IN ($placeholders)');
+      whereArgs.addAll(languages.map(Variable.withString));
+    }
+    whereArgs.add(Variable.withInt(limit));
+
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces
+      FROM cards_fts
+      JOIN cards ON cards_fts.rowid = cards.rowid
+      WHERE ${where.toString()}
+      GROUP BY cards.name, cards.lang
+      ORDER BY cards.name ASC
+      LIMIT ?
+      ''',
+      variables: whereArgs,
+    ).get();
+
+    return rows
+        .map(
+          (row) => CardSearchResult(
+            id: row.read<String>('id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            collectorNumber: row.read<String>('collector_number'),
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<String>> fetchAvailableLanguages() async {
+    final db = await open();
+    final rows = await db.customSelect(
+      'SELECT DISTINCT lang FROM cards WHERE lang IS NOT NULL ORDER BY lang ASC',
+    ).get();
+    return rows
+        .map((row) => row.read<String>('lang'))
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  CardsCompanion _mapCardCompanion(Map<String, dynamic> card) {
+    return CardsCompanion.insert(
+      id: card['id'] as String? ?? '',
+      name: card['name'] as String? ?? '',
+      oracleId: Value(card['oracle_id'] as String?),
+      setCode: Value(card['set'] as String?),
+      collectorNumber: Value(card['collector_number'] as String?),
+      rarity: Value(card['rarity'] as String?),
+      typeLine: Value(card['type_line'] as String?),
+      manaCost: Value(card['mana_cost'] as String?),
+      lang: Value(card['lang'] as String?),
+      releasedAt: Value(card['released_at'] as String?),
+      imageUris: Value(_encodeJsonField(card['image_uris'])),
+      cardFaces: Value(_encodeJsonField(card['card_faces'])),
+      cardJson: Value(_encodeJsonField(card)),
+    );
+  }
+}
+
+String _normalizeSearchQuery(String input) {
+  final trimmed = input.trim().toLowerCase();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  final stripped = trimmed.replaceAll(RegExp(r"[,:;'\-]"), ' ');
+  return stripped.replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+String _buildFtsQuery(String input) {
+  final normalized = _normalizeSearchQuery(input);
+  if (normalized.isEmpty) {
+    return '';
+  }
+  final parts = normalized.split(' ').where((part) => part.isNotEmpty);
+  return parts.map((part) => '$part*').join(' ');
+}
+
+String? _encodeJsonField(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is String) {
+    return value;
+  }
+  return jsonEncode(value);
+}
+
+String? _extractImageUrl(String? imageUrisJson, String? cardFacesJson) {
+  if (imageUrisJson != null && imageUrisJson.isNotEmpty) {
+    final data = _tryDecodeJson(imageUrisJson);
+    if (data is Map<String, dynamic>) {
+      return _pickImageUri(data);
+    }
+  }
+  if (cardFacesJson != null && cardFacesJson.isNotEmpty) {
+    final data = _tryDecodeJson(cardFacesJson);
+    if (data is List) {
+      for (final face in data) {
+        if (face is Map<String, dynamic>) {
+          final imageUris = face['image_uris'];
+          if (imageUris is Map<String, dynamic>) {
+            final picked = _pickImageUri(imageUris);
+            if (picked != null) {
+              return picked;
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+String _extractSetName(String? cardJson) {
+  if (cardJson == null || cardJson.isEmpty) {
+    return '';
+  }
+  final data = _tryDecodeJson(cardJson);
+  if (data is Map<String, dynamic>) {
+    final value = data['set_name'];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+  }
+  return '';
+}
+
+dynamic _tryDecodeJson(String value) {
+  try {
+    return jsonDecode(value);
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _pickImageUri(Map<String, dynamic> imageUris) {
+  const preferredKeys = [
+    'large',
+    'normal',
+    'small',
+    'png',
+    'art_crop',
+  ];
+  for (final key in preferredKeys) {
+    final value = imageUris[key];
+    if (value is String && value.isNotEmpty) {
+      return value;
+    }
+  }
+  return null;
+}
