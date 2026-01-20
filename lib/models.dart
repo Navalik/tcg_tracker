@@ -3,19 +3,26 @@ class CardSearchResult {
     required this.id,
     required this.name,
     required this.setCode,
+    required this.setName,
     required this.collectorNumber,
     this.imageUri,
+    this.cardJson,
   });
 
   final String id;
   final String name;
   final String setCode;
+  final String setName;
   final String collectorNumber;
   final String? imageUri;
+  final String? cardJson;
 
   String get subtitleLabel {
-    final setLabel = setCode.toUpperCase();
-    return collectorNumber.isEmpty ? setLabel : '$setLabel  $collectorNumber';
+    return _formatSetLabel(
+      setName: setName,
+      setCode: setCode,
+      collectorNumber: collectorNumber,
+    );
   }
 
   String get displayLabel {
@@ -66,8 +73,11 @@ class CollectionCardEntry {
   final String? cardJson;
 
   String get subtitleLabel {
-    final setLabel = setCode.toUpperCase();
-    return collectorNumber.isEmpty ? setLabel : '$setLabel  $collectorNumber';
+    return _formatSetLabel(
+      setName: setName,
+      setCode: setCode,
+      collectorNumber: collectorNumber,
+    );
   }
 }
 
@@ -79,4 +89,16 @@ class SetInfo {
 
   final String code;
   final String name;
+}
+
+String _formatSetLabel({
+  required String setName,
+  required String setCode,
+  required String collectorNumber,
+}) {
+  final label = setName.trim().isNotEmpty ? setName.trim() : setCode.toUpperCase();
+  if (label.isEmpty) {
+    return collectorNumber.isEmpty ? '' : '#$collectorNumber';
+  }
+  return collectorNumber.isEmpty ? label : '$label #$collectorNumber';
 }

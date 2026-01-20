@@ -388,6 +388,55 @@ class ScryfallDatabase {
     });
   }
 
+  Future<void> addCardsToCollection(
+    int collectionId,
+    List<String> cardIds,
+  ) async {
+    if (cardIds.isEmpty) {
+      return;
+    }
+    final uniqueIds = cardIds.toSet().toList();
+    final db = await open();
+    await db.transaction(() async {
+      final placeholders = List.filled(uniqueIds.length, '?').join(', ');
+      final rows = await db.customSelect(
+        '''
+        SELECT card_id AS card_id, quantity AS quantity
+        FROM collection_cards
+        WHERE collection_id = ? AND card_id IN ($placeholders)
+        ''',
+        variables: [
+          Variable.withInt(collectionId),
+          ...uniqueIds.map(Variable.withString),
+        ],
+      ).get();
+      final existing = <String, int>{};
+      for (final row in rows) {
+        existing[row.read<String>('card_id')] = row.read<int>('quantity');
+      }
+      for (final cardId in uniqueIds) {
+        final current = existing[cardId];
+        if (current != null) {
+          await (db.update(db.collectionCards)
+                ..where((tbl) =>
+                    tbl.collectionId.equals(collectionId) &
+                    tbl.cardId.equals(cardId)))
+              .write(CollectionCardsCompanion(quantity: Value(current + 1)));
+        } else {
+          await db.into(db.collectionCards).insert(
+                CollectionCardsCompanion.insert(
+                  collectionId: collectionId,
+                  cardId: cardId,
+                  quantity: const Value(1),
+                  foil: const Value(false),
+                  altArt: const Value(false),
+                ),
+              );
+        }
+      }
+    });
+  }
+
   Future<void> upsertCollectionCard(
     int collectionId,
     String cardId, {
@@ -564,14 +613,14 @@ class ScryfallDatabase {
         cards.id AS id,
         cards.name AS name,
         cards.set_code AS set_code,
+        cards.card_json AS card_json,
         cards.collector_number AS collector_number,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards_fts
       JOIN cards ON cards_fts.rowid = cards.rowid
       WHERE ${where.toString()}
-      GROUP BY cards.name, cards.lang
-      ORDER BY cards.name ASC
+      ORDER BY cards.name ASC, cards.set_code ASC, cards.collector_number ASC
       LIMIT ?
       ''',
       variables: whereArgs,
@@ -583,11 +632,13 @@ class ScryfallDatabase {
             id: row.read<String>('id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
             collectorNumber: row.read<String>('collector_number'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
+            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();

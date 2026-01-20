@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
+import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -22,6 +23,18 @@ class _BulkOption {
 
   final String type;
   final String title;
+  final String description;
+}
+
+class _GameOption {
+  const _GameOption({
+    required this.id,
+    required this.name,
+    required this.description,
+  });
+
+  final String id;
+  final String name;
   final String description;
 }
 
@@ -43,6 +56,24 @@ const List<_BulkOption> _bulkOptions = [
   ),
 ];
 
+const List<_GameOption> _gameOptions = [
+  _GameOption(
+    id: 'pokemon',
+    name: 'Pokemon',
+    description: 'Pokemon TCG collections.',
+  ),
+  _GameOption(
+    id: 'magic',
+    name: 'Magic',
+    description: 'Magic: The Gathering collections.',
+  ),
+  _GameOption(
+    id: 'yugioh',
+    name: 'Yu-Gi-Oh',
+    description: 'Yu-Gi-Oh! collections.',
+  ),
+];
+
 String _bulkTypeLabel(String? type) {
   if (type == null) {
     return 'Non selezionato';
@@ -58,6 +89,18 @@ String _bulkTypeLabel(String? type) {
 String _bulkTypeFileName(String type) {
   final sanitized = type.replaceAll(RegExp(r'[^a-z0-9_]+'), '_');
   return 'scryfall_$sanitized.json';
+}
+
+String _gameLabel(String? id) {
+  if (id == null || id.isEmpty) {
+    return 'Not selected';
+  }
+  for (final option in _gameOptions) {
+    if (option.id == id) {
+      return option.name;
+    }
+  }
+  return id;
 }
 
 Future<String?> _showBulkTypePicker(
@@ -162,6 +205,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     with TickerProviderStateMixin {
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
+  static const int _freeCollectionLimit = 5;
+  String? _selectedGameId;
+  bool _isProUnlocked = false;
+  late final PurchaseManager _purchaseManager;
+  late final VoidCallback _purchaseListener;
   bool _checkingBulk = false;
   bool _bulkUpdateAvailable = false;
   String? _bulkDownloadUri;
@@ -188,6 +236,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   void initState() {
     super.initState();
     unawaited(ScryfallDatabase.instance.open());
+    _purchaseManager = PurchaseManager.instance;
+    _purchaseListener = () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isProUnlocked = _purchaseManager.isPro;
+      });
+    };
+    _purchaseManager.addListener(_purchaseListener);
+    unawaited(_purchaseManager.init());
+    _isProUnlocked = _purchaseManager.isPro;
+    unawaited(_loadGameSelection());
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -210,6 +271,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   void dispose() {
     _pulseController.dispose();
     _snakeController.dispose();
+    _purchaseManager.removeListener(_purchaseListener);
     super.dispose();
   }
 
@@ -234,6 +296,169 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return _setNameLookup[setCode] ?? setCode.toUpperCase();
     }
     return collection.name;
+  }
+
+  int _userCollectionCount() {
+    return _collections.where((item) => item.name != 'All cards').length;
+  }
+
+  bool _canCreateCollection() {
+    return _isProUnlocked || _userCollectionCount() < _freeCollectionLimit;
+  }
+
+  Future<void> _loadGameSelection() async {
+    final primary = await AppSettings.loadPrimaryGameId();
+    final enabled = await AppSettings.loadEnabledGames();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedGameId = primary;
+    });
+    if (primary == null || primary.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _promptInitialGameSelection();
+        }
+      });
+    } else if (!enabled.contains(primary)) {
+      await AppSettings.saveEnabledGames([...enabled, primary]);
+    }
+  }
+
+  Future<void> _promptInitialGameSelection() async {
+    final selected = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Choose your game'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _gameOptions
+                .map(
+                  (option) => ListTile(
+                    title: Text(option.name),
+                    subtitle: Text(option.description),
+                    onTap: () => Navigator.of(context).pop(option.id),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+    if (selected == null || selected.isEmpty) {
+      return;
+    }
+    await _setPrimaryGame(selected);
+  }
+
+  Future<void> _setPrimaryGame(String id) async {
+    final enabled = await AppSettings.loadEnabledGames();
+    final updated = enabled.contains(id) ? enabled : [...enabled, id];
+    await AppSettings.saveEnabledGames(updated);
+    await AppSettings.savePrimaryGameId(id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedGameId = id;
+    });
+  }
+
+  Future<void> _showCollectionLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Collection limit reached'),
+          content: Text(
+            'The free version allows up to $_freeCollectionLimit collections. '
+            'Upgrade to Pro to unlock unlimited collections.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPage(),
+                  ),
+                );
+              },
+              child: const Text('Upgrade'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildProBanner(BuildContext context) {
+    final isPro = _isProUnlocked;
+    final subtitle = isPro
+        ? 'Pro active. Unlimited collections.'
+        : 'Base plan: up to $_freeCollectionLimit collections.';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFF3A2F24)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(
+              isPro ? Icons.verified : Icons.workspace_premium,
+              color: const Color(0xFFE9C46A),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isPro ? 'Pro enabled' : 'Upgrade to Pro',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFBFAE95),
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPage(),
+                  ),
+                );
+              },
+              child: Text(isPro ? 'Manage' : 'Upgrade'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadCollections() async {
@@ -567,6 +792,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addCollection(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
     final controller = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -622,6 +851,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addSetCollection(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
     final sets = await ScryfallDatabase.instance.fetchAvailableSets();
     if (!mounted) {
       return;
@@ -732,6 +965,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _showCreateCollectionOptions(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
     final selection = await showModalBottomSheet<_CollectionCreateAction>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1309,6 +1546,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           icon: const Icon(Icons.cloud_download, size: 18),
                           label: const Text('Import now'),
                         ),
+                      if (_selectedGameId != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'Game: ${_gameLabel(_selectedGameId)}',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: const Color(0xFFBFAE95),
+                                  ),
+                        ),
+                      ],
                       if (_bulkDownloading || _bulkImporting)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -1326,6 +1573,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
                     children: [
+                      _buildProBanner(context),
                       ..._buildCollectionSections(context),
                     ],
                   ),
@@ -1591,9 +1839,12 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   bool _loadingLanguages = true;
+  bool _loadingGames = true;
   List<String> _languageOptions = [];
   Set<String> _selectedLanguages = {};
   String? _bulkType;
+  List<String> _enabledGames = [];
+  String? _primaryGameId;
 
   @override
   void initState() {
@@ -1606,6 +1857,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final cachedLanguages = await AppSettings.loadAvailableLanguages();
     final allOptions = AppSettings.languageLabels.keys.toList()..sort();
     final bulkType = await AppSettings.loadBulkType();
+    final enabledGames = await AppSettings.loadEnabledGames();
+    final primaryGameId = await AppSettings.loadPrimaryGameId();
     if (!mounted) {
       return;
     }
@@ -1613,8 +1866,11 @@ class _SettingsPageState extends State<SettingsPage> {
       _selectedLanguages = stored.isEmpty ? {'en'} : stored;
       _languageOptions = cachedLanguages.isEmpty ? allOptions : cachedLanguages;
       _bulkType = bulkType;
+      _enabledGames = enabledGames;
+      _primaryGameId = primaryGameId;
       _loading = false;
       _loadingLanguages = cachedLanguages.isEmpty;
+      _loadingGames = false;
     });
     if (cachedLanguages.isNotEmpty) {
       return;
@@ -1794,6 +2050,114 @@ class _SettingsPageState extends State<SettingsPage> {
         content: Text('Database changed. Go back to Home to download.'),
       ),
     );
+  }
+
+  Future<void> _setPrimaryGame(String id) async {
+    if (id.isEmpty) {
+      return;
+    }
+    if (!_enabledGames.contains(id)) {
+      _enabledGames = [..._enabledGames, id];
+      await AppSettings.saveEnabledGames(_enabledGames);
+    }
+    await AppSettings.savePrimaryGameId(id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _primaryGameId = id;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Primary game set to ${_gameLabel(id)}.')),
+    );
+  }
+
+  Future<void> _showGameLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Game limit reached'),
+          content: const Text(
+            'The free version allows one game. Upgrade to Pro to add more.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPage(),
+                  ),
+                );
+              },
+              child: const Text('Upgrade'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _addGame() async {
+    final manager = PurchaseManager.instance;
+    if (!manager.isPro && _enabledGames.length >= 1) {
+      await _showGameLimitDialog();
+      return;
+    }
+    final remaining = _gameOptions
+        .where((option) => !_enabledGames.contains(option.id))
+        .toList();
+    if (remaining.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('All games are already added.')),
+      );
+      return;
+    }
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add game'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: remaining
+                .map(
+                  (option) => ListTile(
+                    title: Text(option.name),
+                    subtitle: Text(option.description),
+                    onTap: () => Navigator.of(context).pop(option.id),
+                  ),
+                )
+                .toList(),
+          ),
+        );
+      },
+    );
+    if (selected == null || selected.isEmpty) {
+      return;
+    }
+    final updated = [..._enabledGames, selected];
+    await AppSettings.saveEnabledGames(updated);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _enabledGames = updated;
+      _primaryGameId ??= selected;
+    });
+    await AppSettings.savePrimaryGameId(_primaryGameId!);
+  }
+
+  String _gameStatusLabel(String id) {
+    if (_primaryGameId == id) {
+      return 'Primary';
+    }
+    return 'Added';
   }
 
   Future<void> _performHardReset() async {
@@ -1979,6 +2343,82 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 24),
                 Text(
+                  'Games',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Manage which TCGs are enabled.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                ),
+                const SizedBox(height: 12),
+                if (_loadingGames)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: SizedBox(
+                      height: 16,
+                      width: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  ..._enabledGames.map(
+                    (id) => ListTile(
+                      title: Text(_gameLabel(id)),
+                      subtitle: Text(_gameStatusLabel(id)),
+                      contentPadding: EdgeInsets.zero,
+                      trailing: TextButton(
+                        onPressed: () => _setPrimaryGame(id),
+                        child: const Text('Make primary'),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _addGame,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add game'),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Pro',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Unlock unlimited collections.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                ),
+                const SizedBox(height: 12),
+                AnimatedBuilder(
+                  animation: PurchaseManager.instance,
+                  builder: (context, _) {
+                    final manager = PurchaseManager.instance;
+                    return ListTile(
+                      title: const Text('Pro status'),
+                      subtitle: Text(
+                        manager.isPro ? 'Pro active' : 'Base plan',
+                      ),
+                      contentPadding: EdgeInsets.zero,
+                      trailing: TextButton(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProPage(),
+                            ),
+                          );
+                        },
+                        child: const Text('Manage'),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                Text(
                   'Reset',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -2005,6 +2445,160 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 }
 
+class ProPage extends StatefulWidget {
+  const ProPage({super.key});
+
+  @override
+  State<ProPage> createState() => _ProPageState();
+}
+
+class _ProPageState extends State<ProPage> {
+  late final PurchaseManager _manager;
+
+  @override
+  void initState() {
+    super.initState();
+    _manager = PurchaseManager.instance;
+    unawaited(_manager.init());
+  }
+
+  Widget _buildFeatureRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFFE9C46A)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _manager,
+      builder: (context, _) {
+        final isPro = _manager.isPro;
+        final priceLabel = _manager.priceLabel;
+        final testMode = _manager.testMode;
+        final storeNote = _manager.storeAvailable
+            ? 'Store available'
+            : 'Store not available yet';
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: AppBar(
+            title: const Text('Pro'),
+          ),
+          body: Stack(
+            children: [
+              const _AppBackground(),
+              ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF3A2F24)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isPro ? 'Pro active' : 'Base plan',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          isPro
+                              ? 'Unlimited collections are unlocked.'
+                              : 'Unlock Pro to remove the 5-collection limit.',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: const Color(0xFFBFAE95),
+                                  ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Price: $priceLabel',
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: const Color(0xFFE3B55C),
+                                  ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          storeNote,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: const Color(0xFF908676),
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'What you get',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildFeatureRow(
+                    Icons.collections_bookmark,
+                    'Unlimited collections',
+                  ),
+                  const SizedBox(height: 8),
+                  _buildFeatureRow(
+                    Icons.workspace_premium,
+                    'Support future premium features',
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _manager.purchasePro,
+                    child: Text(
+                      testMode
+                          ? (isPro ? 'Switch to Base (test)' : 'Switch to Pro (test)')
+                          : (isPro ? 'Pro enabled' : 'Upgrade to Pro'),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton(
+                    onPressed: _manager.restorePurchases,
+                    child: const Text('Restore purchases'),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile.adaptive(
+                    value: testMode,
+                    onChanged: _manager.setTestMode,
+                    title: const Text('Test mode'),
+                    subtitle: const Text(
+                      'When enabled, Upgrade toggles Pro locally.',
+                    ),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
   final List<CollectionCardEntry> _cards = [];
   bool _loading = true;
@@ -2012,6 +2606,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _showOwned = true;
   bool _showMissing = true;
   String _searchQuery = '';
+  final Set<String> _selectedRarities = {};
+  final Set<String> _selectedSetCodes = {};
+  final Set<String> _selectedColors = {};
+  final Set<String> _selectedTypes = {};
+  int? _manaValueMin;
+  int? _manaValueMax;
 
   @override
   void initState() {
@@ -2051,7 +2651,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     });
   }
 
-  List<CollectionCardEntry> _filteredCards() {
+  List<CollectionCardEntry> _baseVisibleCards() {
     if (!widget.isSetCollection) {
       return _cards;
     }
@@ -2076,6 +2676,449 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       }
       return false;
     }).toList();
+  }
+
+  List<CollectionCardEntry> _filteredCards() {
+    final base = _baseVisibleCards();
+    if (_selectedRarities.isEmpty &&
+        _selectedSetCodes.isEmpty &&
+        _selectedColors.isEmpty &&
+        _selectedTypes.isEmpty &&
+        _manaValueMin == null &&
+        _manaValueMax == null) {
+      return base;
+    }
+    return base.where(_matchesAdvancedFilters).toList();
+  }
+
+  bool _matchesAdvancedFilters(CollectionCardEntry entry) {
+    if (_selectedRarities.isNotEmpty) {
+      final rarity = entry.rarity.trim().toLowerCase();
+      if (!_selectedRarities.contains(rarity)) {
+        return false;
+      }
+    }
+    if (_selectedSetCodes.isNotEmpty) {
+      final code = entry.setCode.trim().toLowerCase();
+      if (!_selectedSetCodes.contains(code)) {
+        return false;
+      }
+    }
+    if (_selectedColors.isNotEmpty) {
+      final colors = _cardColors(entry);
+      if (colors.intersection(_selectedColors).isEmpty) {
+        return false;
+      }
+    }
+    if (_selectedTypes.isNotEmpty) {
+      final types = _cardTypes(entry);
+      if (types.intersection(_selectedTypes).isEmpty) {
+        return false;
+      }
+    }
+    if (_manaValueMin != null || _manaValueMax != null) {
+      final manaValue = _cardManaValue(entry);
+      if (_manaValueMin != null && manaValue < _manaValueMin!) {
+        return false;
+      }
+      if (_manaValueMax != null && manaValue > _manaValueMax!) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Set<String> _cardColors(CollectionCardEntry entry) {
+    final data = _decodeCardJson(entry);
+    if (data == null) {
+      return {'C'};
+    }
+    final colors = (data['colors'] as List?)?.whereType<String>().toList() ??
+        (data['color_identity'] as List?)
+            ?.whereType<String>()
+            .toList() ??
+        <String>[];
+    if (colors.isEmpty) {
+      return {'C'};
+    }
+    return colors.map((code) => code.toUpperCase()).toSet();
+  }
+
+  Set<String> _cardTypes(CollectionCardEntry entry) {
+    final data = _decodeCardJson(entry);
+    final typeLine = data?['type_line']?.toString() ?? '';
+    if (typeLine.isEmpty) {
+      return {};
+    }
+    const knownTypes = [
+      'Artifact',
+      'Creature',
+      'Enchantment',
+      'Instant',
+      'Land',
+      'Planeswalker',
+      'Sorcery',
+      'Battle',
+      'Tribal',
+    ];
+    final matches = <String>{};
+    for (final type in knownTypes) {
+      if (typeLine.toLowerCase().contains(type.toLowerCase())) {
+        matches.add(type);
+      }
+    }
+    return matches;
+  }
+
+  double _cardManaValue(CollectionCardEntry entry) {
+    final data = _decodeCardJson(entry);
+    final value = data?['cmc'];
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+
+  bool _hasActiveAdvancedFilters() {
+    return _selectedRarities.isNotEmpty ||
+        _selectedSetCodes.isNotEmpty ||
+        _selectedColors.isNotEmpty ||
+        _selectedTypes.isNotEmpty ||
+        _manaValueMin != null ||
+        _manaValueMax != null;
+  }
+
+  String _setLabelForEntry(CollectionCardEntry entry) {
+    if (entry.setName.trim().isNotEmpty) {
+      return entry.setName.trim();
+    }
+    return entry.setCode.toUpperCase();
+  }
+
+  Future<void> _showAdvancedFilters() async {
+    final base = _baseVisibleCards();
+    final availableRarities = <String>{};
+    final availableSetCodes = <String, String>{};
+    final availableColors = <String>{};
+    final availableTypes = <String>{};
+    for (final entry in base) {
+      if (entry.rarity.trim().isNotEmpty) {
+        availableRarities.add(entry.rarity.trim().toLowerCase());
+      }
+      if (entry.setCode.trim().isNotEmpty) {
+        availableSetCodes[entry.setCode.trim().toLowerCase()] =
+            _setLabelForEntry(entry);
+      }
+      availableColors.addAll(_cardColors(entry));
+      availableTypes.addAll(_cardTypes(entry));
+    }
+
+    final tempRarities = _selectedRarities.toSet();
+    final tempSetCodes = _selectedSetCodes.toSet();
+    final tempColors = _selectedColors.toSet();
+    final tempTypes = _selectedTypes.toSet();
+    final minController =
+        TextEditingController(text: _manaValueMin?.toString() ?? '');
+    final maxController =
+        TextEditingController(text: _manaValueMax?.toString() ?? '');
+    var setQuery = '';
+
+    var applied = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Widget buildChipRow<T>(
+              Iterable<T> items,
+              bool Function(T) isSelected,
+              void Function(T) toggle,
+              String Function(T) label,
+            ) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: items
+                    .map(
+                      (item) => FilterChip(
+                        label: Text(label(item)),
+                        selected: isSelected(item),
+                        onSelected: (_) => setSheetState(() => toggle(item)),
+                      ),
+                    )
+                    .toList(),
+              );
+            }
+
+            final rarityOrder = ['common', 'uncommon', 'rare', 'mythic'];
+            final sortedRarities = availableRarities.toList()
+              ..sort((a, b) {
+                final ai = rarityOrder.indexOf(a);
+                final bi = rarityOrder.indexOf(b);
+                if (ai == -1 && bi == -1) {
+                  return a.compareTo(b);
+                }
+                if (ai == -1) return 1;
+                if (bi == -1) return -1;
+                return ai.compareTo(bi);
+              });
+            final sortedSets = availableSetCodes.entries.toList()
+              ..sort((a, b) => a.value.compareTo(b.value));
+            final filteredSets = sortedSets.where((entry) {
+              if (setQuery.isEmpty) {
+                return true;
+              }
+              return entry.value.toLowerCase().contains(setQuery) ||
+                  entry.key.toLowerCase().contains(setQuery);
+            }).toList();
+            const colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+            final sortedColors = availableColors.toList()
+              ..sort((a, b) =>
+                  colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)));
+            final sortedTypes = availableTypes.toList()..sort();
+
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Advanced filters',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    if (sortedRarities.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Rarity',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedRarities,
+                        (value) => tempRarities.contains(value),
+                        (value) {
+                          if (!tempRarities.add(value)) {
+                            tempRarities.remove(value);
+                          }
+                        },
+                        (value) => _formatRarity(value),
+                      ),
+                    ],
+                    if (sortedSets.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Set',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Search set',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) {
+                          setSheetState(() {
+                            setQuery = value.trim().toLowerCase();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: sortedSets.length > 16 ? 200 : null,
+                        child: SingleChildScrollView(
+                          child: buildChipRow<MapEntry<String, String>>(
+                            filteredSets,
+                            (value) => tempSetCodes.contains(value.key),
+                            (value) {
+                              if (!tempSetCodes.add(value.key)) {
+                                tempSetCodes.remove(value.key);
+                              }
+                            },
+                            (value) => value.value,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (sortedColors.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Color',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedColors,
+                        (value) => tempColors.contains(value),
+                        (value) {
+                          if (!tempColors.add(value)) {
+                            tempColors.remove(value);
+                          }
+                        },
+                        (value) => _colorLabel(value),
+                      ),
+                    ],
+                    if (sortedTypes.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Type',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedTypes,
+                        (value) => tempTypes.contains(value),
+                        (value) {
+                          if (!tempTypes.add(value)) {
+                            tempTypes.remove(value);
+                          }
+                        },
+                        (value) => value,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'Mana value',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: minController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              hintText: 'Min',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: maxController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              hintText: 'Max',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (sortedRarities.isEmpty &&
+                        sortedSets.isEmpty &&
+                        sortedColors.isEmpty &&
+                        sortedTypes.isEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text('No filters available for this list.'),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              tempRarities.clear();
+                              tempSetCodes.clear();
+                              tempColors.clear();
+                              tempTypes.clear();
+                              minController.clear();
+                              maxController.clear();
+                            });
+                          },
+                          child: const Text('Clear'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: () {
+                            applied = true;
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || !applied) {
+      return;
+    }
+    int? minValue = int.tryParse(minController.text.trim());
+    int? maxValue = int.tryParse(maxController.text.trim());
+    if (minValue != null && maxValue != null && minValue > maxValue) {
+      final swap = minValue;
+      minValue = maxValue;
+      maxValue = swap;
+    }
+    setState(() {
+      _selectedRarities
+        ..clear()
+        ..addAll(tempRarities);
+      _selectedSetCodes
+        ..clear()
+        ..addAll(tempSetCodes);
+      _selectedColors
+        ..clear()
+        ..addAll(tempColors);
+      _selectedTypes
+        ..clear()
+        ..addAll(tempTypes);
+      _manaValueMin = minValue;
+      _manaValueMax = maxValue;
+    });
+  }
+
+  String _colorLabel(String code) {
+    switch (code.toUpperCase()) {
+      case 'W':
+        return 'White';
+      case 'U':
+        return 'Blue';
+      case 'B':
+        return 'Black';
+      case 'R':
+        return 'Red';
+      case 'G':
+        return 'Green';
+      case 'C':
+        return 'Colorless';
+      default:
+        return code.toUpperCase();
+    }
   }
 
   Widget _buildSetHeader() {
@@ -2150,21 +3193,33 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       );
       return;
     }
-    final result = await showModalBottomSheet<CardSearchResult>(
+    final selection = await showModalBottomSheet<_CardSearchSelection>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const _CardSearchSheet(),
     );
 
-    if (result == null) {
+    if (selection == null) {
       return;
     }
 
-    await ScryfallDatabase.instance.addCardToCollection(
-      widget.collectionId,
-      result.id,
-    );
+    if (selection.isBulk) {
+      await ScryfallDatabase.instance.addCardsToCollection(
+        widget.collectionId,
+        selection.cardIds,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Added ${selection.count} cards.')),
+        );
+      }
+    } else {
+      await ScryfallDatabase.instance.addCardToCollection(
+        widget.collectionId,
+        selection.cardIds.first,
+      );
+    }
     await _loadCards();
   }
 
@@ -2174,7 +3229,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final typeLine = _safeCardField(cardData, 'type_line');
     final manaCost = _safeCardField(cardData, 'mana_cost');
     final oracleText = _safeCardField(cardData, 'oracle_text');
-    final setName = _safeCardField(cardData, 'set_name');
     final power = _safeCardField(cardData, 'power');
     final toughness = _safeCardField(cardData, 'toughness');
     final loyalty = _safeCardField(cardData, 'loyalty');
@@ -2227,7 +3281,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       _buildSetIcon(entry.setCode, size: 22),
                       const SizedBox(width: 8),
                       Text(
-                        '${entry.setCode.toUpperCase()} • ${entry.collectorNumber}',
+                        entry.subtitleLabel,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: const Color(0xFFBFAE95),
                             ),
@@ -2294,10 +3348,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         fit: BoxFit.contain,
                       ),
                     ),
-                  if (entry.imageUri != null && setName.isNotEmpty) ...[
+                  if (entry.imageUri != null && entry.subtitleLabel.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      setName,
+                      entry.subtitleLabel,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: const Color(0xFFBFAE95),
                           ),
@@ -2320,8 +3374,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   List<_CardDetail> _parseCardDetails(CollectionCardEntry entry) {
+    final setLabel =
+        entry.setName.isNotEmpty ? entry.setName : entry.setCode.toUpperCase();
     final details = <_CardDetail>[
-      _CardDetail('Set', entry.setCode.toUpperCase()),
+      _CardDetail('Set', setLabel),
       _CardDetail('Collector', entry.collectorNumber),
     ];
     final data = _decodeCardJson(entry);
@@ -2689,10 +3745,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                             children: [
                                               Expanded(
                                                 child: Text(
-                                                  entry.setName.isNotEmpty
-                                                      ? entry.setName
-                                                      : entry.setCode
-                                                          .toUpperCase(),
+                                                  entry.subtitleLabel,
                                                   style: Theme.of(context)
                                                       .textTheme
                                                       .bodySmall
@@ -2882,10 +3935,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      entry.setName.isNotEmpty
-                                                          ? entry.setName
-                                                          : entry.setCode
-                                                              .toUpperCase(),
+                                                      entry.subtitleLabel,
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -2957,6 +4007,17 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       );
                     },
                   ),
+          if (!_loading)
+            Positioned(
+              left: 20,
+              bottom: 20 + MediaQuery.of(context).padding.bottom,
+              child: FloatingActionButton.extended(
+                heroTag: 'filters_fab',
+                onPressed: _showAdvancedFilters,
+                icon: const Icon(Icons.filter_list),
+                label: Text(_hasActiveAdvancedFilters() ? 'Filters*' : 'Filters'),
+              ),
+            ),
         ],
       ),
       floatingActionButton: widget.isSetCollection
@@ -3346,6 +4407,25 @@ class _AppBackground extends StatelessWidget {
 }
 
 
+class _CardSearchSelection {
+  _CardSearchSelection.single(CardSearchResult card)
+      : cards = const [],
+        isBulk = false,
+        count = 1,
+        cardIds = [card.id];
+
+  _CardSearchSelection.bulk(List<CardSearchResult> cards)
+      : cards = cards,
+        isBulk = true,
+        count = cards.length,
+        cardIds = cards.map((card) => card.id).toList(growable: false);
+
+  final List<CardSearchResult> cards;
+  final bool isBulk;
+  final int count;
+  final List<String> cardIds;
+}
+
 class _CardSearchSheet extends StatefulWidget {
   const _CardSearchSheet();
 
@@ -3369,6 +4449,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _loadingLanguages = true;
   bool _searching = false;
   String? _pendingQuery;
+  final Set<String> _selectedRarities = {};
+  final Set<String> _selectedSetCodes = {};
+  final Set<String> _selectedColors = {};
+  final Set<String> _selectedTypes = {};
+  int? _manaValueMin;
+  int? _manaValueMax;
 
   @override
   void initState() {
@@ -3475,10 +4561,486 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
   }
 
+  List<CardSearchResult> _filteredResults() {
+    if (_selectedRarities.isEmpty &&
+        _selectedSetCodes.isEmpty &&
+        _selectedColors.isEmpty &&
+        _selectedTypes.isEmpty &&
+        _manaValueMin == null &&
+        _manaValueMax == null) {
+      return _results;
+    }
+    return _results.where(_matchesAdvancedFilters).toList();
+  }
+
+  bool _matchesAdvancedFilters(CardSearchResult card) {
+    if (_selectedRarities.isNotEmpty) {
+      final rarity = _resultRarity(card);
+      if (rarity.isEmpty || !_selectedRarities.contains(rarity)) {
+        return false;
+      }
+    }
+    if (_selectedSetCodes.isNotEmpty) {
+      final code = card.setCode.trim().toLowerCase();
+      if (!_selectedSetCodes.contains(code)) {
+        return false;
+      }
+    }
+    if (_selectedColors.isNotEmpty) {
+      final colors = _resultColors(card);
+      if (colors.intersection(_selectedColors).isEmpty) {
+        return false;
+      }
+    }
+    if (_selectedTypes.isNotEmpty) {
+      final types = _resultTypes(card);
+      if (types.intersection(_selectedTypes).isEmpty) {
+        return false;
+      }
+    }
+    if (_manaValueMin != null || _manaValueMax != null) {
+      final manaValue = _resultManaValue(card);
+      if (_manaValueMin != null && manaValue < _manaValueMin!) {
+        return false;
+      }
+      if (_manaValueMax != null && manaValue > _manaValueMax!) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  String _resultRarity(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final value = data?['rarity']?.toString().trim().toLowerCase() ?? '';
+    return value;
+  }
+
+  Set<String> _resultColors(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final colors = (data?['colors'] as List?)?.whereType<String>().toList() ??
+        (data?['color_identity'] as List?)
+            ?.whereType<String>()
+            .toList() ??
+        <String>[];
+    if (colors.isEmpty) {
+      return {'C'};
+    }
+    return colors.map((code) => code.toUpperCase()).toSet();
+  }
+
+  Set<String> _resultTypes(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final typeLine = data?['type_line']?.toString() ?? '';
+    if (typeLine.isEmpty) {
+      return {};
+    }
+    const knownTypes = [
+      'Artifact',
+      'Creature',
+      'Enchantment',
+      'Instant',
+      'Land',
+      'Planeswalker',
+      'Sorcery',
+      'Battle',
+      'Tribal',
+    ];
+    final matches = <String>{};
+    for (final type in knownTypes) {
+      if (typeLine.toLowerCase().contains(type.toLowerCase())) {
+        matches.add(type);
+      }
+    }
+    return matches;
+  }
+
+  double _resultManaValue(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final value = data?['cmc'];
+    if (value is num) {
+      return value.toDouble();
+    }
+    if (value is String) {
+      return double.tryParse(value) ?? 0;
+    }
+    return 0;
+  }
+
+  Map<String, dynamic>? _decodeCardJson(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    return null;
+  }
+
+  bool _hasActiveAdvancedFilters() {
+    return _selectedRarities.isNotEmpty ||
+        _selectedSetCodes.isNotEmpty ||
+        _selectedColors.isNotEmpty ||
+        _selectedTypes.isNotEmpty ||
+        _manaValueMin != null ||
+        _manaValueMax != null;
+  }
+
+  String _colorLabel(String code) {
+    switch (code.toUpperCase()) {
+      case 'W':
+        return 'White';
+      case 'U':
+        return 'Blue';
+      case 'B':
+        return 'Black';
+      case 'R':
+        return 'Red';
+      case 'G':
+        return 'Green';
+      case 'C':
+        return 'Colorless';
+      default:
+        return code.toUpperCase();
+    }
+  }
+
+  Future<void> _showAdvancedFilters() async {
+    final availableRarities = <String>{};
+    final availableSetCodes = <String, String>{};
+    final availableColors = <String>{};
+    final availableTypes = <String>{};
+    for (final card in _results) {
+      final rarity = _resultRarity(card);
+      if (rarity.isNotEmpty) {
+        availableRarities.add(rarity);
+      }
+      if (card.setCode.trim().isNotEmpty) {
+        availableSetCodes[card.setCode.trim().toLowerCase()] =
+            card.setName.trim().isNotEmpty
+                ? card.setName.trim()
+                : card.setCode.toUpperCase();
+      }
+      availableColors.addAll(_resultColors(card));
+      availableTypes.addAll(_resultTypes(card));
+    }
+
+    final tempRarities = _selectedRarities.toSet();
+    final tempSetCodes = _selectedSetCodes.toSet();
+    final tempColors = _selectedColors.toSet();
+    final tempTypes = _selectedTypes.toSet();
+    final minController =
+        TextEditingController(text: _manaValueMin?.toString() ?? '');
+    final maxController =
+        TextEditingController(text: _manaValueMax?.toString() ?? '');
+    var setQuery = '';
+
+    var applied = false;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Widget buildChipRow<T>(
+              Iterable<T> items,
+              bool Function(T) isSelected,
+              void Function(T) toggle,
+              String Function(T) label,
+            ) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: items
+                    .map(
+                      (item) => FilterChip(
+                        label: Text(label(item)),
+                        selected: isSelected(item),
+                        onSelected: (_) => setSheetState(() => toggle(item)),
+                      ),
+                    )
+                    .toList(),
+              );
+            }
+
+            final rarityOrder = ['common', 'uncommon', 'rare', 'mythic'];
+            final sortedRarities = availableRarities.toList()
+              ..sort((a, b) {
+                final ai = rarityOrder.indexOf(a);
+                final bi = rarityOrder.indexOf(b);
+                if (ai == -1 && bi == -1) {
+                  return a.compareTo(b);
+                }
+                if (ai == -1) return 1;
+                if (bi == -1) return -1;
+                return ai.compareTo(bi);
+              });
+            final sortedSets = availableSetCodes.entries.toList()
+              ..sort((a, b) => a.value.compareTo(b.value));
+            final filteredSets = sortedSets.where((entry) {
+              if (setQuery.isEmpty) {
+                return true;
+              }
+              return entry.value.toLowerCase().contains(setQuery) ||
+                  entry.key.toLowerCase().contains(setQuery);
+            }).toList();
+            const colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+            final sortedColors = availableColors.toList()
+              ..sort((a, b) =>
+                  colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)));
+            final sortedTypes = availableTypes.toList()..sort();
+
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Advanced filters',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                    if (sortedRarities.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Rarity',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedRarities,
+                        (value) => tempRarities.contains(value),
+                        (value) {
+                          if (!tempRarities.add(value)) {
+                            tempRarities.remove(value);
+                          }
+                        },
+                        (value) => _formatRarity(value),
+                      ),
+                    ],
+                    if (sortedSets.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Set',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        decoration: const InputDecoration(
+                          hintText: 'Search set',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) {
+                          setSheetState(() {
+                            setQuery = value.trim().toLowerCase();
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: sortedSets.length > 16 ? 200 : null,
+                        child: SingleChildScrollView(
+                          child: buildChipRow<MapEntry<String, String>>(
+                            filteredSets,
+                            (value) => tempSetCodes.contains(value.key),
+                            (value) {
+                              if (!tempSetCodes.add(value.key)) {
+                                tempSetCodes.remove(value.key);
+                              }
+                            },
+                            (value) => value.value,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (sortedColors.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Color',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedColors,
+                        (value) => tempColors.contains(value),
+                        (value) {
+                          if (!tempColors.add(value)) {
+                            tempColors.remove(value);
+                          }
+                        },
+                        (value) => _colorLabel(value),
+                      ),
+                    ],
+                    if (sortedTypes.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Type',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedTypes,
+                        (value) => tempTypes.contains(value),
+                        (value) {
+                          if (!tempTypes.add(value)) {
+                            tempTypes.remove(value);
+                          }
+                        },
+                        (value) => value,
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'Mana value',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: minController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              hintText: 'Min',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: maxController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              hintText: 'Max',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (sortedRarities.isEmpty &&
+                        sortedSets.isEmpty &&
+                        sortedColors.isEmpty &&
+                        sortedTypes.isEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text('No filters available for this search.'),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              tempRarities.clear();
+                              tempSetCodes.clear();
+                              tempColors.clear();
+                              tempTypes.clear();
+                              minController.clear();
+                              maxController.clear();
+                            });
+                          },
+                          child: const Text('Clear'),
+                        ),
+                        const Spacer(),
+                        FilledButton(
+                          onPressed: () {
+                            applied = true;
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (!mounted || !applied) {
+      return;
+    }
+    int? minValue = int.tryParse(minController.text.trim());
+    int? maxValue = int.tryParse(maxController.text.trim());
+    if (minValue != null && maxValue != null && minValue > maxValue) {
+      final swap = minValue;
+      minValue = maxValue;
+      maxValue = swap;
+    }
+    setState(() {
+      _selectedRarities
+        ..clear()
+        ..addAll(tempRarities);
+      _selectedSetCodes
+        ..clear()
+        ..addAll(tempSetCodes);
+      _selectedColors
+        ..clear()
+        ..addAll(tempColors);
+      _selectedTypes
+        ..clear()
+        ..addAll(tempTypes);
+      _manaValueMin = minValue;
+      _manaValueMax = maxValue;
+    });
+  }
+
+  Future<bool> _confirmBulkAdd(int count) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add all results?'),
+          content: Text('This will add $count cards to the collection.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Add all'),
+            ),
+          ],
+        );
+      },
+    );
+    return result == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
     final sheetHeight = mediaQuery.size.height * 0.78;
+    final visibleResults = _filteredResults();
+    final filtersActive = _hasActiveAdvancedFilters();
     return Padding(
       padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
       child: Container(
@@ -3512,6 +5074,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ),
                       IconButton(
+                        onPressed: _results.isEmpty ? null : _showAdvancedFilters,
+                        icon: Icon(
+                          Icons.filter_list,
+                          color: filtersActive
+                              ? const Color(0xFFE9C46A)
+                              : null,
+                        ),
+                        tooltip: 'Filters',
+                      ),
+                      IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close),
                       ),
@@ -3542,20 +5114,42 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      'Results: ${_results.length} · Languages: ${(_searchLanguages.toList()..sort()).join(', ')}',
+                      filtersActive
+                          ? 'Results: ${visibleResults.length} / ${_results.length} · Languages: ${(_searchLanguages.toList()..sort()).join(', ')}'
+                          : 'Results: ${_results.length} · Languages: ${(_searchLanguages.toList()..sort()).join(', ')}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: const Color(0xFFBFAE95),
                           ),
                     ),
                   ),
                 const SizedBox(height: 12),
+                if (!_loading && visibleResults.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final confirmed =
+                            await _confirmBulkAdd(visibleResults.length);
+                        if (!confirmed) {
+                          return;
+                        }
+                        if (!mounted) {
+                          return;
+                        }
+                        Navigator.of(context)
+                            .pop(_CardSearchSelection.bulk(visibleResults));
+                      },
+                      icon: const Icon(Icons.playlist_add),
+                      label: const Text('Add all results'),
+                    ),
+                  ),
                 Expanded(
                   child: _loading
                       ? const Padding(
                           padding: EdgeInsets.all(24),
                           child: CircularProgressIndicator(),
                         )
-                      : _results.isEmpty
+                      : visibleResults.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(24),
                               child: Column(
@@ -3589,13 +5183,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           : ListView.separated(
                               shrinkWrap: true,
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                              itemCount: _results.length,
+                              itemCount: visibleResults.length,
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: 10),
                               itemBuilder: (context, index) {
-                                final card = _results[index];
+                                final card = visibleResults[index];
                                 return InkWell(
-                                  onTap: () => Navigator.of(context).pop(card),
+                                  onTap: () => Navigator.of(context)
+                                      .pop(_CardSearchSelection.single(card)),
                                   onLongPress: () => _showPreview(card),
                                   borderRadius: BorderRadius.circular(14),
                                   child: Container(
@@ -3836,6 +5431,9 @@ class AppSettings {
   static const _prefsKeyAvailableLanguages = 'available_languages';
   static const _prefsKeyCollectionViewMode = 'collection_view_mode';
   static const _prefsKeyBulkType = 'scryfall_bulk_type';
+  static const _prefsKeyProUnlocked = 'pro_unlocked';
+  static const _prefsKeyPrimaryGameId = 'primary_game_id';
+  static const _prefsKeyEnabledGames = 'enabled_games';
 
   static const Map<String, String> languageLabels = {
     'en': 'English',
@@ -3915,6 +5513,39 @@ class AppSettings {
     await prefs.setString(_prefsKeyBulkType, value);
   }
 
+  static Future<String?> loadPrimaryGameId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prefsKeyPrimaryGameId);
+  }
+
+  static Future<void> savePrimaryGameId(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKeyPrimaryGameId, value);
+  }
+
+  static Future<List<String>> loadEnabledGames() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_prefsKeyEnabledGames) ?? [];
+  }
+
+  static Future<void> saveEnabledGames(List<String> games) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      _prefsKeyEnabledGames,
+      games.toSet().toList(),
+    );
+  }
+
+  static Future<bool> loadProUnlocked() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefsKeyProUnlocked) ?? false;
+  }
+
+  static Future<void> saveProUnlocked(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyProUnlocked, value);
+  }
+
   static Future<void> reset() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKeySearchLanguages);
@@ -3922,6 +5553,9 @@ class AppSettings {
     await prefs.remove(_prefsKeyAvailableLanguages);
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
+    await prefs.remove(_prefsKeyProUnlocked);
+    await prefs.remove(_prefsKeyPrimaryGameId);
+    await prefs.remove(_prefsKeyEnabledGames);
   }
 
   static Future<_CollectionViewMode> loadCollectionViewMode() async {
@@ -3941,6 +5575,100 @@ class AppSettings {
       _prefsKeyCollectionViewMode,
       mode == _CollectionViewMode.gallery ? 'gallery' : 'list',
     );
+  }
+}
+
+class PurchaseManager extends ChangeNotifier {
+  PurchaseManager._();
+
+  static final PurchaseManager instance = PurchaseManager._();
+  static const String _proProductId = 'tcg_tracker_pro';
+
+  bool _isPro = false;
+  bool _storeAvailable = false;
+  bool _testMode = true;
+  bool _initialized = false;
+  ProductDetails? _proProduct;
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
+
+  bool get isPro => _isPro;
+  bool get storeAvailable => _storeAvailable;
+  bool get testMode => _testMode;
+  bool get isInitialized => _initialized;
+  String get priceLabel => _proProduct?.price ?? 'TBD';
+
+  Future<void> init() async {
+    if (_initialized) {
+      return;
+    }
+    _isPro = await AppSettings.loadProUnlocked();
+    if (_supportsStore()) {
+      _storeAvailable = await InAppPurchase.instance.isAvailable();
+      _subscription ??= InAppPurchase.instance.purchaseStream.listen(
+        _handlePurchaseUpdates,
+        onDone: () {
+          _subscription = null;
+        },
+      );
+      if (_storeAvailable) {
+        final response = await InAppPurchase.instance.queryProductDetails(
+          {_proProductId},
+        );
+        if (response.error == null && response.productDetails.isNotEmpty) {
+          _proProduct = response.productDetails.first;
+        }
+      }
+    }
+    _initialized = true;
+    notifyListeners();
+  }
+
+  Future<void> setTestMode(bool value) async {
+    _testMode = value;
+    notifyListeners();
+  }
+
+  Future<void> purchasePro() async {
+    if (_testMode || !_supportsStore()) {
+      await _setPro(!_isPro);
+      return;
+    }
+    if (!_storeAvailable || _proProduct == null) {
+      return;
+    }
+    final purchaseParam = PurchaseParam(productDetails: _proProduct!);
+    await InAppPurchase.instance.buyNonConsumable(
+      purchaseParam: purchaseParam,
+    );
+  }
+
+  Future<void> restorePurchases() async {
+    if (!_supportsStore()) {
+      return;
+    }
+    await InAppPurchase.instance.restorePurchases();
+  }
+
+  bool _supportsStore() => Platform.isAndroid || Platform.isIOS;
+
+  Future<void> _setPro(bool value) async {
+    _isPro = value;
+    await AppSettings.saveProUnlocked(value);
+    notifyListeners();
+  }
+
+  Future<void> _handlePurchaseUpdates(
+    List<PurchaseDetails> purchases,
+  ) async {
+    for (final purchase in purchases) {
+      if (purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored) {
+        await _setPro(true);
+      }
+      if (purchase.pendingCompletePurchase) {
+        await InAppPurchase.instance.completePurchase(purchase);
+      }
+    }
   }
 }
 
@@ -4237,7 +5965,7 @@ String _setIconUrl(String setCode) {
 
 Widget _buildSetIcon(String setCode, {double size = 28}) {
   if (setCode.trim().isEmpty) {
-    return const Icon(Icons.style, color: Color(0xFFE9C46A));
+    return _emptySetIcon(size);
   }
   return Container(
     width: size,
@@ -4257,10 +5985,21 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
         Color(0xFFE9C46A),
         BlendMode.srcIn,
       ),
-      placeholderBuilder: (_) => const Icon(
-        Icons.style,
-        size: 16,
-        color: Color(0xFFE9C46A),
+      placeholderBuilder: (_) => _emptySetIcon(size - 12),
+      errorBuilder: (_, __, ___) => _emptySetIcon(size - 12),
+    ),
+  );
+}
+
+Widget _emptySetIcon(double size) {
+  return SizedBox(
+    width: size,
+    height: size,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF201A14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF3A2F24)),
       ),
     ),
   );
