@@ -655,6 +655,137 @@ class ScryfallDatabase {
         .toList();
   }
 
+  Future<List<CardSearchResult>> fetchCardsForFilters({
+    List<String> setCodes = const [],
+    List<String> rarities = const [],
+    List<String> types = const [],
+    List<String> languages = const [],
+  }) async {
+    final db = await open();
+    final whereClauses = <String>[];
+    final variables = <Variable>[];
+
+    if (setCodes.isNotEmpty) {
+      final normalized = setCodes
+          .map((code) => code.trim().toLowerCase())
+          .where((code) => code.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+            'LOWER(cards.set_code) IN (${List.filled(normalized.length, '?').join(', ')})');
+        variables.addAll(
+            normalized.map((code) => Variable.withString(code)));
+      }
+    }
+
+    if (rarities.isNotEmpty) {
+      final normalized = rarities
+          .map((rarity) => rarity.trim().toLowerCase())
+          .where((rarity) => rarity.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+            'LOWER(cards.rarity) IN (${List.filled(normalized.length, '?').join(', ')})');
+        variables.addAll(
+            normalized.map((rarity) => Variable.withString(rarity)));
+      }
+    }
+
+    if (types.isNotEmpty) {
+      final normalized = types
+          .map((type) => type.trim().toLowerCase())
+          .where((type) => type.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        final typeClauses = normalized
+            .map((_) => 'LOWER(cards.type_line) LIKE ?')
+            .join(' OR ');
+        whereClauses.add('($typeClauses)');
+        variables.addAll(
+          normalized.map((type) => Variable.withString('%$type%')),
+        );
+      }
+    }
+
+    if (languages.isNotEmpty) {
+      final normalized = languages
+          .map((lang) => lang.trim().toLowerCase())
+          .where((lang) => lang.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+            'LOWER(cards.lang) IN (${List.filled(normalized.length, '?').join(', ')})');
+        variables.addAll(
+            normalized.map((lang) => Variable.withString(lang)));
+      }
+    }
+
+    final whereSql =
+        whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM cards
+      $whereSql
+      ORDER BY cards.name ASC
+      ''',
+      variables: variables,
+    ).get();
+
+    return rows
+        .map(
+          (row) => CardSearchResult(
+            id: row.read<String>('id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<Map<String, int>> fetchSetTotalsForCodes(
+    List<String> setCodes,
+  ) async {
+    if (setCodes.isEmpty) {
+      return {};
+    }
+    final db = await open();
+    final placeholders = List.filled(setCodes.length, '?').join(', ');
+    final rows = await db.customSelect(
+      '''
+      SELECT set_code AS set_code, COUNT(*) AS total
+      FROM cards
+      WHERE set_code IN ($placeholders)
+      GROUP BY set_code
+      ''',
+      variables: setCodes.map(Variable.withString).toList(),
+    ).get();
+    final result = <String, int>{};
+    for (final row in rows) {
+      final code = row.read<String>('set_code').trim().toLowerCase();
+      final total = row.read<int>('total');
+      if (code.isNotEmpty && total > 0) {
+        result[code] = total;
+      }
+    }
+    return result;
+  }
+
   CardsCompanion _mapCardCompanion(Map<String, dynamic> card) {
     return CardsCompanion.insert(
       id: card['id'] as String? ?? '',

@@ -848,6 +848,41 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _collections.add(CollectionInfo(id: id, name: name, cardCount: 0));
     });
+
+    final addCards = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Vuoi aggiungere delle carte?'),
+          content: const Text(
+            'Puoi usare la ricerca e i filtri per aggiungere più carte.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Non ora'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Sì'),
+            ),
+          ],
+        );
+      },
+    );
+    if (addCards == true && mounted) {
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) => CollectionDetailPage(
+                collectionId: id,
+                name: name,
+                autoOpenAddCard: true,
+              ),
+            ),
+          )
+          .then((_) => _loadCollections());
+    }
   }
 
   Future<void> _addSetCollection(BuildContext context) async {
@@ -1817,6 +1852,7 @@ class CollectionDetailPage extends StatefulWidget {
     this.isAllCards = false,
     this.isSetCollection = false,
     this.setCode,
+    this.autoOpenAddCard = false,
   });
 
   final int collectionId;
@@ -1824,6 +1860,7 @@ class CollectionDetailPage extends StatefulWidget {
   final bool isAllCards;
   final bool isSetCollection;
   final String? setCode;
+  final bool autoOpenAddCard;
 
   @override
   State<CollectionDetailPage> createState() => _CollectionDetailPageState();
@@ -2612,12 +2649,23 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   final Set<String> _selectedTypes = {};
   int? _manaValueMin;
   int? _manaValueMax;
+  bool _autoAddShown = false;
+  Map<String, int> _setTotalsByCode = {};
 
   @override
   void initState() {
     super.initState();
     _loadCards();
     _loadViewMode();
+    if (widget.autoOpenAddCard && !widget.isSetCollection) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _autoAddShown) {
+          return;
+        }
+        _autoAddShown = true;
+        _addCard(context);
+      });
+    }
   }
 
   Future<void> _loadViewMode() async {
@@ -2640,6 +2688,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               )
             : await ScryfallDatabase.instance
                 .fetchCollectionCards(widget.collectionId);
+    final setCodes = cards
+        .map((entry) => entry.setCode.trim().toLowerCase())
+        .where((code) => code.isNotEmpty)
+        .toSet()
+        .toList();
+    final totals = await ScryfallDatabase.instance
+        .fetchSetTotalsForCodes(setCodes);
     if (!mounted) {
       return;
     }
@@ -2647,6 +2702,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _cards
         ..clear()
         ..addAll(cards);
+      _setTotalsByCode = totals;
       _loading = false;
     });
   }
@@ -2796,6 +2852,92 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return entry.setName.trim();
     }
     return entry.setCode.toUpperCase();
+  }
+
+  int? _setTotalForEntry(CollectionCardEntry entry) {
+    final data = _decodeCardJson(entry);
+    int? parseTotal(dynamic raw) {
+      if (raw is num) {
+        final value = raw.toInt();
+        return value > 0 ? value : null;
+      }
+      if (raw is String) {
+        final parsed = int.tryParse(raw.trim());
+        if (parsed != null && parsed > 0) {
+          return parsed;
+        }
+      }
+      return null;
+    }
+
+    if (data != null) {
+      final direct = [
+        data['printed_total'],
+        data['set_total'],
+        data['printedTotal'],
+        data['setTotal'],
+        data['total'],
+      ];
+      for (final raw in direct) {
+        final parsed = parseTotal(raw);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+
+      final setData = data['set'];
+      if (setData is Map<String, dynamic>) {
+        final nested = [
+          setData['printed_total'],
+          setData['set_total'],
+          setData['printedTotal'],
+          setData['setTotal'],
+          setData['total'],
+        ];
+        for (final raw in nested) {
+          final parsed = parseTotal(raw);
+          if (parsed != null) {
+            return parsed;
+          }
+        }
+      }
+    }
+    final code = entry.setCode.trim().toLowerCase();
+    final fromMap = _setTotalsByCode[code];
+    if (fromMap != null && fromMap > 0) {
+      return fromMap;
+    }
+    if (widget.isSetCollection && _cards.isNotEmpty) {
+      return _cards.length;
+    }
+    return null;
+  }
+
+  String _collectorProgressLabel(CollectionCardEntry entry) {
+    final number = entry.collectorNumber.trim();
+    if (number.isEmpty) {
+      return '';
+    }
+    if (number.contains('/')) {
+      return number;
+    }
+    final total = _setTotalForEntry(entry);
+    if (total == null || total <= 0) {
+      return number;
+    }
+    return '$number/$total';
+  }
+
+  String _subtitleLabel(CollectionCardEntry entry) {
+    final setLabel = _setLabelForEntry(entry);
+    final progress = _collectorProgressLabel(entry);
+    if (setLabel.isEmpty) {
+      return progress;
+    }
+    if (progress.isEmpty) {
+      return setLabel;
+    }
+    return '$setLabel • $progress';
   }
 
   Future<void> _showAdvancedFilters() async {
@@ -3170,17 +3312,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _quickAddCard(CollectionCardEntry entry) async {
-    if (!widget.isSetCollection) {
+    if (widget.isSetCollection) {
+      final nextQuantity = entry.quantity + 1;
+      await ScryfallDatabase.instance.upsertCollectionCard(
+        widget.collectionId,
+        entry.cardId,
+        quantity: nextQuantity,
+        foil: entry.foil,
+        altArt: entry.altArt,
+      );
+    } else if (widget.isAllCards) {
+      await ScryfallDatabase.instance
+          .addCardToCollection(widget.collectionId, entry.cardId);
+    } else {
       return;
     }
-    final nextQuantity = entry.quantity + 1;
-    await ScryfallDatabase.instance.upsertCollectionCard(
-      widget.collectionId,
-      entry.cardId,
-      quantity: nextQuantity,
-      foil: entry.foil,
-      altArt: entry.altArt,
-    );
     await _loadCards();
   }
 
@@ -3281,7 +3427,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       _buildSetIcon(entry.setCode, size: 22),
                       const SizedBox(width: 8),
                       Text(
-                        entry.subtitleLabel,
+                        _subtitleLabel(entry),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: const Color(0xFFBFAE95),
                             ),
@@ -3348,10 +3494,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         fit: BoxFit.contain,
                       ),
                     ),
-                  if (entry.imageUri != null && entry.subtitleLabel.isNotEmpty) ...[
+                  if (entry.imageUri != null &&
+                      _subtitleLabel(entry).isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
-                      entry.subtitleLabel,
+                      _subtitleLabel(entry),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: const Color(0xFFBFAE95),
                           ),
@@ -3503,7 +3650,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    entry.subtitleLabel,
+                    _subtitleLabel(entry),
                     style: Theme.of(context)
                         .textTheme
                         .bodySmall
@@ -3713,6 +3860,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       final entry = visibleCards[index];
                       final isMissing =
                           widget.isSetCollection && entry.quantity == 0;
+                      final hasCornerQuantity = entry.quantity > 1;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
                         onLongPress: widget.isAllCards
@@ -3722,95 +3870,110 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(16),
-                                decoration: _cardTintDecoration(context, entry),
-                                child: Row(
-                                  children: [
-                                    _buildSetIcon(entry.setCode),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            entry.name,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium,
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  entry.subtitleLabel,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(
-                                                        color: const Color(
-                                                            0xFFBFAE95),
+                              ConstrainedBox(
+                                constraints:
+                                    const BoxConstraints(minHeight: 108),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration:
+                                      _cardTintDecoration(context, entry),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.end,
+                                    children: [
+                                      _buildSetIcon(entry.setCode, size: 30),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              entry.name,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Builder(
+                                              builder: (context) {
+                                                final setLabel =
+                                                    _setLabelForEntry(entry);
+                                                final progress =
+                                                    _collectorProgressLabel(
+                                                        entry);
+                                                final hasRarity = entry.rarity
+                                                    .trim()
+                                                    .isNotEmpty;
+                                                final leftLabel = setLabel
+                                                        .isNotEmpty
+                                                    ? setLabel
+                                                    : progress;
+                                                return Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        leftLabel,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                  0xFFBFAE95),
+                                                            ),
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
                                                       ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              if (entry.rarity
-                                                  .trim()
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(width: 8),
-                                                _raritySquare(entry.rarity),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  _rarityInitial(entry.rarity),
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodySmall
-                                                      ?.copyWith(
-                                                        color: const Color(
-                                                            0xFFE9C46A),
+                                                    ),
+                                                    if (progress.isNotEmpty &&
+                                                        setLabel
+                                                            .isNotEmpty) ...[
+                                                      Text(
+                                                        progress,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                  0xFFBFAE95),
+                                                            ),
                                                       ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (isMissing)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF1C1713),
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                          border: Border.all(
-                                              color: const Color(0xFF3A2F24)),
-                                        ),
-                                        child: Text(
-                                          'Missing',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall,
+                                                    ],
+                                                    if (hasRarity) ...[
+                                                      const SizedBox(width: 6),
+                                                      _raritySquare(
+                                                          entry.rarity),
+                                                    ],
+                                                  ],
+                                                );
+                                              },
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    if (widget.isSetCollection) ...[
-                                      const SizedBox(width: 8),
-                                      IconButton(
-                                        tooltip: 'Add one',
-                                        icon: const Icon(
-                                            Icons.add_circle_outline),
-                                        color: const Color(0xFFE9C46A),
-                                        onPressed: () => _quickAddCard(entry),
-                                      ),
+                                      if (widget.isSetCollection ||
+                                          widget.isAllCards) ...[
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          tooltip: 'Add one',
+                                          icon: const Icon(
+                                              Icons.add_circle_outline),
+                                          color: const Color(0xFFE9C46A),
+                                          onPressed: () =>
+                                              _quickAddCard(entry),
+                                        ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               ),
-                              if (entry.quantity > 1)
+                              if (isMissing)
+                                Positioned(
+                                  top: 6,
+                                  right: hasCornerQuantity ? 42 : 8,
+                                  child: _buildBadge('Missing'),
+                                ),
+                              if (hasCornerQuantity)
                                 Positioned(
                                   top: 0,
                                   right: 0,
@@ -3836,6 +3999,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       final entry = visibleCards[index];
                       final isMissing =
                           widget.isSetCollection && entry.quantity == 0;
+                      final hasCornerQuantity = entry.quantity > 1;
+                      final badgeOnRight =
+                          widget.isSetCollection || widget.isAllCards;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
                         onLongPress: widget.isAllCards
@@ -3872,22 +4038,45 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                     entry.imageUri!,
                                                     fit: BoxFit.cover,
                                                   ),
+                                            if (widget.isSetCollection ||
+                                                widget.isAllCards)
+                                              Positioned(
+                                                top: 8,
+                                                left: 8,
+                                                child: Material(
+                                                  color: const Color(0xFF1C1713)
+                                                      .withOpacity(0.9),
+                                                  shape: const CircleBorder(),
+                                                  child: InkWell(
+                                                    customBorder:
+                                                        const CircleBorder(),
+                                                    onTap: () =>
+                                                        _quickAddCard(entry),
+                                                    child: const Padding(
+                                                      padding:
+                                                          EdgeInsets.all(9),
+                                                      child: Icon(
+                                                        Icons.add,
+                                                        size: 22,
+                                                        color:
+                                                            Color(0xFFE9C46A),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
                                             if (entry.foil || entry.altArt)
                                               Positioned(
-                                                top: 10,
-                                                right: entry.quantity > 1
-                                                    ? null
-                                                    : 10,
-                                                left: entry.quantity > 1
-                                                    ? 10
-                                                    : null,
+                                                top: isMissing ? 52 : 10,
+                                                right: badgeOnRight ? 10 : null,
+                                                left: badgeOnRight ? null : 10,
                                                 child: Column(
                                                   crossAxisAlignment:
-                                                      entry.quantity > 1
+                                                      badgeOnRight
                                                           ? CrossAxisAlignment
-                                                              .start
+                                                              .end
                                                           : CrossAxisAlignment
-                                                              .end,
+                                                              .start,
                                                   children: [
                                                     if (entry.foil)
                                                       _buildBadge('Foil'),
@@ -3901,8 +4090,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                               ),
                                             if (isMissing)
                                               Positioned(
-                                                top: 10,
-                                                left: 10,
+                                                top: 8,
+                                                right: 8,
                                                 child: _buildBadge('Missing'),
                                               ),
                                           ],
@@ -3910,32 +4099,38 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                       ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.all(12),
+                                      padding: const EdgeInsets.all(10),
                                       child: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            entry.name,
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium,
+                                          SizedBox(
+                                            height: 44,
+                                            child: Text(
+                                              entry.name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium,
+                                            ),
                                           ),
-                                          const SizedBox(height: 6),
+                                          const SizedBox(height: 4),
                                           Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
                                             children: [
                                               _buildSetIcon(entry.setCode,
                                                   size: 22),
-                                              const SizedBox(width: 8),
+                                              const SizedBox(width: 6),
                                               Expanded(
                                                 child: Column(
                                                   crossAxisAlignment:
                                                       CrossAxisAlignment.start,
                                                   children: [
                                                     Text(
-                                                      entry.subtitleLabel,
+                                                      _setLabelForEntry(entry),
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -3947,46 +4142,50 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                                 0xFFBFAE95),
                                                           ),
                                                     ),
-                                                    if (entry.rarity
-                                                        .trim()
-                                                        .isNotEmpty)
-                                                      Row(
-                                                        children: [
-                                                          _raritySquare(
-                                                              entry.rarity),
-                                                          const SizedBox(
-                                                              width: 6),
-                                                          Text(
-                                                            _rarityInitial(
-                                                                entry.rarity),
-                                                            style: Theme.of(
-                                                                    context)
-                                                                .textTheme
-                                                                .bodySmall
-                                                                ?.copyWith(
-                                                                  color: const Color(
-                                                                      0xFFE9C46A),
-                                                                ),
-                                                          ),
-                                                        ],
-                                                      ),
+                                                    Builder(
+                                                      builder: (context) {
+                                                        final progress =
+                                                            _collectorProgressLabel(
+                                                                entry);
+                                                        final hasRarity = entry
+                                                            .rarity
+                                                            .trim()
+                                                            .isNotEmpty;
+                                                        if (!hasRarity &&
+                                                            progress
+                                                                .isEmpty) {
+                                                          return const SizedBox
+                                                              .shrink();
+                                                        }
+                                                        return Row(
+                                                          children: [
+                                                            const Spacer(),
+                                                            if (progress
+                                                                .isNotEmpty)
+                                                              Text(
+                                                                progress,
+                                                                style: Theme.of(
+                                                                        context)
+                                                                    .textTheme
+                                                                    .bodySmall
+                                                                    ?.copyWith(
+                                                                      color: const Color(
+                                                                          0xFFBFAE95),
+                                                                    ),
+                                                              ),
+                                                            if (hasRarity) ...[
+                                                              const SizedBox(
+                                                                  width: 6),
+                                                              _raritySquare(
+                                                                  entry.rarity),
+                                                            ],
+                                                          ],
+                                                        );
+                                                      },
+                                                    ),
                                                   ],
                                                 ),
                                               ),
-                                              if (widget.isSetCollection) ...[
-                                                const SizedBox(width: 6),
-                                                IconButton(
-                                                  tooltip: 'Add one',
-                                                  icon: const Icon(
-                                                    Icons.add_circle_outline,
-                                                    size: 18,
-                                                  ),
-                                                  color:
-                                                      const Color(0xFFE9C46A),
-                                                  onPressed: () =>
-                                                      _quickAddCard(entry),
-                                                ),
-                                              ],
                                             ],
                                           ),
                                         ],
@@ -4011,11 +4210,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             Positioned(
               left: 20,
               bottom: 20 + MediaQuery.of(context).padding.bottom,
-              child: FloatingActionButton.extended(
+              child: FloatingActionButton(
                 heroTag: 'filters_fab',
                 onPressed: _showAdvancedFilters,
-                icon: const Icon(Icons.filter_list),
-                label: Text(_hasActiveAdvancedFilters() ? 'Filters*' : 'Filters'),
+                tooltip: 'Filters',
+                backgroundColor: _hasActiveAdvancedFilters()
+                    ? const Color(0xFFE9C46A)
+                    : null,
+                foregroundColor: _hasActiveAdvancedFilters()
+                    ? const Color(0xFF1C1510)
+                    : null,
+                child: Icon(
+                  _hasActiveAdvancedFilters()
+                      ? Icons.filter_list_alt
+                      : Icons.filter_list,
+                ),
               ),
             ),
         ],
@@ -4687,6 +4896,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _manaValueMax != null;
   }
 
+  bool _hasNarrowingFilters() {
+    return _selectedRarities.isNotEmpty ||
+        _selectedSetCodes.isNotEmpty ||
+        _selectedTypes.isNotEmpty;
+  }
+
   String _colorLabel(String code) {
     switch (code.toUpperCase()) {
       case 'W':
@@ -4711,19 +4926,45 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final availableSetCodes = <String, String>{};
     final availableColors = <String>{};
     final availableTypes = <String>{};
-    for (final card in _results) {
-      final rarity = _resultRarity(card);
-      if (rarity.isNotEmpty) {
-        availableRarities.add(rarity);
+    if (_results.isEmpty) {
+      const fallbackRarities = ['common', 'uncommon', 'rare', 'mythic'];
+      const fallbackColors = ['W', 'U', 'B', 'R', 'G', 'C'];
+      const fallbackTypes = [
+        'Artifact',
+        'Creature',
+        'Enchantment',
+        'Instant',
+        'Land',
+        'Planeswalker',
+        'Sorcery',
+        'Battle',
+        'Tribal',
+      ];
+      availableRarities.addAll(fallbackRarities);
+      availableColors.addAll(fallbackColors);
+      availableTypes.addAll(fallbackTypes);
+      final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+      for (final set in sets) {
+        availableSetCodes[set.code.trim().toLowerCase()] =
+            set.name.trim().isNotEmpty
+                ? set.name.trim()
+                : set.code.toUpperCase();
       }
-      if (card.setCode.trim().isNotEmpty) {
-        availableSetCodes[card.setCode.trim().toLowerCase()] =
-            card.setName.trim().isNotEmpty
-                ? card.setName.trim()
-                : card.setCode.toUpperCase();
+    } else {
+      for (final card in _results) {
+        final rarity = _resultRarity(card);
+        if (rarity.isNotEmpty) {
+          availableRarities.add(rarity);
+        }
+        if (card.setCode.trim().isNotEmpty) {
+          availableSetCodes[card.setCode.trim().toLowerCase()] =
+              card.setName.trim().isNotEmpty
+                  ? card.setName.trim()
+                  : card.setCode.toUpperCase();
+        }
+        availableColors.addAll(_resultColors(card));
+        availableTypes.addAll(_resultTypes(card));
       }
-      availableColors.addAll(_resultColors(card));
-      availableTypes.addAll(_resultTypes(card));
     }
 
     final tempRarities = _selectedRarities.toSet();
@@ -4947,7 +5188,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         sortedColors.isEmpty &&
                         sortedTypes.isEmpty) ...[
                       const SizedBox(height: 12),
-                      const Text('No filters available for this search.'),
+                      const Text('No filters available.'),
                     ],
                     const SizedBox(height: 20),
                     Row(
@@ -5012,6 +5253,55 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     });
   }
 
+  Future<void> _bulkAddByFilters() async {
+    if (!_hasActiveAdvancedFilters()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select filters first.')),
+      );
+      return;
+    }
+    if (!_hasNarrowingFilters()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Select Set, Rarity, or Type to narrow results.'),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _loading = true;
+    });
+    try {
+      final candidates = await ScryfallDatabase.instance.fetchCardsForFilters(
+        setCodes: _selectedSetCodes.toList(),
+        rarities: _selectedRarities.toList(),
+        types: _selectedTypes.toList(),
+        languages: _searchLanguages.toList(),
+      );
+      final filtered = candidates.where(_matchesAdvancedFilters).toList();
+      if (!mounted) {
+        return;
+      }
+      if (filtered.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No cards match these filters.')),
+        );
+        return;
+      }
+      final confirmed = await _confirmBulkAdd(filtered.length);
+      if (!confirmed || !mounted) {
+        return;
+      }
+      Navigator.of(context).pop(_CardSearchSelection.bulk(filtered));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   Future<bool> _confirmBulkAdd(int count) async {
     final result = await showDialog<bool>(
       context: context,
@@ -5074,7 +5364,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ),
                       IconButton(
-                        onPressed: _results.isEmpty ? null : _showAdvancedFilters,
+                        onPressed: _showAdvancedFilters,
                         icon: Icon(
                           Icons.filter_list,
                           color: filtersActive
@@ -5123,6 +5413,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     ),
                   ),
                 const SizedBox(height: 12),
+                if (!_loading && filtersActive && _query.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: OutlinedButton.icon(
+                      onPressed: _bulkAddByFilters,
+                      icon: const Icon(Icons.playlist_add_check),
+                      label: const Text('Add filtered cards'),
+                    ),
+                  ),
                 if (!_loading && visibleResults.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -6029,14 +6328,6 @@ String _formatRarity(String raw) {
     return '';
   }
   return value[0].toUpperCase() + value.substring(1);
-}
-
-String _rarityInitial(String raw) {
-  final formatted = _formatRarity(raw);
-  if (formatted.isEmpty) {
-    return '';
-  }
-  return formatted[0];
 }
 
 Widget _cornerQuantityBadge(int quantity) {
