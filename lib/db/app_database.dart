@@ -437,6 +437,82 @@ class ScryfallDatabase {
     });
   }
 
+  Future<Map<String, String>> fetchSetCodesForCardIds(
+    List<String> cardIds,
+  ) async {
+    if (cardIds.isEmpty) {
+      return {};
+    }
+    final uniqueIds = cardIds.toSet().toList();
+    final db = await open();
+    final placeholders = List.filled(uniqueIds.length, '?').join(', ');
+    final rows = await db.customSelect(
+      '''
+      SELECT id AS card_id, set_code AS set_code
+      FROM cards
+      WHERE id IN ($placeholders)
+      ''',
+      variables: uniqueIds.map(Variable.withString).toList(),
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<String>('card_id'): row.read<String>('set_code')
+    };
+  }
+
+  Future<Map<String, int>> fetchCollectionQuantities(
+    int collectionId,
+    List<String> cardIds,
+  ) async {
+    if (cardIds.isEmpty) {
+      return {};
+    }
+    final uniqueIds = cardIds.toSet().toList();
+    final db = await open();
+    final placeholders = List.filled(uniqueIds.length, '?').join(', ');
+    final rows = await db.customSelect(
+      '''
+      SELECT card_id AS card_id, quantity AS quantity
+      FROM collection_cards
+      WHERE collection_id = ? AND card_id IN ($placeholders)
+      ''',
+      variables: [
+        Variable.withInt(collectionId),
+        ...uniqueIds.map(Variable.withString),
+      ],
+    ).get();
+    return {
+      for (final row in rows)
+        row.read<String>('card_id'): row.read<int>('quantity')
+    };
+  }
+
+  Future<Map<String, List<int>>> fetchCollectionIdsForCardIds(
+    List<String> cardIds,
+  ) async {
+    if (cardIds.isEmpty) {
+      return {};
+    }
+    final uniqueIds = cardIds.toSet().toList();
+    final db = await open();
+    final placeholders = List.filled(uniqueIds.length, '?').join(', ');
+    final rows = await db.customSelect(
+      '''
+      SELECT card_id AS card_id, collection_id AS collection_id
+      FROM collection_cards
+      WHERE card_id IN ($placeholders)
+      ''',
+      variables: uniqueIds.map(Variable.withString).toList(),
+    ).get();
+    final result = <String, List<int>>{};
+    for (final row in rows) {
+      final cardId = row.read<String>('card_id');
+      final collectionId = row.read<int>('collection_id');
+      (result[cardId] ??= []).add(collectionId);
+    }
+    return result;
+  }
+
   Future<void> upsertCollectionCard(
     int collectionId,
     String cardId, {

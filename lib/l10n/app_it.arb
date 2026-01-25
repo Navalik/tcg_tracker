@@ -1,0 +1,413 @@
+{
+  "@@locale": "it",
+  "appTitle": "TCG Tracker",
+  "allCards": "All cards",
+  "notSelected": "Not selected",
+  "bulkAllPrintingsTitle": "All printings",
+  "bulkAllPrintingsDescription": "All printings and languages. Heaviest.",
+  "bulkOracleCardsTitle": "Oracle cards",
+  "bulkOracleCardsDescription": "One entry per card. Fewer variants.",
+  "bulkUniqueArtworkTitle": "Unique artwork",
+  "bulkUniqueArtworkDescription": "One entry per artwork. Lightest.",
+  "gamePokemonDescription": "Pokemon TCG collections.",
+  "gameMagicDescription": "Magic: The Gathering collections.",
+  "gameYugiohDescription": "Yu-Gi-Oh! collections.",
+  "cardCount": "{count, plural, =0 {0 cards} =1 {1 card} other {{count} cards}}",
+  "@cardCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settings": "Settings",
+  "searchLanguages": "Search languages",
+  "searchLanguagesSubtitle": "Choose which card languages appear in search.",
+  "defaultLabel": "Default",
+  "remove": "Remove",
+  "addLanguage": "Add language",
+  "allLanguagesAdded": "All languages are already added.",
+  "languageAddedDownloadAgain": "Language added. Download again to import the cards.",
+  "cardDatabase": "Card database",
+  "cardDatabaseSubtitle": "Choose which database to download from Scryfall.",
+  "selectedType": "Selected type",
+  "change": "Change",
+  "changeDatabaseTitle": "Change database?",
+  "changeDatabaseBody": "The current database will be removed and you will need to download the cards again.",
+  "confirm": "Confirm",
+  "updatingDatabaseTitle": "Updating database",
+  "preparingDatabaseBody": "Preparing the new database...",
+  "databaseChangedGoHome": "Database changed. Go back to Home to download.",
+  "games": "Games",
+  "gamesSubtitle": "Manage which TCGs are enabled.",
+  "makePrimary": "Make primary",
+  "addGame": "Add game",
+  "gameLimitReachedTitle": "Game limit reached",
+  "gameLimitReachedBody": "The free version allows one game. Upgrade to Pro to add more.",
+  "allGamesAdded": "All games are already added.",
+  "primaryLabel": "Primary",
+  "addedLabel": "Added",
+  "primaryGameSet": "Primary game set to {game}.",
+  "@primaryGameSet": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "pro": "Pro",
+  "proSubtitle": "Unlock unlimited collections.",
+  "proStatus": "Pro status",
+  "proActive": "Pro active",
+  "basePlan": "Base plan",
+  "storeAvailable": "Store available",
+  "storeNotAvailableYet": "Store not available yet",
+  "unlimitedCollectionsUnlocked": "Unlimited collections are unlocked.",
+  "unlockProRemoveLimit": "Unlock Pro to remove the 5-collection limit.",
+  "priceLabel": "Price: {price}",
+  "@priceLabel": {
+    "placeholders": {
+      "price": {}
+    }
+  },
+  "whatYouGet": "What you get",
+  "unlimitedCollectionsFeature": "Unlimited collections",
+  "supportFuturePremiumFeatures": "Support future premium features",
+  "switchToBaseTest": "Switch to Base (test)",
+  "switchToProTest": "Switch to Pro (test)",
+  "restorePurchases": "Restore purchases",
+  "testMode": "Test mode",
+  "testModeSubtitle": "When enabled, Upgrade toggles Pro locally.",
+  "manage": "Manage",
+  "reset": "Reset",
+  "resetSubtitle": "Remove all collections and the card database.",
+  "factoryReset": "Factory reset",
+  "factoryResetTitle": "Factory reset?",
+  "factoryResetBody": "This will remove all collections, the card database, and downloads. The app will return to a first-launch state.",
+  "cleaningUpTitle": "Cleaning up",
+  "removingLocalDataBody": "Removing local data...",
+  "resetComplete": "Reset complete. Restart the app.",
+  "notNow": "Not now",
+  "upgrade": "Upgrade",
+  "cancel": "Cancel",
+  "chooseDatabase": "Choose database",
+  "downloadDatabase": "Download database",
+  "downloadUpdate": "Download update",
+  "downloading": "Downloading...",
+  "downloadingWithPercent": "Downloading... {percent}%",
+  "@downloadingWithPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "importingWithPercent": "Importing... {percent}%",
+  "@importingWithPercent": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "checkingUpdates": "Checking updates...",
+  "downloadingUpdateWithTotal": "Downloading update... {percent}% ({received} / {total})",
+  "@downloadingUpdateWithTotal": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "received": {},
+      "total": {}
+    }
+  },
+  "downloadingUpdateNoTotal": "Downloading update... {received}",
+  "@downloadingUpdateNoTotal": {
+    "placeholders": {
+      "received": {}
+    }
+  },
+  "importingCardsWithCount": "Importing cards... {percent}% ({count} cards)",
+  "@importingCardsWithCount": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadFailedTapUpdate": "Download failed. Tap update again.",
+  "selectDatabaseToDownload": "Select a database to download.",
+  "databaseMissingDownloadRequired": "Database {name} missing. Download required.",
+  "@databaseMissingDownloadRequired": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "updateReadyWithDate": "Update ready: {date}",
+  "@updateReadyWithDate": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "unknownDate": "unknown",
+  "upToDate": "Up to date.",
+  "importNow": "Import now",
+  "gameLabel": "Game: {game}",
+  "@gameLabel": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "rebuildingSearchIndex": "Rebuilding search index",
+  "requiredAfterLargeUpdates": "Required after large updates.",
+  "addTitle": "Add",
+  "addCards": "Add card(s)",
+  "addCardsToCatalogSubtitle": "Add to the main catalog.",
+  "addCardsToCollection": "Add card(s) to a collection",
+  "addCardsToCollectionSubtitle": "Choose a custom collection.",
+  "addCollection": "Add a collection",
+  "addCollectionSubtitle": "Create set-based or custom.",
+  "chooseCollection": "Choose collection",
+  "chooseCardDatabaseTitle": "Choose card database",
+  "chooseYourGameTitle": "Choose your game",
+  "collectionLimitReachedTitle": "Collection limit reached",
+  "collectionLimitReachedBody": "The free version allows up to {limit} collections. Upgrade to Pro to unlock unlimited collections.",
+  "@collectionLimitReachedBody": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "proActiveUnlimitedCollections": "Pro active. Unlimited collections.",
+  "basePlanCollectionLimit": "Base plan: up to {limit} collections.",
+  "@basePlanCollectionLimit": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "proEnabled": "Pro enabled",
+  "upgradeToPro": "Upgrade to Pro",
+  "myCollections": "My collections",
+  "buildYourCollectionsTitle": "Build your own collections",
+  "buildYourCollectionsSubtitle": "Tap to create your first collection.",
+  "addCardsNowTitle": "Add cards now?",
+  "addCardsNowBody": "Use search and filters to add multiple cards.",
+  "yes": "Yes",
+  "noSetsAvailableYet": "No sets available yet.",
+  "newSetCollectionTitle": "New set collection",
+  "collectionAlreadyExists": "Collection already exists.",
+  "failedToAddCollection": "Failed to add collection: {error}",
+  "@failedToAddCollection": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "newCollectionTitle": "New collection",
+  "create": "Create",
+  "collectionNameHint": "Collection name",
+  "createCustomCollectionFirst": "Create a custom collection first.",
+  "rename": "Rename",
+  "delete": "Delete",
+  "renameCollectionTitle": "Rename collection",
+  "save": "Save",
+  "deleteCollectionTitle": "Delete collection?",
+  "deleteCollectionBody": "\"{name}\" will be removed from this device.",
+  "@deleteCollectionBody": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "collectionDeleted": "Collection deleted.",
+  "downloadLinkUnavailable": "Download link unavailable.",
+  "scryfallBulkUpdateAvailable": "Scryfall bulk update available.",
+  "update": "Update",
+  "advancedFiltersTitle": "Advanced filters",
+  "rarity": "Rarity",
+  "setLabel": "Set",
+  "colorLabel": "Color",
+  "colorWhite": "White",
+  "colorBlue": "Blue",
+  "colorBlack": "Black",
+  "colorRed": "Red",
+  "colorGreen": "Green",
+  "colorColorless": "Colorless",
+  "languageEnglish": "English",
+  "languageItalian": "Italian",
+  "languageFrench": "French",
+  "languageGerman": "German",
+  "languageSpanish": "Spanish",
+  "languagePortuguese": "Portuguese",
+  "languageJapanese": "Japanese",
+  "languageKorean": "Korean",
+  "languageRussian": "Russian",
+  "languageChineseSimplified": "Chinese (Simplified)",
+  "languageChineseTraditional": "Chinese (Traditional)",
+  "languageArabic": "Arabic",
+  "languageHebrew": "Hebrew",
+  "languageLatin": "Latin",
+  "languageGreek": "Greek",
+  "languageSanskrit": "Sanskrit",
+  "languagePhyrexian": "Phyrexian",
+  "languageQuenya": "Quenya",
+  "typeLabel": "Type",
+  "manaValue": "Mana value",
+  "minLabel": "Min",
+  "maxLabel": "Max",
+  "noFiltersAvailableForList": "No filters available for this list.",
+  "noFiltersAvailable": "No filters available.",
+  "clear": "Clear",
+  "apply": "Apply",
+  "downloadComplete": "Download complete: {path}",
+  "@downloadComplete": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "downloadFailedWithError": "Download failed: {error}",
+  "@downloadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "downloadFailedGeneric": "Download failed.",
+  "networkErrorTryAgain": "Network error. Please try again.",
+  "gallery": "Gallery",
+  "list": "List",
+  "noCardsMatchFilters": "No cards match these filters",
+  "noOwnedCardsYet": "No owned cards yet",
+  "noCardsYet": "No cards yet",
+  "tryEnablingOwnedOrMissing": "Try enabling owned or missing cards.",
+  "addCardsHereOrAny": "Add cards here or inside any collection.",
+  "addFirstCardToStartCollection": "Add your first card to start this collection.",
+  "addCard": "Add card",
+  "searchCardsHint": "Search cards",
+  "ownedCount": "Owned ({count})",
+  "@ownedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "missingCount": "Missing ({count})",
+  "@missingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "useListToSetOwnedQuantities": "Use the list to set owned quantities.",
+  "addedCards": "Added {count} cards.",
+  "@addedCards": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "quantityLabel": "Quantity",
+  "quantityMultiplier": "x{count}",
+  "@quantityMultiplier": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "foilLabel": "Foil",
+  "altArtLabel": "Alt art",
+  "markMissing": "Mark missing",
+  "importComplete": "Import complete.",
+  "importFailed": "Import failed: {error}",
+  "@importFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "selectFiltersFirst": "Select filters first.",
+  "selectSetRarityTypeToNarrow": "Select Set, Rarity, or Type to narrow results.",
+  "addAllResultsTitle": "Add all results?",
+  "addAllResultsBody": "This will add {count} cards to the collection.",
+  "@addAllResultsBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addAll": "Add all",
+  "addFilteredCards": "Add filtered cards",
+  "addAllResults": "Add all results",
+  "searchCardTitle": "Search card",
+  "filters": "Filters",
+  "addOne": "Add one",
+  "missingLabel": "Missing",
+  "typeCardNameHint": "Type a card name",
+  "resultsWithFilters": "Results: {visible} / {total} · Languages: {languages}",
+  "@resultsWithFilters": {
+    "placeholders": {
+      "visible": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "languages": {}
+    }
+  },
+  "resultsWithoutFilters": "Results: {total} · Languages: {languages}",
+  "@resultsWithoutFilters": {
+    "placeholders": {
+      "total": {
+        "type": "int"
+      },
+      "languages": {}
+    }
+  },
+  "startTypingToSearch": "Start typing to search.",
+  "noResultsFound": "No results found",
+  "tryRemovingChangingFilters": "Try removing or changing filters.",
+  "tryDifferentNameOrSpelling": "Try a different name or spelling.",
+  "allCardsCollectionNotFound": "All cards collection not found.",
+  "searchSetHint": "Search set",
+  "setCollectionCount": "Set • {count} cards",
+  "@setCollectionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "customCollectionCount": "Custom • {count} cards",
+  "@customCollectionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "createCollectionTitle": "Create collection",
+  "setCollectionTitle": "Set collection",
+  "setCollectionSubtitle": "Tracks missing cards by set.",
+  "customCollectionTitle": "Custom collection",
+  "customCollectionSubtitle": "Add cards manually.",
+  "details": "Details",
+  "loyaltyLabel": "Loyalty {value}",
+  "@loyaltyLabel": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "detailSet": "Set",
+  "detailCollector": "Collector",
+  "detailRarity": "Rarity",
+  "detailSetName": "Set name",
+  "detailLanguage": "Language",
+  "detailRelease": "Release",
+  "detailArtist": "Artist"
+}
