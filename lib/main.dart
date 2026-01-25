@@ -3730,6 +3730,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               foil: foil,
                               altArt: altArt,
                             );
+                          } else if (widget.isAllCards) {
+                            await ScryfallDatabase.instance
+                                .upsertCollectionCard(
+                              widget.collectionId,
+                              entry.cardId,
+                              quantity: quantity,
+                              foil: foil,
+                              altArt: altArt,
+                            );
                           } else {
                             await ScryfallDatabase.instance.updateCollectionCard(
                               widget.collectionId,
@@ -3863,9 +3872,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       final hasCornerQuantity = entry.quantity > 1;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
-                        onLongPress: widget.isAllCards
-                            ? null
-                            : () => _showCardActions(entry),
+                        onLongPress: () => _showCardActions(entry),
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
@@ -3973,6 +3980,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   right: hasCornerQuantity ? 42 : 8,
                                   child: _buildBadge('Missing'),
                                 ),
+                              if (entry.foil || entry.altArt)
+                                Positioned(
+                                  top: isMissing ? 42 : 6,
+                                  right: hasCornerQuantity ? 42 : 8,
+                                  child: Row(
+                                    children: [
+                                      if (entry.foil)
+                                        _statusMiniBadge(icon: Icons.star),
+                                      if (entry.foil && entry.altArt)
+                                        const SizedBox(width: 6),
+                                      if (entry.altArt)
+                                        _statusMiniBadge(icon: Icons.brush),
+                                    ],
+                                  ),
+                                ),
                               if (hasCornerQuantity)
                                 Positioned(
                                   top: 0,
@@ -4000,13 +4022,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       final isMissing =
                           widget.isSetCollection && entry.quantity == 0;
                       final hasCornerQuantity = entry.quantity > 1;
-                      final badgeOnRight =
-                          widget.isSetCollection || widget.isAllCards;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
-                        onLongPress: widget.isAllCards
-                            ? null
-                            : () => _showCardActions(entry),
+                        onLongPress: () => _showCardActions(entry),
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
@@ -4065,34 +4083,31 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                   ),
                                                 ),
                                               ),
-                                            if (entry.foil || entry.altArt)
-                                              Positioned(
-                                                top: isMissing ? 52 : 10,
-                                                right: badgeOnRight ? 10 : null,
-                                                left: badgeOnRight ? null : 10,
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      badgeOnRight
-                                                          ? CrossAxisAlignment
-                                                              .end
-                                                          : CrossAxisAlignment
-                                                              .start,
-                                                  children: [
-                                                    if (entry.foil)
-                                                      _buildBadge('Foil'),
-                                                    if (entry.foil &&
-                                                        entry.altArt)
-                                                      const SizedBox(height: 6),
-                                                    if (entry.altArt)
-                                                      _buildBadge('Alt Art'),
-                                                  ],
-                                                ),
-                                              ),
                                             if (isMissing)
                                               Positioned(
                                                 top: 8,
                                                 right: 8,
                                                 child: _buildBadge('Missing'),
+                                              ),
+                                            if (entry.foil || entry.altArt)
+                                              Positioned(
+                                                bottom: 8,
+                                                right: 8,
+                                                child: Row(
+                                                  children: [
+                                                    if (entry.foil)
+                                                      _statusMiniBadge(
+                                                        icon: Icons.star,
+                                                      ),
+                                                    if (entry.foil &&
+                                                        entry.altArt)
+                                                      const SizedBox(width: 6),
+                                                    if (entry.altArt)
+                                                      _statusMiniBadge(
+                                                        icon: Icons.brush,
+                                                      ),
+                                                  ],
+                                                ),
                                               ),
                                           ],
                                         ),
@@ -6319,6 +6334,31 @@ Widget _buildBadge(String label) {
         color: Color(0xFFE9C46A),
       ),
     ),
+  );
+}
+
+Widget _statusMiniBadge({IconData? icon, String? label}) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+      color: const Color(0xFF2A221B),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: const Color(0xFF3A2F24)),
+    ),
+    child: icon != null
+        ? Icon(
+            icon,
+            size: 12,
+            color: const Color(0xFFE9C46A),
+          )
+        : Text(
+            label ?? '',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFFE9C46A),
+            ),
+          ),
   );
 }
 
