@@ -81,6 +81,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _isSetCollection(CollectionInfo collection) {
+    if (collection.type == CollectionType.set) {
+      return true;
+    }
     return collection.name.startsWith(_setPrefix);
   }
 
@@ -91,6 +94,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   String? _setCodeForCollection(CollectionInfo collection) {
     if (!_isSetCollection(collection)) {
       return null;
+    }
+    final filter = collection.filter;
+    if (filter != null && filter.sets.isNotEmpty) {
+      return filter.sets.first;
     }
     return collection.name.substring(_setPrefix.length).trim();
   }
@@ -114,6 +121,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   bool _canCreateCollection() {
     return _isProUnlocked || _userCollectionCount() < _freeCollectionLimit;
+  }
+
+  bool _filterHasCriteria(CollectionFilter filter) {
+    return (filter.name?.trim().isNotEmpty ?? false) ||
+        (filter.artist?.trim().isNotEmpty ?? false) ||
+        (filter.flavor?.trim().isNotEmpty ?? false) ||
+        filter.manaMin != null ||
+        filter.manaMax != null ||
+        filter.sets.isNotEmpty ||
+        filter.rarities.isNotEmpty ||
+        filter.colors.isNotEmpty ||
+        filter.types.isNotEmpty;
   }
 
   Future<void> _loadGameSelection() async {
@@ -281,7 +300,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     if (collections.isEmpty) {
       final id =
-          await ScryfallDatabase.instance.addCollection(_allCardsCollectionName);
+          await ScryfallDatabase.instance.addCollection(
+            _allCardsCollectionName,
+            type: CollectionType.all,
+          );
       if (!mounted) {
         return;
       }
@@ -289,7 +311,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _collections
           ..clear()
           ..add(CollectionInfo(
-              id: id, name: _allCardsCollectionName, cardCount: 0));
+              id: id,
+              name: _allCardsCollectionName,
+              cardCount: 0,
+              type: CollectionType.all,
+              filter: null,
+            ));
         _totalCardCount = owned;
       });
       return;
@@ -305,6 +332,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             id: collection.id,
             name: _allCardsCollectionName,
             cardCount: collection.cardCount,
+            type: CollectionType.all,
+            filter: collection.filter,
           ),
         );
       } else {
@@ -356,6 +385,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     collectionId: allCards.id,
                     name: _collectionDisplayName(allCards),
                     isAllCards: true,
+                    filter: allCards.filter,
                   ),
                 ),
               ).then((_) => _loadCollections());
@@ -398,6 +428,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     name: _collectionDisplayName(collection),
                     isSetCollection: setCode != null,
                     setCode: setCode,
+                    filter: collection.filter,
                   ),
                 ),
               ).then((_) => _loadCollections());
@@ -648,9 +679,42 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
+    final filter = await Navigator.of(context).push<CollectionFilter>(
+      MaterialPageRoute(
+        builder: (_) => _CollectionFilterBuilderPage(name: name),
+      ),
+    );
+    if (filter == null) {
+      return;
+    }
+    if (!_filterHasCriteria(filter)) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.selectFiltersFirst,
+      );
+      return;
+    }
+    if (!_filterHasCriteria(filter)) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.selectFiltersFirst,
+      );
+      return;
+    }
+
     int id;
     try {
-      id = await ScryfallDatabase.instance.addCollection(name);
+      id = await ScryfallDatabase.instance.addCollection(
+        name,
+        type: CollectionType.custom,
+        filter: filter,
+      );
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -665,49 +729,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     setState(() {
-      _collections.add(CollectionInfo(id: id, name: name, cardCount: 0));
+      _collections.add(
+        CollectionInfo(
+          id: id,
+          name: name,
+          cardCount: 0,
+          type: CollectionType.custom,
+          filter: filter,
+        ),
+      );
     });
-
-    if (!context.mounted) {
-      return;
-    }
-    final addCards = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.addCardsNowTitle),
-          content: Text(l10n.addCardsNowBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(l10n.notNow),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(l10n.yes),
-            ),
-          ],
-        );
-      },
-    );
-    if (addCards != true) {
-      return;
-    }
-    if (!context.mounted) {
-      return;
-    }
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => CollectionDetailPage(
-              collectionId: id,
-              name: name,
-              autoOpenAddCard: true,
-            ),
-          ),
-        )
-        .then((_) => _loadCollections());
+    await _loadCollections();
   }
 
   Future<void> _addSetCollection(BuildContext context) async {
@@ -805,8 +837,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     int id;
+    final filter = CollectionFilter(
+      sets: {selected.code.toLowerCase()},
+    );
     try {
-      id = await ScryfallDatabase.instance.addCollection(resolvedName);
+      id = await ScryfallDatabase.instance.addCollection(
+        resolvedName,
+        type: CollectionType.set,
+        filter: filter,
+      );
     } catch (error) {
       if (!context.mounted) {
         return;
@@ -822,13 +861,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     setState(() {
       _collections.add(
-        CollectionInfo(id: id, name: resolvedName, cardCount: 0),
+        CollectionInfo(
+          id: id,
+          name: resolvedName,
+          cardCount: 0,
+          type: CollectionType.set,
+          filter: filter,
+        ),
       );
       _setNameLookup = {
         ..._setNameLookup,
         selected.code: selected.name,
       };
     });
+    await _loadCollections();
   }
 
   Future<void> _showCreateCollectionOptions(BuildContext context) async {
@@ -898,6 +944,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               name: _collectionDisplayName(resolved),
               isAllCards: true,
               autoOpenAddCard: true,
+              filter: resolved.filter,
             ),
           ),
         )
@@ -952,6 +999,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               isSetCollection: isSet,
               setCode: isSet ? _setCodeForCollection(selected) : null,
               autoOpenAddCard: !isSet,
+              filter: selected.filter,
             ),
           ),
         )
@@ -985,6 +1033,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         ),
       );
+      menuItems.add(
+        PopupMenuItem(
+          value: _CollectionAction.editFilters,
+          child: Row(
+            children: [
+              Icon(Icons.tune, size: 18),
+              SizedBox(width: 8),
+              Text(AppLocalizations.of(context)!.filters),
+            ],
+          ),
+        ),
+      );
     }
     menuItems.add(
       PopupMenuItem(
@@ -1009,9 +1069,36 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     if (selection == _CollectionAction.rename) {
       await _renameCollection(collection);
+    } else if (selection == _CollectionAction.editFilters) {
+      await _editCollectionFilters(collection);
     } else if (selection == _CollectionAction.delete) {
       await _deleteCollection(collection);
     }
+  }
+
+  Future<void> _editCollectionFilters(CollectionInfo collection) async {
+    if (_isSetCollection(collection)) {
+      return;
+    }
+    final filter = await Navigator.of(context).push<CollectionFilter>(
+      MaterialPageRoute(
+        builder: (_) => _CollectionFilterBuilderPage(
+          name: _collectionDisplayName(collection),
+          initialFilter: collection.filter,
+        ),
+      ),
+    );
+    if (filter == null) {
+      return;
+    }
+    await ScryfallDatabase.instance.updateCollectionFilter(
+      collection.id,
+      filter: filter,
+    );
+    if (!mounted) {
+      return;
+    }
+    await _loadCollections();
   }
 
   Future<void> _renameCollection(CollectionInfo collection) async {
@@ -1073,6 +1160,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           id: collection.id,
           name: resolvedName,
           cardCount: collection.cardCount,
+          type: collection.type,
+          filter: collection.filter,
         );
       }
     });
@@ -1848,6 +1937,601 @@ class _PickCollectionSheet extends StatelessWidget {
   }
 }
 
+class _CollectionFilterBuilderPage extends StatefulWidget {
+  const _CollectionFilterBuilderPage({
+    required this.name,
+    this.initialFilter,
+  });
+
+  final String name;
+  final CollectionFilter? initialFilter;
+
+  @override
+  State<_CollectionFilterBuilderPage> createState() =>
+      _CollectionFilterBuilderPageState();
+}
+
+class _CollectionFilterBuilderPageState
+    extends State<_CollectionFilterBuilderPage> {
+  static const List<String> _knownTypes = [
+    'Artifact',
+    'Creature',
+    'Enchantment',
+    'Instant',
+    'Land',
+    'Planeswalker',
+    'Sorcery',
+    'Battle',
+    'Tribal',
+  ];
+  static const List<String> _rarityOrder = [
+    'common',
+    'uncommon',
+    'rare',
+    'mythic',
+  ];
+  static const List<String> _colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _artistController = TextEditingController();
+  final TextEditingController _flavorController = TextEditingController();
+  final TextEditingController _manaMinController = TextEditingController();
+  final TextEditingController _manaMaxController = TextEditingController();
+
+  final Set<String> _selectedSets = {};
+  final Set<String> _selectedRarities = {};
+  final Set<String> _selectedColors = {};
+  final Set<String> _selectedTypes = {};
+
+  List<SetInfo> _availableSets = [];
+  bool _loadingSets = true;
+  String _setQuery = '';
+  String _typeQuery = '';
+
+  bool _previewLoading = false;
+  int? _previewTotal;
+  List<CardSearchResult> _previewCards = [];
+
+  Timer? _previewDebounce;
+  Timer? _artistDebounce;
+  List<String> _artistSuggestions = [];
+  bool _loadingArtists = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialFilter;
+    if (initial != null) {
+      _nameController.text = initial.name ?? '';
+      _artistController.text = initial.artist ?? '';
+      _flavorController.text = initial.flavor ?? '';
+      if (initial.manaMin != null) {
+        _manaMinController.text = initial.manaMin.toString();
+      }
+      if (initial.manaMax != null) {
+        _manaMaxController.text = initial.manaMax.toString();
+      }
+      _selectedSets.addAll(initial.sets);
+      _selectedRarities.addAll(initial.rarities);
+      _selectedColors.addAll(initial.colors);
+      _selectedTypes.addAll(initial.types);
+    }
+    _loadSets();
+    _schedulePreviewUpdate();
+  }
+
+  @override
+  void dispose() {
+    _previewDebounce?.cancel();
+    _artistDebounce?.cancel();
+    _nameController.dispose();
+    _artistController.dispose();
+    _flavorController.dispose();
+    _manaMinController.dispose();
+    _manaMaxController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSets() async {
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _availableSets = sets;
+      _loadingSets = false;
+    });
+  }
+
+  void _schedulePreviewUpdate() {
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(const Duration(milliseconds: 250), () async {
+      await _refreshPreview();
+    });
+  }
+
+  void _onArtistChanged(String value) {
+    _artistDebounce?.cancel();
+    final query = value.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _artistSuggestions = [];
+        _loadingArtists = false;
+      });
+      _schedulePreviewUpdate();
+      return;
+    }
+    _artistDebounce = Timer(const Duration(milliseconds: 250), () async {
+      setState(() {
+        _loadingArtists = true;
+      });
+      final results =
+          await ScryfallDatabase.instance.fetchAvailableArtists(query: query);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _artistSuggestions = results;
+        _loadingArtists = false;
+      });
+    });
+    _schedulePreviewUpdate();
+  }
+
+  CollectionFilter _buildFilter() {
+    int? minValue = int.tryParse(_manaMinController.text.trim());
+    int? maxValue = int.tryParse(_manaMaxController.text.trim());
+    if (minValue != null && maxValue != null && minValue > maxValue) {
+      final swap = minValue;
+      minValue = maxValue;
+      maxValue = swap;
+    }
+    final name = _nameController.text.trim();
+    final artist = _artistController.text.trim();
+    final flavor = _flavorController.text.trim();
+    return CollectionFilter(
+      name: name.isEmpty ? null : name,
+      artist: artist.isEmpty ? null : artist,
+      flavor: flavor.isEmpty ? null : flavor,
+      manaMin: minValue,
+      manaMax: maxValue,
+      sets: _selectedSets,
+      rarities: _selectedRarities,
+      colors: _selectedColors,
+      types: _selectedTypes,
+    );
+  }
+
+  bool _hasCriteria(CollectionFilter filter) {
+    return (filter.name?.trim().isNotEmpty ?? false) ||
+        (filter.artist?.trim().isNotEmpty ?? false) ||
+        (filter.flavor?.trim().isNotEmpty ?? false) ||
+        filter.manaMin != null ||
+        filter.manaMax != null ||
+        filter.sets.isNotEmpty ||
+        filter.rarities.isNotEmpty ||
+        filter.colors.isNotEmpty ||
+        filter.types.isNotEmpty;
+  }
+
+  Future<void> _refreshPreview() async {
+    final filter = _buildFilter();
+    if (!_hasCriteria(filter)) {
+      setState(() {
+        _previewLoading = false;
+        _previewTotal = null;
+        _previewCards = [];
+      });
+      return;
+    }
+    setState(() {
+      _previewLoading = true;
+    });
+    final total =
+        await ScryfallDatabase.instance.countCardsForFilter(filter);
+    final cards = await ScryfallDatabase.instance.fetchFilteredCardPreviews(
+      filter,
+      limit: 30,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _previewTotal = total;
+      _previewCards = cards;
+      _previewLoading = false;
+    });
+  }
+
+  String _colorLabel(String code) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (code.toUpperCase()) {
+      case 'W':
+        return l10n.colorWhite;
+      case 'U':
+        return l10n.colorBlue;
+      case 'B':
+        return l10n.colorBlack;
+      case 'R':
+        return l10n.colorRed;
+      case 'G':
+        return l10n.colorGreen;
+      case 'C':
+        return l10n.colorColorless;
+      default:
+        return code.toUpperCase();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final isEditing = widget.initialFilter != null;
+    final filter = _buildFilter();
+    final hasCriteria = _hasCriteria(filter);
+    final filteredSets = _setQuery.isEmpty
+        ? <SetInfo>[]
+        : _availableSets
+            .where(
+              (set) =>
+                  set.name.toLowerCase().contains(_setQuery.toLowerCase()) ||
+                  set.code.toLowerCase().contains(_setQuery.toLowerCase()),
+            )
+            .toList();
+    final filteredTypes = _typeQuery.isEmpty
+        ? <String>[]
+        : _knownTypes
+            .where((type) =>
+                type.toLowerCase().contains(_typeQuery.toLowerCase()))
+            .toList()
+          ..sort();
+    final sortedRarities = _rarityOrder;
+    final sortedColors = _colorOrder;
+
+    Widget buildChipRow<T>(
+      Iterable<T> items,
+      bool Function(T) isSelected,
+      void Function(T) toggle,
+      String Function(T) label,
+    ) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: items
+            .map(
+              (item) => FilterChip(
+                label: Text(label(item)),
+                selected: isSelected(item),
+                onSelected: (_) => setState(() => toggle(item)),
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    Widget buildSelectedChips(
+      Iterable<String> items,
+      void Function(String) remove,
+    ) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: items
+            .map(
+              (item) => InputChip(
+                label: Text(item),
+                onDeleted: () => setState(() => remove(item)),
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(widget.name),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        children: [
+          Text(
+            l10n.advancedFiltersTitle,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.searchCardsHint,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nameController,
+            decoration: InputDecoration(
+              hintText: l10n.typeCardNameHint,
+              prefixIcon: const Icon(Icons.search),
+            ),
+            onChanged: (_) => _schedulePreviewUpdate(),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.setLabel,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          if (_selectedSets.isNotEmpty) ...[
+            buildSelectedChips(
+              _selectedSets,
+              (value) {
+                _selectedSets.remove(value);
+                _schedulePreviewUpdate();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+          TextField(
+            decoration: InputDecoration(
+              hintText: l10n.searchSetHint,
+              prefixIcon: const Icon(Icons.search),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _setQuery = value.trim();
+              });
+            },
+          ),
+          if (_setQuery.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            if (_loadingSets)
+              const Center(child: CircularProgressIndicator())
+            else if (filteredSets.isEmpty)
+              Text(l10n.noResultsFound)
+            else
+              SizedBox(
+                height: filteredSets.length > 8 ? 200 : null,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: filteredSets.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final set = filteredSets[index];
+                    return ListTile(
+                      title: Text(set.name),
+                      subtitle: Text(set.code.toUpperCase()),
+                      onTap: () {
+                        setState(() {
+                          _selectedSets.add(set.code.toLowerCase());
+                          _setQuery = '';
+                        });
+                        _schedulePreviewUpdate();
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            l10n.rarity,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          buildChipRow<String>(
+            sortedRarities,
+            (value) => _selectedRarities.contains(value),
+            (value) {
+              if (!_selectedRarities.add(value)) {
+                _selectedRarities.remove(value);
+              }
+              _schedulePreviewUpdate();
+            },
+            (value) => _formatRarity(value),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.colorLabel,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          buildChipRow<String>(
+            sortedColors,
+            (value) => _selectedColors.contains(value),
+            (value) {
+              if (!_selectedColors.add(value)) {
+                _selectedColors.remove(value);
+              }
+              _schedulePreviewUpdate();
+            },
+            (value) => _colorLabel(value),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.typeLabel,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          if (_selectedTypes.isNotEmpty) ...[
+            buildSelectedChips(
+              _selectedTypes,
+              (value) {
+                _selectedTypes.remove(value);
+                _schedulePreviewUpdate();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+          TextField(
+            decoration: InputDecoration(
+              hintText: l10n.searchHint,
+              prefixIcon: const Icon(Icons.search),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _typeQuery = value.trim();
+              });
+            },
+          ),
+          if (_typeQuery.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            if (filteredTypes.isEmpty)
+              Text(l10n.noResultsFound)
+            else
+              SizedBox(
+                height: filteredTypes.length > 8 ? 200 : null,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: filteredTypes.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final type = filteredTypes[index];
+                    return ListTile(
+                      title: Text(type),
+                      onTap: () {
+                        setState(() {
+                          _selectedTypes.add(type);
+                          _typeQuery = '';
+                        });
+                        _schedulePreviewUpdate();
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            l10n.manaValue,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _manaMinController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: l10n.minLabel,
+                  ),
+                  onChanged: (_) => _schedulePreviewUpdate(),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _manaMaxController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: l10n.maxLabel,
+                  ),
+                  onChanged: (_) => _schedulePreviewUpdate(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.detailArtist,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _artistController,
+            decoration: InputDecoration(
+              hintText: l10n.typeArtistNameHint,
+              prefixIcon: const Icon(Icons.person_outline),
+            ),
+            onChanged: _onArtistChanged,
+          ),
+          if (_artistController.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            if (_loadingArtists)
+              const Center(child: CircularProgressIndicator())
+            else if (_artistSuggestions.isNotEmpty)
+              SizedBox(
+                height: _artistSuggestions.length > 6 ? 180 : null,
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _artistSuggestions.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final artist = _artistSuggestions[index];
+                    return ListTile(
+                      title: Text(artist),
+                      onTap: () {
+                        setState(() {
+                          _artistController.text = artist;
+                          _artistController.selection =
+                              TextSelection.collapsed(offset: artist.length);
+                          _artistSuggestions = [];
+                        });
+                        _schedulePreviewUpdate();
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            l10n.flavorText,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _flavorController,
+            decoration: InputDecoration(
+              hintText: l10n.typeFlavorTextHint,
+              prefixIcon: const Icon(Icons.format_quote),
+            ),
+            onChanged: (_) => _schedulePreviewUpdate(),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            l10n.cardCount(_previewTotal ?? 0),
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          if (!hasCriteria)
+            Text(l10n.selectFiltersFirst)
+          else if (_previewLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (_previewCards.isEmpty)
+            Text(l10n.noResultsFound)
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _previewCards.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (context, index) {
+                final card = _previewCards[index];
+                return ListTile(
+                  leading: _buildSetIcon(card.setCode, size: 20),
+                  title: Text(card.name),
+                  subtitle: Text(card.subtitleLabel),
+                );
+              },
+            ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_buildFilter()),
+                child: Text(isEditing ? l10n.save : l10n.create),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CreateCollectionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -1939,7 +2623,7 @@ class _TitleLockup extends StatelessWidget {
   }
 }
 
-enum _CollectionAction { rename, delete }
+enum _CollectionAction { rename, editFilters, delete }
 
 enum _HomeAddAction { addCards, addCardsToCollection, addCollection }
 

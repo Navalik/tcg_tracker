@@ -794,8 +794,29 @@ class $CollectionsTable extends Collections
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
-  List<GeneratedColumn> get $columns => [id, name];
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('custom'),
+  );
+  static const VerificationMeta _filterJsonMeta = const VerificationMeta(
+    'filterJson',
+  );
+  @override
+  late final GeneratedColumn<String> filterJson = GeneratedColumn<String>(
+    'filter_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, type, filterJson];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -819,6 +840,18 @@ class $CollectionsTable extends Collections
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    }
+    if (data.containsKey('filter_json')) {
+      context.handle(
+        _filterJsonMeta,
+        filterJson.isAcceptableOrUnknown(data['filter_json']!, _filterJsonMeta),
+      );
+    }
     return context;
   }
 
@@ -836,6 +869,14 @@ class $CollectionsTable extends Collections
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      filterJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filter_json'],
+      ),
     );
   }
 
@@ -848,17 +889,35 @@ class $CollectionsTable extends Collections
 class Collection extends DataClass implements Insertable<Collection> {
   final int id;
   final String name;
-  const Collection({required this.id, required this.name});
+  final String type;
+  final String? filterJson;
+  const Collection({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.filterJson,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
     map['name'] = Variable<String>(name);
+    map['type'] = Variable<String>(type);
+    if (!nullToAbsent || filterJson != null) {
+      map['filter_json'] = Variable<String>(filterJson);
+    }
     return map;
   }
 
   CollectionsCompanion toCompanion(bool nullToAbsent) {
-    return CollectionsCompanion(id: Value(id), name: Value(name));
+    return CollectionsCompanion(
+      id: Value(id),
+      name: Value(name),
+      type: Value(type),
+      filterJson: filterJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(filterJson),
+    );
   }
 
   factory Collection.fromJson(
@@ -869,6 +928,8 @@ class Collection extends DataClass implements Insertable<Collection> {
     return Collection(
       id: serializer.fromJson<int>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      type: serializer.fromJson<String>(json['type']),
+      filterJson: serializer.fromJson<String?>(json['filterJson']),
     );
   }
   @override
@@ -877,15 +938,30 @@ class Collection extends DataClass implements Insertable<Collection> {
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
       'name': serializer.toJson<String>(name),
+      'type': serializer.toJson<String>(type),
+      'filterJson': serializer.toJson<String?>(filterJson),
     };
   }
 
-  Collection copyWith({int? id, String? name}) =>
-      Collection(id: id ?? this.id, name: name ?? this.name);
+  Collection copyWith({
+    int? id,
+    String? name,
+    String? type,
+    Value<String?> filterJson = const Value.absent(),
+  }) => Collection(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    type: type ?? this.type,
+    filterJson: filterJson.present ? filterJson.value : this.filterJson,
+  );
   Collection copyWithCompanion(CollectionsCompanion data) {
     return Collection(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      type: data.type.present ? data.type.value : this.type,
+      filterJson: data.filterJson.present
+          ? data.filterJson.value
+          : this.filterJson,
     );
   }
 
@@ -893,42 +969,68 @@ class Collection extends DataClass implements Insertable<Collection> {
   String toString() {
     return (StringBuffer('Collection(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('filterJson: $filterJson')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name);
+  int get hashCode => Object.hash(id, name, type, filterJson);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Collection && other.id == this.id && other.name == this.name);
+      (other is Collection &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.type == this.type &&
+          other.filterJson == this.filterJson);
 }
 
 class CollectionsCompanion extends UpdateCompanion<Collection> {
   final Value<int> id;
   final Value<String> name;
+  final Value<String> type;
+  final Value<String?> filterJson;
   const CollectionsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.type = const Value.absent(),
+    this.filterJson = const Value.absent(),
   });
   CollectionsCompanion.insert({
     this.id = const Value.absent(),
     required String name,
+    this.type = const Value.absent(),
+    this.filterJson = const Value.absent(),
   }) : name = Value(name);
   static Insertable<Collection> custom({
     Expression<int>? id,
     Expression<String>? name,
+    Expression<String>? type,
+    Expression<String>? filterJson,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (type != null) 'type': type,
+      if (filterJson != null) 'filter_json': filterJson,
     });
   }
 
-  CollectionsCompanion copyWith({Value<int>? id, Value<String>? name}) {
-    return CollectionsCompanion(id: id ?? this.id, name: name ?? this.name);
+  CollectionsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<String>? type,
+    Value<String?>? filterJson,
+  }) {
+    return CollectionsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      filterJson: filterJson ?? this.filterJson,
+    );
   }
 
   @override
@@ -940,6 +1042,12 @@ class CollectionsCompanion extends UpdateCompanion<Collection> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (filterJson.present) {
+      map['filter_json'] = Variable<String>(filterJson.value);
+    }
     return map;
   }
 
@@ -947,7 +1055,9 @@ class CollectionsCompanion extends UpdateCompanion<Collection> {
   String toString() {
     return (StringBuffer('CollectionsCompanion(')
           ..write('id: $id, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('type: $type, ')
+          ..write('filterJson: $filterJson')
           ..write(')'))
         .toString();
   }
@@ -1688,9 +1798,19 @@ typedef $$CardsTableProcessedTableManager =
       PrefetchHooks Function()
     >;
 typedef $$CollectionsTableCreateCompanionBuilder =
-    CollectionsCompanion Function({Value<int> id, required String name});
+    CollectionsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<String> type,
+      Value<String?> filterJson,
+    });
 typedef $$CollectionsTableUpdateCompanionBuilder =
-    CollectionsCompanion Function({Value<int> id, Value<String> name});
+    CollectionsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<String> type,
+      Value<String?> filterJson,
+    });
 
 class $$CollectionsTableFilterComposer
     extends Composer<_$AppDatabase, $CollectionsTable> {
@@ -1708,6 +1828,16 @@ class $$CollectionsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get filterJson => $composableBuilder(
+    column: $table.filterJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1730,6 +1860,16 @@ class $$CollectionsTableOrderingComposer
     column: $table.name,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get filterJson => $composableBuilder(
+    column: $table.filterJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CollectionsTableAnnotationComposer
@@ -1746,6 +1886,14 @@ class $$CollectionsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get filterJson => $composableBuilder(
+    column: $table.filterJson,
+    builder: (column) => column,
+  );
 }
 
 class $$CollectionsTableTableManager
@@ -1781,10 +1929,26 @@ class $$CollectionsTableTableManager
               ({
                 Value<int> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
-              }) => CollectionsCompanion(id: id, name: name),
+                Value<String> type = const Value.absent(),
+                Value<String?> filterJson = const Value.absent(),
+              }) => CollectionsCompanion(
+                id: id,
+                name: name,
+                type: type,
+                filterJson: filterJson,
+              ),
           createCompanionCallback:
-              ({Value<int> id = const Value.absent(), required String name}) =>
-                  CollectionsCompanion.insert(id: id, name: name),
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<String> type = const Value.absent(),
+                Value<String?> filterJson = const Value.absent(),
+              }) => CollectionsCompanion.insert(
+                id: id,
+                name: name,
+                type: type,
+                filterJson: filterJson,
+              ),
           withReferenceMapper: (p0) => p0
               .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
               .toList(),

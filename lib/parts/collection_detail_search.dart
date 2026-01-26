@@ -485,6 +485,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final nameController = TextEditingController(text: _query);
     final artistController = TextEditingController(text: _artistQuery);
     final flavorController = TextEditingController(text: _flavorQuery);
+    List<String> artistSuggestions = [];
+    bool loadingArtists = false;
+    Timer? artistDebounce;
     final minController =
         TextEditingController(text: _manaValueMin?.toString() ?? '');
     final maxController =
@@ -745,7 +748,59 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         hintText: l10n.typeArtistNameHint,
                         prefixIcon: const Icon(Icons.person_outline),
                       ),
+                      onChanged: (value) {
+                        artistDebounce?.cancel();
+                        final query = value.trim();
+                        if (query.isEmpty) {
+                          setSheetState(() {
+                            artistSuggestions = [];
+                            loadingArtists = false;
+                          });
+                          return;
+                        }
+                        artistDebounce =
+                            Timer(const Duration(milliseconds: 250), () async {
+                          setSheetState(() {
+                            loadingArtists = true;
+                          });
+                          final results = await ScryfallDatabase.instance
+                              .fetchAvailableArtists(query: query);
+                          setSheetState(() {
+                            artistSuggestions = results;
+                            loadingArtists = false;
+                          });
+                        });
+                      },
                     ),
+                    if (artistController.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      if (loadingArtists)
+                        const Center(child: CircularProgressIndicator())
+                      else if (artistSuggestions.isNotEmpty)
+                        SizedBox(
+                          height: artistSuggestions.length > 6 ? 180 : null,
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: artistSuggestions.length,
+                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final artist = artistSuggestions[index];
+                              return ListTile(
+                                title: Text(artist),
+                                onTap: () {
+                                  setSheetState(() {
+                                    artistController.text = artist;
+                                    artistController.selection =
+                                        TextSelection.collapsed(
+                                            offset: artist.length);
+                                    artistSuggestions = [];
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                        ),
+                    ],
                     const SizedBox(height: 16),
                     Text(
                       l10n.flavorText,
@@ -779,6 +834,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               nameController.clear();
                               artistController.clear();
                               flavorController.clear();
+                              artistSuggestions = [];
+                              loadingArtists = false;
                               minController.clear();
                               maxController.clear();
                               setQuery = '';
@@ -806,6 +863,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       },
     );
 
+    artistDebounce?.cancel();
     if (!mounted || !applied) {
       return;
     }

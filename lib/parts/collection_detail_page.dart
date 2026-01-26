@@ -8,6 +8,7 @@ class CollectionDetailPage extends StatefulWidget {
     this.isAllCards = false,
     this.isSetCollection = false,
     this.setCode,
+    this.filter,
     this.autoOpenAddCard = false,
   });
 
@@ -16,6 +17,7 @@ class CollectionDetailPage extends StatefulWidget {
   final bool isAllCards;
   final bool isSetCollection;
   final String? setCode;
+  final CollectionFilter? filter;
   final bool autoOpenAddCard;
 
   @override
@@ -33,6 +35,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _loadingMore = false;
   bool _hasMore = true;
   int _loadedOffset = 0;
+  int? _ownedCollectionId;
+  Timer? _searchDebounce;
   CollectionViewMode _viewMode = CollectionViewMode.list;
   bool _showOwned = true;
   bool _showMissing = true;
@@ -46,10 +50,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _autoAddShown = false;
   Map<String, int> _setTotalsByCode = {};
 
+  bool get _isFilterCollection =>
+      !widget.isAllCards && (widget.filter != null || widget.isSetCollection);
+
   @override
   void initState() {
     super.initState();
-    _loadCards();
+    _initialize();
     _loadViewMode();
     _scrollController.addListener(_onScroll);
     if (widget.autoOpenAddCard && !widget.isSetCollection) {
@@ -61,6 +68,19 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _addCard(context);
       });
     }
+  }
+
+  Future<void> _initialize() async {
+    if (widget.isAllCards) {
+      _ownedCollectionId = widget.collectionId;
+    } else {
+      _ownedCollectionId =
+          await ScryfallDatabase.instance.fetchAllCardsCollectionId();
+    }
+    if (!mounted) {
+      return;
+    }
+    await _loadCards();
   }
 
   Future<void> _loadViewMode() async {
@@ -75,6 +95,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -118,15 +139,32 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _loadingMore = true;
       });
     }
+    final ownedCollectionId = _ownedCollectionId;
+    if (!widget.isAllCards && ownedCollectionId == null) {
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
+          _loading = false;
+          _hasMore = false;
+        });
+      }
+      return;
+    }
+    final fallbackFilter = widget.isSetCollection &&
+            (widget.setCode?.trim().isNotEmpty ?? false)
+        ? CollectionFilter(sets: {widget.setCode!.trim().toLowerCase()})
+        : null;
+    final filter = widget.filter ?? fallbackFilter;
     final cards = widget.isAllCards
         ? await ScryfallDatabase.instance.fetchOwnedCards(
+            searchQuery: _searchQuery,
             limit: _pageSize,
             offset: _loadedOffset,
           )
-        : widget.isSetCollection
-            ? await ScryfallDatabase.instance.fetchSetCollectionCards(
-                widget.collectionId,
-                widget.setCode ?? '',
+        : filter != null
+            ? await ScryfallDatabase.instance.fetchFilteredCollectionCards(
+                filter,
+                searchQuery: _searchQuery,
                 limit: _pageSize,
                 offset: _loadedOffset,
               )
@@ -192,21 +230,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   List<CollectionCardEntry> _baseVisibleCards() {
-    if (!widget.isSetCollection) {
+    if (!_isFilterCollection) {
       return _cards;
     }
-    if (_searchQuery.isEmpty && _showOwned && _showMissing) {
+    if (_showOwned && _showMissing) {
       return _cards;
     }
-    final queryLower = _searchQuery.toLowerCase();
     return _cards.where((entry) {
-      if (queryLower.isNotEmpty) {
-        final haystack =
-            '${entry.name} ${entry.collectorNumber}'.toLowerCase();
-        if (!haystack.contains(queryLower)) {
-          return false;
-        }
-      }
       final owned = entry.quantity > 0;
       if (owned && _showOwned) {
         return true;
@@ -763,8 +793,17 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) {
-              setState(() {
-                _searchQuery = value.trim();
+              _searchDebounce?.cancel();
+              final next = value.trim();
+              _searchDebounce =
+                  Timer(const Duration(milliseconds: 300), () {
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _searchQuery = next;
+                });
+                _loadCards();
               });
             },
           ),
@@ -802,128 +841,19 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _quickAddCard(CollectionCardEntry entry) async {
-    if (widget.isSetCollection) {
-      final nextQuantity = entry.quantity + 1;
-      await ScryfallDatabase.instance.upsertCollectionCard(
-        widget.collectionId,
-        entry.cardId,
-        quantity: nextQuantity,
-        foil: entry.foil,
-        altArt: entry.altArt,
-      );
-    } else if (widget.isAllCards) {
-      await ScryfallDatabase.instance
-          .addCardToCollection(widget.collectionId, entry.cardId);
-      await _syncAllCardsQuantities([entry.cardId]);
-    } else {
+    final ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null) {
       return;
     }
-    await _loadCards();
-  }
-
-  Future<void> _applyQuantityToCollection(
-    int collectionId,
-    String cardId,
-    int quantity, {
-    required bool exists,
-    required bool allowInsert,
-  }) async {
-    if (quantity <= 0) {
-      await ScryfallDatabase.instance.deleteCollectionCard(
-        collectionId,
-        cardId,
-      );
-      return;
-    }
-    if (exists) {
-      await ScryfallDatabase.instance.updateCollectionCard(
-        collectionId,
-        cardId,
-        quantity: quantity,
-      );
-      return;
-    }
-    if (!allowInsert) {
-      return;
-    }
+    final nextQuantity = entry.quantity + 1;
     await ScryfallDatabase.instance.upsertCollectionCard(
-      collectionId,
-      cardId,
-      quantity: quantity,
-      foil: false,
-      altArt: false,
+      ownedCollectionId,
+      entry.cardId,
+      quantity: nextQuantity,
+      foil: entry.foil,
+      altArt: entry.altArt,
     );
-  }
-
-  Future<void> _syncAllCardsQuantities(List<String> cardIds) async {
-    if (!widget.isAllCards || cardIds.isEmpty) {
-      return;
-    }
-    final uniqueIds = cardIds.toSet().toList();
-    final quantities = await ScryfallDatabase.instance.fetchCollectionQuantities(
-      widget.collectionId,
-      uniqueIds,
-    );
-    final setCodes =
-        await ScryfallDatabase.instance.fetchSetCodesForCardIds(uniqueIds);
-    final collections = await ScryfallDatabase.instance.fetchCollections();
-    final setCollectionsByCode = <String, int>{};
-    final isSetById = <int, bool>{};
-    for (final collection in collections) {
-      final isSet = collection.name.startsWith(_setPrefix);
-      isSetById[collection.id] = isSet;
-      if (!isSet) {
-        continue;
-      }
-      final code =
-          collection.name.substring(_setPrefix.length).trim().toLowerCase();
-      if (code.isNotEmpty) {
-        setCollectionsByCode[code] = collection.id;
-      }
-    }
-    final existingByCard =
-        await ScryfallDatabase.instance.fetchCollectionIdsForCardIds(uniqueIds);
-    final setCollectionIds = isSetById.entries
-        .where((entry) => entry.value)
-        .map((entry) => entry.key)
-        .toSet();
-    for (final cardId in uniqueIds) {
-      final quantity = quantities[cardId] ?? 0;
-      final setCode = setCodes[cardId]?.trim().toLowerCase();
-      final setCollectionId = (setCode == null || setCode.isEmpty)
-          ? null
-          : setCollectionsByCode[setCode];
-      if (setCollectionId != null) {
-        final exists =
-            (existingByCard[cardId] ?? const []).contains(setCollectionId);
-        await _applyQuantityToCollection(
-          setCollectionId,
-          cardId,
-          quantity,
-          exists: exists,
-          allowInsert: true,
-        );
-      }
-      final existingIds = existingByCard[cardId] ?? const [];
-      for (final collectionId in existingIds) {
-        if (collectionId == widget.collectionId) {
-          continue;
-        }
-        if (setCollectionId != null && collectionId == setCollectionId) {
-          continue;
-        }
-        if (setCollectionIds.contains(collectionId)) {
-          continue;
-        }
-        await _applyQuantityToCollection(
-          collectionId,
-          cardId,
-          quantity,
-          exists: true,
-          allowInsert: false,
-        );
-      }
-    }
+    await _loadCards();
   }
 
   Future<void> _addCard(BuildContext context) async {
@@ -931,6 +861,14 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       showAppSnackBar(
         context,
         AppLocalizations.of(context)!.useListToSetOwnedQuantities,
+      );
+      return;
+    }
+    final ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
       );
       return;
     }
@@ -947,10 +885,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
     if (selection.isBulk) {
       await ScryfallDatabase.instance.addCardsToCollection(
-        widget.collectionId,
+        ownedCollectionId,
         selection.cardIds,
       );
-      await _syncAllCardsQuantities(selection.cardIds);
       if (!context.mounted) {
         return;
       }
@@ -960,10 +897,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       );
     } else {
       await ScryfallDatabase.instance.addCardToCollection(
-        widget.collectionId,
+        ownedCollectionId,
         selection.cardIds.first,
       );
-      await _syncAllCardsQuantities([selection.cardIds.first]);
     }
     if (!mounted) {
       return;
@@ -1233,6 +1169,14 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _showCardActions(CollectionCardEntry entry) async {
+    final ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      );
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1242,7 +1186,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             TextEditingController(text: entry.quantity.toString());
         var foil = entry.foil;
         var altArt = entry.altArt;
-        final isSetCollection = widget.isSetCollection;
+        final isFilterCollection = !widget.isAllCards;
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Container(
@@ -1309,9 +1253,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     children: [
                       TextButton(
                         onPressed: () async {
-                          if (isSetCollection) {
+                          if (isFilterCollection) {
                             await ScryfallDatabase.instance.upsertCollectionCard(
-                              widget.collectionId,
+                              ownedCollectionId,
                               entry.cardId,
                               quantity: 0,
                               foil: foil,
@@ -1319,12 +1263,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             );
                           } else {
                             await ScryfallDatabase.instance.deleteCollectionCard(
-                              widget.collectionId,
+                              ownedCollectionId,
                               entry.cardId,
                             );
-                            if (widget.isAllCards) {
-                              await _syncAllCardsQuantities([entry.cardId]);
-                            }
                           }
                           if (!context.mounted) {
                             return;
@@ -1336,7 +1277,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           await _loadCards();
                         },
                         child: Text(
-                          isSetCollection ? l10n.markMissing : l10n.delete,
+                          isFilterCollection ? l10n.markMissing : l10n.delete,
                         ),
                       ),
                       const Spacer(),
@@ -1345,37 +1286,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           final parsed =
                               int.tryParse(quantityController.text.trim()) ??
                                   entry.quantity;
-                          final quantity = isSetCollection
+                          final quantity = isFilterCollection
                               ? (parsed < 0 ? 0 : parsed)
                               : (parsed < 1 ? 1 : parsed);
-                          if (isSetCollection) {
-                            await ScryfallDatabase.instance
-                                .upsertCollectionCard(
-                              widget.collectionId,
-                              entry.cardId,
-                              quantity: quantity,
-                              foil: foil,
-                              altArt: altArt,
-                            );
-                          } else if (widget.isAllCards) {
-                            await ScryfallDatabase.instance
-                                .upsertCollectionCard(
-                              widget.collectionId,
-                              entry.cardId,
-                              quantity: quantity,
-                              foil: foil,
-                              altArt: altArt,
-                            );
-                            await _syncAllCardsQuantities([entry.cardId]);
-                          } else {
-                            await ScryfallDatabase.instance.updateCollectionCard(
-                              widget.collectionId,
-                              entry.cardId,
-                              quantity: quantity,
-                              foil: foil,
-                              altArt: altArt,
-                            );
-                          }
+                          await ScryfallDatabase.instance.upsertCollectionCard(
+                            ownedCollectionId,
+                            entry.cardId,
+                            quantity: quantity,
+                            foil: foil,
+                            altArt: altArt,
+                          );
                           if (!context.mounted) {
                             return;
                           }
@@ -1406,7 +1326,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: Text(widget.name),
-        bottom: widget.isSetCollection
+        bottom: _isFilterCollection
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(108),
                 child: _buildSetHeader(),
@@ -1461,16 +1381,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         size: 36, color: Color(0xFFE9C46A)),
                     const SizedBox(height: 12),
                     Text(
-                      widget.isSetCollection
-                          ? l10n.noCardsMatchFilters
-                          : widget.isAllCards
-                              ? l10n.noOwnedCardsYet
+                      widget.isAllCards
+                          ? l10n.noOwnedCardsYet
+                          : _isFilterCollection
+                              ? l10n.noCardsMatchFilters
                               : l10n.noCardsYet,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      widget.isSetCollection
+                      _isFilterCollection
                           ? l10n.tryEnablingOwnedOrMissing
                           : widget.isAllCards
                               ? l10n.addCardsHereOrAny
@@ -1505,7 +1425,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       }
                       final entry = visibleCards[index];
                       final isMissing =
-                          widget.isSetCollection && entry.quantity == 0;
+                          _isFilterCollection && entry.quantity == 0;
                       final hasCornerQuantity = entry.quantity > 1;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
@@ -1595,7 +1515,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           ],
                                         ),
                                       ),
-                                      if (widget.isSetCollection ||
+                                      if (_isFilterCollection ||
                                           widget.isAllCards) ...[
                                         const SizedBox(width: 8),
                                         IconButton(
@@ -1663,7 +1583,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       }
                       final entry = visibleCards[index];
                       final isMissing =
-                          widget.isSetCollection && entry.quantity == 0;
+                          _isFilterCollection && entry.quantity == 0;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
                         onLongPress: () => _showCardActions(entry),
@@ -1698,7 +1618,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                     entry.imageUri!,
                                                     fit: BoxFit.cover,
                                                   ),
-                                            if (widget.isSetCollection ||
+                                            if (_isFilterCollection ||
                                                 widget.isAllCards)
                                               Positioned(
                                                 top: 8,

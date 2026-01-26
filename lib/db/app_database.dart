@@ -35,6 +35,9 @@ class Cards extends Table {
 class Collections extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text()();
+  TextColumn get type =>
+      text().withDefault(const Constant('custom'))();
+  TextColumn get filterJson => text().nullable()();
 }
 
 class CollectionCards extends Table {
@@ -68,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -77,7 +80,22 @@ class AppDatabase extends _$AppDatabase {
           await _createIndexes();
           await _createFts();
         },
-        onUpgrade: (m, from, to) async {},
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await customStatement(
+              "ALTER TABLE collections ADD COLUMN type TEXT NOT NULL DEFAULT 'custom'",
+            );
+            await customStatement(
+              'ALTER TABLE collections ADD COLUMN filter_json TEXT',
+            );
+            await customStatement(
+              "UPDATE collections SET type = 'all' WHERE lower(name) = 'all cards'",
+            );
+            await customStatement(
+              "UPDATE collections SET type = 'set' WHERE lower(name) LIKE 'set: %'",
+            );
+          }
+        },
         beforeOpen: (details) async {},
       );
 
@@ -103,6 +121,13 @@ class AppDatabase extends _$AppDatabase {
   Future<void> rebuildFts() async {
     await customStatement("INSERT INTO cards_fts(cards_fts) VALUES('rebuild')");
   }
+}
+
+class _FilterQuery {
+  const _FilterQuery(this.whereClauses, this.variables);
+
+  final List<String> whereClauses;
+  final List<Variable> variables;
 }
 
 class ScryfallDatabase {
@@ -131,6 +156,22 @@ class ScryfallDatabase {
     }
     await db.close();
     _db = null;
+  }
+
+  Future<int?> fetchAllCardsCollectionId() async {
+    final db = await open();
+    final row = await (db.select(db.collections)
+          ..where((tbl) => tbl.type.equals('all'))
+          ..limit(1))
+        .getSingleOrNull();
+    if (row != null) {
+      return row.id;
+    }
+    final fallback = await db.customSelect(
+      'SELECT id AS id FROM collections WHERE lower(name) = ? LIMIT 1',
+      variables: [Variable.withString('all cards')],
+    ).getSingleOrNull();
+    return fallback?.read<int>('id');
   }
 
   Future<void> hardReset() async {
@@ -165,42 +206,114 @@ class ScryfallDatabase {
     final rows = await (db.select(db.collections)
           ..orderBy([(tbl) => OrderingTerm.asc(tbl.id)]))
         .get();
-    final counts = await _fetchCollectionCounts(db);
+    final allCardsId = _resolveAllCardsId(rows);
+    final counts = await _fetchOwnedCountsByCollection(
+      db,
+      rows,
+      allCardsId,
+    );
     return rows
         .map(
           (row) => CollectionInfo(
             id: row.id,
             name: row.name,
             cardCount: counts[row.id] ?? 0,
+            type: collectionTypeFromDb(row.type),
+            filter: row.filterJson == null
+                ? null
+                : CollectionFilter.fromJson(
+                    jsonDecode(row.filterJson!) as Map<String, dynamic>,
+                  ),
           ),
         )
         .toList();
   }
 
-  Future<Map<int, int>> _fetchCollectionCounts(AppDatabase db) async {
-    final rows = await db.customSelect(
-      '''
-      SELECT collection_id AS collection_id,
-             SUM(quantity) AS total
-      FROM collection_cards
-      GROUP BY collection_id
-      ''',
-    ).get();
-    return {
-      for (final row in rows)
-        row.read<int>('collection_id'): row.read<int>('total')
-    };
+  int? _resolveAllCardsId(List<Collection> rows) {
+    for (final row in rows) {
+      if (collectionTypeFromDb(row.type) == CollectionType.all) {
+        return row.id;
+      }
+    }
+    for (final row in rows) {
+      if (row.name.trim().toLowerCase() == 'all cards') {
+        return row.id;
+      }
+    }
+    return null;
   }
 
-  Future<int> addCollection(String name) async {
+  Future<Map<int, int>> _fetchOwnedCountsByCollection(
+    AppDatabase db,
+    List<Collection> rows,
+    int? allCardsId,
+  ) async {
+    final counts = <int, int>{};
+    if (allCardsId == null) {
+      for (final row in rows) {
+        counts[row.id] = 0;
+      }
+      return counts;
+    }
+    final ownedRow = await db.customSelect(
+      'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
+      variables: [Variable.withInt(allCardsId)],
+    ).getSingle();
+    counts[allCardsId] = ownedRow.read<int>('total');
+    for (final row in rows) {
+      if (row.id == allCardsId) {
+        continue;
+      }
+      final filter = row.filterJson == null
+          ? null
+          : CollectionFilter.fromJson(
+              jsonDecode(row.filterJson!) as Map<String, dynamic>,
+            );
+      if (filter == null) {
+        counts[row.id] = 0;
+        continue;
+      }
+      counts[row.id] = await _countOwnedCardsForFilter(
+        db,
+        filter,
+        allCardsId,
+      );
+    }
+    return counts;
+  }
+
+  Future<int> addCollection(
+    String name, {
+    CollectionType type = CollectionType.custom,
+    CollectionFilter? filter,
+  }) async {
     final db = await open();
-    return db.into(db.collections).insert(CollectionsCompanion.insert(name: name));
+    return db.into(db.collections).insert(
+          CollectionsCompanion.insert(
+            name: name,
+            type: Value(collectionTypeToDb(type)),
+            filterJson:
+                Value(filter == null ? null : jsonEncode(filter.toJson())),
+          ),
+        );
   }
 
   Future<void> renameCollection(int id, String name) async {
     final db = await open();
     await (db.update(db.collections)..where((tbl) => tbl.id.equals(id)))
         .write(CollectionsCompanion(name: Value(name)));
+  }
+
+  Future<void> updateCollectionFilter(
+    int id, {
+    CollectionFilter? filter,
+  }) async {
+    final db = await open();
+    await (db.update(db.collections)..where((tbl) => tbl.id.equals(id))).write(
+      CollectionsCompanion(
+        filterJson: Value(filter == null ? null : jsonEncode(filter.toJson())),
+      ),
+    );
   }
 
   Future<void> deleteCollection(int id) async {
@@ -211,6 +324,193 @@ class ScryfallDatabase {
           .go();
       await (db.delete(db.collections)..where((tbl) => tbl.id.equals(id))).go();
     });
+  }
+
+  _FilterQuery _buildFilterQuery(CollectionFilter filter) {
+    final whereClauses = <String>[];
+    final variables = <Variable>[];
+
+    final name = filter.name?.trim();
+    if (name != null && name.isNotEmpty) {
+      whereClauses.add('LOWER(cards.name) LIKE ?');
+      variables.add(Variable.withString('%${name.toLowerCase()}%'));
+    }
+
+    if (filter.sets.isNotEmpty) {
+      final normalized = filter.sets
+          .map((code) => code.trim().toLowerCase())
+          .where((code) => code.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+          'LOWER(cards.set_code) IN (${List.filled(normalized.length, '?').join(', ')})',
+        );
+        variables.addAll(
+          normalized.map((code) => Variable.withString(code)),
+        );
+      }
+    }
+
+    if (filter.rarities.isNotEmpty) {
+      final normalized = filter.rarities
+          .map((rarity) => rarity.trim().toLowerCase())
+          .where((rarity) => rarity.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+          'LOWER(cards.rarity) IN (${List.filled(normalized.length, '?').join(', ')})',
+        );
+        variables.addAll(
+          normalized.map((rarity) => Variable.withString(rarity)),
+        );
+      }
+    }
+
+    if (filter.types.isNotEmpty) {
+      final normalized = filter.types
+          .map((type) => type.trim().toLowerCase())
+          .where((type) => type.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        final typeClauses =
+            normalized.map((_) => 'LOWER(cards.type_line) LIKE ?').join(' OR ');
+        whereClauses.add('($typeClauses)');
+        variables.addAll(
+          normalized.map((type) => Variable.withString('%$type%')),
+        );
+      }
+    }
+
+    if (filter.colors.isNotEmpty) {
+      final normalized = filter.colors
+          .map((color) => color.trim().toUpperCase())
+          .where((color) => color.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        final colorClauses = <String>[];
+        for (final color in normalized) {
+          if (color == 'C') {
+            continue;
+          }
+          colorClauses.add(
+            '''
+            json_extract(cards.card_json, '\$.colors') LIKE ?
+            OR json_extract(cards.card_json, '\$.color_identity') LIKE ?
+            OR EXISTS (
+              SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
+              WHERE json_extract(value, '\$.colors') LIKE ?
+                 OR json_extract(value, '\$.color_identity') LIKE ?
+            )
+            ''',
+          );
+          final like = '%\"$color\"%';
+          variables.addAll([
+            Variable.withString(like),
+            Variable.withString(like),
+            Variable.withString(like),
+            Variable.withString(like),
+          ]);
+        }
+        if (normalized.contains('C')) {
+          colorClauses.add(
+            '''
+            (
+              COALESCE(json_array_length(json_extract(cards.card_json, '\$.colors')), 0) = 0
+              AND COALESCE(json_array_length(json_extract(cards.card_json, '\$.color_identity')), 0) = 0
+              AND (
+                json_extract(cards.card_json, '\$.card_faces') IS NULL
+                OR NOT EXISTS (
+                  SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
+                  WHERE COALESCE(json_array_length(json_extract(value, '\$.colors')), 0) > 0
+                     OR COALESCE(json_array_length(json_extract(value, '\$.color_identity')), 0) > 0
+                )
+              )
+            )
+            ''',
+          );
+        }
+        if (colorClauses.isNotEmpty) {
+          whereClauses.add('(${colorClauses.join(' OR ')})');
+        }
+      }
+    }
+
+    final artist = filter.artist?.trim();
+    if (artist != null && artist.isNotEmpty) {
+      whereClauses.add(
+        '''
+        (
+          LOWER(json_extract(cards.card_json, '\$.artist')) LIKE ?
+          OR EXISTS (
+            SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
+            WHERE LOWER(json_extract(value, '\$.artist')) LIKE ?
+          )
+        )
+        ''',
+      );
+      final like = '%${artist.toLowerCase()}%';
+      variables.add(Variable.withString(like));
+      variables.add(Variable.withString(like));
+    }
+
+    final flavor = filter.flavor?.trim();
+    if (flavor != null && flavor.isNotEmpty) {
+      whereClauses.add(
+        '''
+        (
+          LOWER(json_extract(cards.card_json, '\$.flavor_text')) LIKE ?
+          OR EXISTS (
+            SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
+            WHERE LOWER(json_extract(value, '\$.flavor_text')) LIKE ?
+          )
+        )
+        ''',
+      );
+      final like = '%${flavor.toLowerCase()}%';
+      variables.add(Variable.withString(like));
+      variables.add(Variable.withString(like));
+    }
+
+    if (filter.manaMin != null) {
+      whereClauses.add(
+        'CAST(json_extract(cards.card_json, \'\$.cmc\') AS REAL) >= ?',
+      );
+      variables.add(Variable.withInt(filter.manaMin!));
+    }
+    if (filter.manaMax != null) {
+      whereClauses.add(
+        'CAST(json_extract(cards.card_json, \'\$.cmc\') AS REAL) <= ?',
+      );
+      variables.add(Variable.withInt(filter.manaMax!));
+    }
+
+    return _FilterQuery(whereClauses, variables);
+  }
+
+  Future<int> _countOwnedCardsForFilter(
+    AppDatabase db,
+    CollectionFilter filter,
+    int allCardsId,
+  ) async {
+    final filterQuery = _buildFilterQuery(filter);
+    final whereClauses = [...filterQuery.whereClauses];
+    whereClauses.add('COALESCE(collection_cards.quantity, 0) > 0');
+    final whereSql = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+    final rows = await db.customSelect(
+      '''
+      SELECT COUNT(*) AS total
+      FROM cards
+      LEFT JOIN collection_cards
+        ON collection_cards.card_id = cards.id
+        AND collection_cards.collection_id = ?
+      $whereSql
+      ''',
+      variables: [
+        Variable.withInt(allCardsId),
+        ...filterQuery.variables,
+      ],
+    ).getSingle();
+    return rows.read<int>('total');
   }
 
   Future<List<CollectionCardEntry>> fetchCollectionCards(
@@ -281,22 +581,38 @@ class ScryfallDatabase {
 
 
   Future<List<CollectionCardEntry>> fetchOwnedCards({
+    String? searchQuery,
     int? limit,
     int? offset,
   }) async {
     final db = await open();
+    final allCardsId = await fetchAllCardsCollectionId();
+    if (allCardsId == null) {
+      return [];
+    }
     var resolvedLimit = limit;
     if (offset != null && resolvedLimit == null) {
       resolvedLimit = -1;
     }
-    final variables = <Variable>[];
+    final variables = <Variable>[Variable.withInt(allCardsId)];
+    final whereClauses = <String>['collection_cards.collection_id = ?'];
+    final query = searchQuery?.trim();
+    if (query != null && query.isNotEmpty) {
+      whereClauses.add(
+        '(LOWER(cards.name) LIKE ? OR LOWER(cards.collector_number) LIKE ?)',
+      );
+      final like = '%${query.toLowerCase()}%';
+      variables.add(Variable.withString(like));
+      variables.add(Variable.withString(like));
+    }
+    final whereSql = whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
     final sql = StringBuffer(
       '''
       SELECT
         collection_cards.card_id AS card_id,
-        SUM(collection_cards.quantity) AS quantity,
-        MAX(collection_cards.foil) AS foil,
-        MAX(collection_cards.alt_art) AS alt_art,
+        collection_cards.quantity AS quantity,
+        collection_cards.foil AS foil,
+        collection_cards.alt_art AS alt_art,
         cards.name AS name,
         cards.set_code AS set_code,
         cards.collector_number AS collector_number,
@@ -306,7 +622,7 @@ class ScryfallDatabase {
         cards.card_json AS card_json
       FROM collection_cards
       JOIN cards ON cards.id = collection_cards.card_id
-      GROUP BY collection_cards.card_id
+      $whereSql
       ORDER BY cards.name ASC
       '''
     );
@@ -415,6 +731,213 @@ class ScryfallDatabase {
             cardJson: row.readNullable<String>('card_json'),
           ),
         )
+        .toList();
+  }
+
+  Future<List<CollectionCardEntry>> fetchFilteredCollectionCards(
+    CollectionFilter filter, {
+    String? searchQuery,
+    int? limit,
+    int? offset,
+  }) async {
+    final db = await open();
+    final allCardsId = await fetchAllCardsCollectionId();
+    if (allCardsId == null) {
+      return [];
+    }
+    var resolvedLimit = limit;
+    if (offset != null && resolvedLimit == null) {
+      resolvedLimit = -1;
+    }
+    final filterQuery = _buildFilterQuery(filter);
+    final whereClauses = [...filterQuery.whereClauses];
+    final variables = <Variable>[...filterQuery.variables];
+    final query = searchQuery?.trim();
+    if (query != null && query.isNotEmpty) {
+      whereClauses.add(
+        '(LOWER(cards.name) LIKE ? OR LOWER(cards.collector_number) LIKE ?)',
+      );
+      final like = '%${query.toLowerCase()}%';
+      variables.add(Variable.withString(like));
+      variables.add(Variable.withString(like));
+    }
+    final whereSql =
+        whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+    final bound = <Variable>[
+      Variable.withInt(allCardsId),
+      ...variables,
+    ];
+    final sql = StringBuffer(
+      '''
+      SELECT
+        cards.id AS card_id,
+        COALESCE(collection_cards.quantity, 0) AS quantity,
+        COALESCE(collection_cards.foil, 0) AS foil,
+        COALESCE(collection_cards.alt_art, 0) AS alt_art,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM cards
+      LEFT JOIN collection_cards
+        ON collection_cards.card_id = cards.id
+        AND collection_cards.collection_id = ?
+      $whereSql
+      ORDER BY cards.name ASC
+      ''',
+    );
+    if (resolvedLimit != null) {
+      sql.write(' LIMIT ?');
+      variables.add(Variable.withInt(resolvedLimit));
+    }
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: bound,
+    ).get();
+
+    return rows
+        .map(
+          (row) => CollectionCardEntry(
+            cardId: row.read<String>('card_id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            quantity: row.read<int>('quantity'),
+            foil: row.read<int>('foil') == 1,
+            altArt: row.read<int>('alt_art') == 1,
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<int> countOwnedCardsForFilter(CollectionFilter filter) async {
+    final db = await open();
+    final allCardsId = await fetchAllCardsCollectionId();
+    if (allCardsId == null) {
+      return 0;
+    }
+    return _countOwnedCardsForFilter(db, filter, allCardsId);
+  }
+
+  Future<int> countCardsForFilter(CollectionFilter filter) async {
+    final db = await open();
+    final filterQuery = _buildFilterQuery(filter);
+    final whereSql = filterQuery.whereClauses.isEmpty
+        ? ''
+        : 'WHERE ${filterQuery.whereClauses.join(' AND ')}';
+    final row = await db.customSelect(
+      '''
+      SELECT COUNT(*) AS total
+      FROM cards
+      $whereSql
+      ''',
+      variables: filterQuery.variables,
+    ).getSingle();
+    return row.read<int>('total');
+  }
+
+  Future<List<CardSearchResult>> fetchFilteredCardPreviews(
+    CollectionFilter filter, {
+    int limit = 40,
+    int? offset,
+  }) async {
+    final db = await open();
+    final filterQuery = _buildFilterQuery(filter);
+    final whereSql = filterQuery.whereClauses.isEmpty
+        ? ''
+        : 'WHERE ${filterQuery.whereClauses.join(' AND ')}';
+    final variables = <Variable>[...filterQuery.variables, Variable.withInt(limit)];
+    final sql = StringBuffer(
+      '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM cards
+      $whereSql
+      ORDER BY cards.name ASC
+      LIMIT ?
+      ''',
+    );
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: variables,
+    ).get();
+
+    return rows
+        .map(
+          (row) => CardSearchResult(
+            id: row.read<String>('id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<String>> fetchAvailableArtists({
+    String? query,
+    int limit = 40,
+  }) async {
+    final db = await open();
+    final where = <String>[];
+    final variables = <Variable>[];
+    final resolvedQuery = query?.trim().toLowerCase();
+    if (resolvedQuery != null && resolvedQuery.isNotEmpty) {
+      where.add('LOWER(artist) LIKE ?');
+      variables.add(Variable.withString('%$resolvedQuery%'));
+    }
+    final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
+    final rows = await db.customSelect(
+      '''
+      SELECT DISTINCT artist
+      FROM (
+        SELECT json_extract(card_json, '\$.artist') AS artist
+        FROM cards
+        WHERE json_extract(card_json, '\$.artist') IS NOT NULL
+        UNION
+        SELECT json_extract(value, '\$.artist') AS artist
+        FROM cards, json_each(cards.card_json, '\$.card_faces')
+        WHERE json_extract(value, '\$.artist') IS NOT NULL
+      )
+      $whereSql
+      ORDER BY artist ASC
+      LIMIT ?
+      ''',
+      variables: [...variables, Variable.withInt(limit)],
+    ).get();
+    return rows
+        .map((row) => row.read<String>('artist').trim())
+        .where((value) => value.isNotEmpty)
         .toList();
   }
 
@@ -652,8 +1175,13 @@ class ScryfallDatabase {
 
   Future<int> countOwnedCards() async {
     final db = await open();
+    final allCardsId = await fetchAllCardsCollectionId();
+    if (allCardsId == null) {
+      return 0;
+    }
     final row = await db.customSelect(
-      'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards',
+      'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
+      variables: [Variable.withInt(allCardsId)],
     ).getSingle();
     return row.read<int>('total');
   }
