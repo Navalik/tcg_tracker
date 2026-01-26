@@ -928,12 +928,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   Future<void> _addCard(BuildContext context) async {
     if (widget.isSetCollection) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.useListToSetOwnedQuantities,
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.useListToSetOwnedQuantities,
       );
       return;
     }
@@ -957,12 +954,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.addedCards(selection.count),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.addedCards(selection.count),
       );
     } else {
       await ScryfallDatabase.instance.addCardToCollection(

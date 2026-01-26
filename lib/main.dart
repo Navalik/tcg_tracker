@@ -70,6 +70,20 @@ class TCGTracker extends StatelessWidget {
         textTheme: scaledTextTheme,
         scaffoldBackgroundColor: scaffoldBackground,
         cardColor: const Color(0xFF171411),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: const Color(0xFFE9C46A),
+          contentTextStyle: scaledTextTheme.bodyMedium?.copyWith(
+            color: const Color(0xFF1C1510),
+            fontWeight: FontWeight.w600,
+          ),
+          behavior: SnackBarBehavior.floating,
+          elevation: 6,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Color(0xFFB07C2A)),
+          ),
+          insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,

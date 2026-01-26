@@ -69,6 +69,21 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose which card languages appear in search.';
 
   @override
+  String get cardName => 'Card name';
+
+  @override
+  String get searchHint => 'Search';
+
+  @override
+  String get typeArtistNameHint => 'Type an artist name';
+
+  @override
+  String get flavorText => 'Flavor text';
+
+  @override
+  String get typeFlavorTextHint => 'Type flavor text';
+
+  @override
   String get loadMore => 'Load more';
 
   @override

@@ -45,6 +45,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Set<String> _searchLanguages = {};
   bool _loadingLanguages = true;
   bool _searching = false;
+  String _artistQuery = '';
+  String _flavorQuery = '';
   String? _pendingQuery;
   bool _pendingFilterRefresh = false;
   final Set<String> _selectedRarities = {};
@@ -249,6 +251,20 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         return false;
       }
     }
+    if (_artistQuery.trim().isNotEmpty) {
+      final artist = _resultArtist(card);
+      if (artist.isEmpty ||
+          !artist.contains(_artistQuery.trim().toLowerCase())) {
+        return false;
+      }
+    }
+    if (_flavorQuery.trim().isNotEmpty) {
+      final flavor = _resultFlavor(card);
+      if (flavor.isEmpty ||
+          !flavor.contains(_flavorQuery.trim().toLowerCase())) {
+        return false;
+      }
+    }
     return true;
   }
 
@@ -309,6 +325,48 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return 0;
   }
 
+  String _resultArtist(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final entries = <String>[];
+    final artist = data?['artist']?.toString().trim();
+    if (artist != null && artist.isNotEmpty) {
+      entries.add(artist);
+    }
+    final faces = data?['card_faces'];
+    if (faces is List) {
+      for (final face in faces) {
+        if (face is Map<String, dynamic>) {
+          final faceArtist = face['artist']?.toString().trim();
+          if (faceArtist != null && faceArtist.isNotEmpty) {
+            entries.add(faceArtist);
+          }
+        }
+      }
+    }
+    return entries.map((value) => value.toLowerCase()).join(' ');
+  }
+
+  String _resultFlavor(CardSearchResult card) {
+    final data = _decodeCardJson(card.cardJson);
+    final entries = <String>[];
+    final flavor = data?['flavor_text']?.toString().trim();
+    if (flavor != null && flavor.isNotEmpty) {
+      entries.add(flavor);
+    }
+    final faces = data?['card_faces'];
+    if (faces is List) {
+      for (final face in faces) {
+        if (face is Map<String, dynamic>) {
+          final faceFlavor = face['flavor_text']?.toString().trim();
+          if (faceFlavor != null && faceFlavor.isNotEmpty) {
+            entries.add(faceFlavor);
+          }
+        }
+      }
+    }
+    return entries.map((value) => value.toLowerCase()).join(' ');
+  }
+
   Map<String, dynamic>? _decodeCardJson(String? raw) {
     if (raw == null || raw.isEmpty) {
       return null;
@@ -335,6 +393,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedSetCodes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
+        _artistQuery.trim().isNotEmpty ||
+        _flavorQuery.trim().isNotEmpty ||
         _manaValueMin != null ||
         _manaValueMax != null;
   }
@@ -342,7 +402,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _hasNarrowingFilters() {
     return _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
-        _selectedTypes.isNotEmpty;
+        _selectedTypes.isNotEmpty ||
+        _selectedColors.isNotEmpty ||
+        _artistQuery.trim().isNotEmpty ||
+        _flavorQuery.trim().isNotEmpty;
   }
 
   String _colorLabel(String code) {
@@ -419,11 +482,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final tempSetCodes = _selectedSetCodes.toSet();
     final tempColors = _selectedColors.toSet();
     final tempTypes = _selectedTypes.toSet();
+    final nameController = TextEditingController(text: _query);
+    final artistController = TextEditingController(text: _artistQuery);
+    final flavorController = TextEditingController(text: _flavorQuery);
     final minController =
         TextEditingController(text: _manaValueMin?.toString() ?? '');
     final maxController =
         TextEditingController(text: _manaValueMax?.toString() ?? '');
     var setQuery = '';
+    var typeQuery = '';
 
     var applied = false;
     await showModalBottomSheet<void>(
@@ -481,6 +548,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               ..sort((a, b) =>
                   colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)));
             final sortedTypes = availableTypes.toList()..sort();
+            final filteredRarities = sortedRarities;
+            final filteredColors = sortedColors;
+            final filteredTypes = sortedTypes
+                .where((value) => value.toLowerCase().contains(typeQuery))
+                .toList();
 
             return Container(
               margin: const EdgeInsets.all(16),
@@ -514,15 +586,28 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l10n.cardName,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: nameController,
+                      decoration: InputDecoration(
+                        hintText: l10n.typeCardNameHint,
+                        prefixIcon: const Icon(Icons.search),
+                      ),
+                    ),
                     if (sortedRarities.isNotEmpty) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       Text(
                         l10n.rarity,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
                       buildChipRow<String>(
-                        sortedRarities,
+                        filteredRarities,
                         (value) => tempRarities.contains(value),
                         (value) {
                           if (!tempRarities.add(value)) {
@@ -550,22 +635,24 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           });
                         },
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: sortedSets.length > 16 ? 200 : null,
-                        child: SingleChildScrollView(
-                          child: buildChipRow<MapEntry<String, String>>(
-                            filteredSets,
-                            (value) => tempSetCodes.contains(value.key),
-                            (value) {
-                              if (!tempSetCodes.add(value.key)) {
-                                tempSetCodes.remove(value.key);
-                              }
-                            },
-                            (value) => value.value,
+                      if (setQuery.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: sortedSets.length > 16 ? 200 : null,
+                          child: SingleChildScrollView(
+                            child: buildChipRow<MapEntry<String, String>>(
+                              filteredSets,
+                              (value) => tempSetCodes.contains(value.key),
+                              (value) {
+                                if (!tempSetCodes.add(value.key)) {
+                                  tempSetCodes.remove(value.key);
+                                }
+                              },
+                              (value) => value.value,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                     if (sortedColors.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -575,7 +662,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                       ),
                       const SizedBox(height: 8),
                       buildChipRow<String>(
-                        sortedColors,
+                        filteredColors,
                         (value) => tempColors.contains(value),
                         (value) {
                           if (!tempColors.add(value)) {
@@ -592,16 +679,30 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
-                      buildChipRow<String>(
-                        sortedTypes,
-                        (value) => tempTypes.contains(value),
-                        (value) {
-                          if (!tempTypes.add(value)) {
-                            tempTypes.remove(value);
-                          }
+                      TextField(
+                        decoration: InputDecoration(
+                          hintText: l10n.searchHint,
+                          prefixIcon: const Icon(Icons.search),
+                        ),
+                        onChanged: (value) {
+                          setSheetState(() {
+                            typeQuery = value.trim().toLowerCase();
+                          });
                         },
-                        (value) => value,
                       ),
+                      if (typeQuery.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        buildChipRow<String>(
+                          filteredTypes,
+                          (value) => tempTypes.contains(value),
+                          (value) {
+                            if (!tempTypes.add(value)) {
+                              tempTypes.remove(value);
+                            }
+                          },
+                          (value) => value,
+                        ),
+                      ],
                     ],
                     const SizedBox(height: 16),
                     Text(
@@ -632,6 +733,32 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.detailArtist,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: artistController,
+                      decoration: InputDecoration(
+                        hintText: l10n.typeArtistNameHint,
+                        prefixIcon: const Icon(Icons.person_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.flavorText,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: flavorController,
+                      decoration: InputDecoration(
+                        hintText: l10n.typeFlavorTextHint,
+                        prefixIcon: const Icon(Icons.format_quote),
+                      ),
+                    ),
                     if (sortedRarities.isEmpty &&
                         sortedSets.isEmpty &&
                         sortedColors.isEmpty &&
@@ -649,8 +776,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               tempSetCodes.clear();
                               tempColors.clear();
                               tempTypes.clear();
+                              nameController.clear();
+                              artistController.clear();
+                              flavorController.clear();
                               minController.clear();
                               maxController.clear();
+                              setQuery = '';
+                              typeQuery = '';
                             });
                           },
                           child: Text(l10n.clear),
@@ -697,9 +829,19 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _selectedTypes
         ..clear()
         ..addAll(tempTypes);
+      _artistQuery = artistController.text.trim();
+      _flavorQuery = flavorController.text.trim();
       _manaValueMin = minValue;
       _manaValueMax = maxValue;
     });
+    final nameValue = nameController.text.trim();
+    if (_controller.text.trim() != nameValue) {
+      _controller.value = _controller.value.copyWith(
+        text: nameValue,
+        selection: TextSelection.collapsed(offset: nameValue.length),
+      );
+    }
+    _query = nameValue;
     if (_searching) {
       _pendingFilterRefresh = true;
     } else {
@@ -709,20 +851,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Future<void> _bulkAddByFilters() async {
     if (!_hasActiveAdvancedFilters()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.selectFiltersFirst),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.selectFiltersFirst,
       );
       return;
     }
     if (!_hasNarrowingFilters()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.selectSetRarityTypeToNarrow,
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.selectSetRarityTypeToNarrow,
       );
       return;
     }
@@ -742,10 +880,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         return;
       }
       if (filtered.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppLocalizations.of(context)!.noCardsMatchFilters),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.noCardsMatchFilters,
         );
         return;
       }
@@ -803,16 +940,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         ),
         child: SafeArea(
           top: false,
-          child: SizedBox(
-            height: sheetHeight,
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 48,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3B3229),
+            child: SizedBox(
+              height: sheetHeight,
+              child: Stack(
+                children: [
+                  Column(
+                    children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 48,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B3229),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -825,16 +964,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           l10n.searchCardTitle,
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
-                      ),
-                      IconButton(
-                        onPressed: _showAdvancedFilters,
-                        icon: Icon(
-                          Icons.filter_list,
-                          color: filtersActive
-                              ? const Color(0xFFE9C46A)
-                              : null,
-                        ),
-                        tooltip: l10n.filters,
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
@@ -957,7 +1086,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             )
                           : ListView.separated(
                               shrinkWrap: true,
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
                               itemCount: visibleResults.length +
                                   ((_loadingMore ||
                                               (!_loading &&
@@ -1051,12 +1180,32 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               },
                             ),
                 ),
-              ],
+                    ],
+                  ),
+                  Positioned(
+                    left: 20,
+                    bottom: 16 + mediaQuery.padding.bottom,
+                    child: FloatingActionButton(
+                      heroTag: 'search_filters_fab',
+                      onPressed: _showAdvancedFilters,
+                      tooltip: l10n.filters,
+                      backgroundColor: filtersActive
+                          ? const Color(0xFFE9C46A)
+                          : null,
+                      foregroundColor: filtersActive
+                          ? const Color(0xFF1C1510)
+                          : null,
+                      child: Icon(
+                        filtersActive ? Icons.filter_list_alt : Icons.filter_list,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   void _showPreview(CardSearchResult card) {

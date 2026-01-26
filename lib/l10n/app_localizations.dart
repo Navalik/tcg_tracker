@@ -194,6 +194,36 @@ abstract class AppLocalizations {
   /// **'Choose which card languages appear in search.'**
   String get searchLanguagesSubtitle;
 
+  /// No description provided for @cardName.
+  ///
+  /// In en, this message translates to:
+  /// **'Card name'**
+  String get cardName;
+
+  /// No description provided for @searchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get searchHint;
+
+  /// No description provided for @typeArtistNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type an artist name'**
+  String get typeArtistNameHint;
+
+  /// No description provided for @flavorText.
+  ///
+  /// In en, this message translates to:
+  /// **'Flavor text'**
+  String get flavorText;
+
+  /// No description provided for @typeFlavorTextHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type flavor text'**
+  String get typeFlavorTextHint;
+
   /// No description provided for @loadMore.
   ///
   /// In en, this message translates to:

@@ -568,11 +568,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     });
 
     if (result.updateAvailable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(AppLocalizations.of(context)!.scryfallBulkUpdateAvailable),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.scryfallBulkUpdateAvailable,
       );
     }
   }
@@ -657,11 +655,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(AppLocalizations.of(context)!.failedToAddCollection(error.toString())),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedToAddCollection(error.toString()),
       );
       return;
     }
@@ -724,8 +720,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (sets.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.noSetsAvailableYet)),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.noSetsAvailableYet,
       );
       return;
     }
@@ -800,12 +797,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     final resolvedName = _setCollectionName(selected.code);
     if (_collections.any((item) => item.name == resolvedName)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.collectionAlreadyExists,
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
       );
       return;
     }
@@ -817,11 +811,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text(AppLocalizations.of(context)!.failedToAddCollection(error.toString())),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedToAddCollection(error.toString()),
       );
       return;
     }
@@ -888,12 +880,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     if (allCards == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.allCardsCollectionNotFound,
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
       );
       return;
     }
@@ -932,12 +921,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.createCustomCollectionFirst,
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.createCustomCollectionFirst,
       );
       return;
     }
@@ -1127,10 +1113,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _collections.removeWhere((item) => item.id == collection.id);
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppLocalizations.of(context)!.collectionDeleted),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.collectionDeleted,
     );
   }
 
@@ -1152,10 +1137,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (_bulkDownloadUri == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.downloadLinkUnavailable),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.downloadLinkUnavailable,
       );
       return;
     }
@@ -1175,7 +1159,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkDownloadError = null;
     });
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final client = http.Client();
       try {
@@ -1232,11 +1215,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _bulkDownloading = false;
           _bulkDownloadProgress = 1;
         });
-        messenger.showSnackBar(
-          SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.downloadComplete(targetPath)),
-          ),
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.downloadComplete(targetPath),
         );
         await _importBulkFile(targetPath);
       } finally {
@@ -1254,11 +1235,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _bulkDownloading = false;
         _bulkDownloadError = message;
       });
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(message),
-        ),
-      );
+      showAppSnackBar(context, message);
     }
   }
 
@@ -1278,7 +1255,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkImportedCount = 0;
     });
 
-    final messenger = ScaffoldMessenger.of(context);
     try {
       final importer = ScryfallBulkImporter();
       await importer.importAllCardsJson(
@@ -1317,10 +1293,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _cardsMissing = false;
         _totalCardCount = total;
       });
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(AppLocalizations.of(context)!.importComplete),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.importComplete,
       );
     } catch (error) {
       if (!mounted) {
@@ -1329,12 +1304,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       setState(() {
         _bulkImporting = false;
       });
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            AppLocalizations.of(context)!.importFailed(error.toString()),
-          ),
-        ),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.importFailed(error.toString()),
       );
     }
   }

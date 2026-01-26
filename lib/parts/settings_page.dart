@@ -116,8 +116,9 @@ class _SettingsPageState extends State<SettingsPage> {
         .toList()
       ..sort();
     if (options.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.allLanguagesAdded)),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allLanguagesAdded,
       );
       return;
     }
@@ -162,12 +163,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context)!.languageAddedDownloadAgain,
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.languageAddedDownloadAgain,
     );
   }
 
@@ -258,12 +256,9 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _bulkType = selected;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context)!.databaseChangedGoHome,
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.databaseChangedGoHome,
     );
   }
 
@@ -282,14 +277,11 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _primaryGameId = id;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          AppLocalizations.of(context)!.primaryGameSet(
-                _gameLabel(AppLocalizations.of(context)!, id),
-              ),
-        ),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.primaryGameSet(
+            _gameLabel(AppLocalizations.of(context)!, id),
+          ),
     );
   }
 
@@ -333,8 +325,9 @@ class _SettingsPageState extends State<SettingsPage> {
         .where((option) => !_enabledGames.contains(option.id))
         .toList();
     if (remaining.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppLocalizations.of(context)!.allGamesAdded)),
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allGamesAdded,
       );
       return;
     }
@@ -450,10 +443,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(AppLocalizations.of(context)!.resetComplete),
-      ),
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.resetComplete,
     );
     Navigator.of(context).popUntil((route) => route.isFirst);
   }

@@ -375,3 +375,22 @@ class _AppBackground extends StatelessWidget {
   }
 }
 
+void showAppSnackBar(
+  BuildContext context,
+  String message, {
+  Duration duration = const Duration(seconds: 3),
+}) {
+  final mediaQuery = MediaQuery.of(context);
+  final availableHeight =
+      mediaQuery.size.height - mediaQuery.padding.top - mediaQuery.padding.bottom;
+  final bottom = (availableHeight * 0.5).clamp(120.0, availableHeight - 80.0);
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(message),
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.fromLTRB(16, 0, 16, bottom),
+      duration: duration,
+    ),
+  );
+}
+
