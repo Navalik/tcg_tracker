@@ -69,6 +69,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose which card languages appear in search.';
 
   @override
+  String get loadMore => 'Load more';
+
+  @override
   String get defaultLabel => 'Default';
 
   @override

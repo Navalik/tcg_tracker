@@ -27,16 +27,21 @@ class _CardSearchSheet extends StatefulWidget {
 
 class _CardSearchSheetState extends State<_CardSearchSheet>
     with SingleTickerProviderStateMixin {
+  static const int _pageSize = 80;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   Timer? _debounce;
   bool _loading = false;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _offset = 0;
   List<CardSearchResult> _results = [];
   String _query = '';
   OverlayEntry? _previewEntry;
   late final AnimationController _previewController;
   late final Animation<double> _previewOpacity;
   late final Animation<double> _previewScale;
+  final Map<String, Map<String, dynamic>?> _cardJsonCache = {};
   Set<String> _searchLanguages = {};
   bool _loadingLanguages = true;
   bool _searching = false;
@@ -106,34 +111,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     _hidePreview(immediate: false);
     _searching = true;
+    _offset = 0;
+    _hasMore = true;
+    _cardJsonCache.clear();
     setState(() {
       _loading = true;
+      _loadingMore = false;
+      _results = [];
     });
 
     final currentQuery = _query;
     try {
-      List<CardSearchResult> results;
-      if (currentQuery.isEmpty) {
-        results = await ScryfallDatabase.instance.fetchCardsForFilters(
-          setCodes: _selectedSetCodes.toList(),
-          rarities: _selectedRarities.toList(),
-          types: _selectedTypes.toList(),
-          languages: _searchLanguages.toList(),
-          limit: 200,
-        );
-      } else {
-        results = await ScryfallDatabase.instance.searchCardsByName(
-          currentQuery,
-          languages: _searchLanguages.toList(),
-        );
-      }
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _results = results;
-        _loading = false;
-      });
+      await _loadNextPage(currentQuery, replace: true);
     } finally {
       if (mounted && _loading) {
         setState(() {
@@ -155,6 +144,49 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _pendingFilterRefresh = false;
       await _runSearch();
     }
+  }
+
+  Future<void> _loadNextPage(String query, {bool replace = false}) async {
+    if (_loadingMore || !_hasMore) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _loadingMore = !replace;
+      });
+    }
+    List<CardSearchResult> page;
+    if (query.isEmpty) {
+      page = await ScryfallDatabase.instance.fetchCardsForFilters(
+        setCodes: _selectedSetCodes.toList(),
+        rarities: _selectedRarities.toList(),
+        types: _selectedTypes.toList(),
+        languages: _searchLanguages.toList(),
+        limit: _pageSize,
+        offset: _offset,
+      );
+    } else {
+      page = await ScryfallDatabase.instance.searchCardsByName(
+        query,
+        languages: _searchLanguages.toList(),
+        limit: _pageSize,
+        offset: _offset,
+      );
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (replace) {
+        _results = page;
+      } else {
+        _results = [..._results, ...page];
+      }
+      _loading = false;
+      _loadingMore = false;
+      _offset += page.length;
+      _hasMore = page.length == _pageSize;
+    });
   }
 
   Future<void> _loadSearchLanguages() async {
@@ -281,10 +313,20 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (raw == null || raw.isEmpty) {
       return null;
     }
-    final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
+    final cached = _cardJsonCache[raw];
+    if (cached != null || _cardJsonCache.containsKey(raw)) {
+      return cached;
     }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        _cardJsonCache[raw] = decoded;
+        return decoded;
+      }
+    } catch (_) {
+      // Ignore invalid JSON and cache the miss to avoid repeated work.
+    }
+    _cardJsonCache[raw] = null;
     return null;
   }
 
@@ -916,10 +958,46 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           : ListView.separated(
                               shrinkWrap: true,
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                              itemCount: visibleResults.length,
+                              itemCount: visibleResults.length +
+                                  ((_loadingMore ||
+                                              (!_loading &&
+                                                  _hasMore &&
+                                                  visibleResults.isNotEmpty))
+                                          ? 1
+                                          : 0),
                               separatorBuilder: (_, _) =>
                                   const SizedBox(height: 10),
                               itemBuilder: (context, index) {
+                                if (index >= visibleResults.length) {
+                                  if (_loadingMore) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return Center(
+                                    child: TextButton.icon(
+                                      onPressed: _loading || !_hasMore
+                                          ? null
+                                          : () => _loadNextPage(
+                                                _query,
+                                              ),
+                                      icon: const Icon(Icons.expand_more),
+                                      label:
+                                          Text(AppLocalizations.of(context)!.loadMore),
+                                    ),
+                                  );
+                                }
                                 final card = visibleResults[index];
                                 return InkWell(
                                   onTap: () => Navigator.of(context)

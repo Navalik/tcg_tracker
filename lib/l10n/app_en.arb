@@ -23,6 +23,7 @@
   "settings": "Settings",
   "searchLanguages": "Search languages",
   "searchLanguagesSubtitle": "Choose which card languages appear in search.",
+  "loadMore": "Load more",
   "defaultLabel": "Default",
   "remove": "Remove",
   "addLanguage": "Add language",

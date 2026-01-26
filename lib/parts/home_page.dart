@@ -1199,17 +1199,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           });
         }
         var received = 0;
+        final progressThrottle = Stopwatch()..start();
+        const minProgressInterval = Duration(milliseconds: 120);
         await for (final chunk in response.stream) {
           received += chunk.length;
-          if (mounted) {
+          sink.add(chunk);
+          final shouldReport = progressThrottle.elapsed >= minProgressInterval ||
+              (totalBytes > 0 && received >= totalBytes);
+          if (shouldReport && mounted) {
+            progressThrottle.reset();
             setState(() {
               _bulkDownloadReceived = received;
-            });
-          }
-          sink.add(chunk);
-          if (totalBytes > 0 && mounted) {
-            setState(() {
-              _bulkDownloadProgress = received / totalBytes;
+              if (totalBytes > 0) {
+                _bulkDownloadProgress = received / totalBytes;
+              }
             });
           }
         }
@@ -1222,6 +1225,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         }
 
         setState(() {
+          _bulkDownloadReceived = received;
+          if (totalBytes > 0) {
+            _bulkDownloadProgress = received / totalBytes;
+          }
           _bulkDownloading = false;
           _bulkDownloadProgress = 1;
         });

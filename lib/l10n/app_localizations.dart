@@ -194,6 +194,12 @@ abstract class AppLocalizations {
   /// **'Choose which card languages appear in search.'**
   String get searchLanguagesSubtitle;
 
+  /// No description provided for @loadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get loadMore;
+
   /// No description provided for @defaultLabel.
   ///
   /// In en, this message translates to:

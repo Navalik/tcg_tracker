@@ -728,6 +728,7 @@ class ScryfallDatabase {
   Future<List<CardSearchResult>> searchCardsByName(
     String query, {
     int limit = 80,
+    int? offset,
     List<String>? languages,
   }) async {
     final matchQuery = _buildFtsQuery(query);
@@ -743,8 +744,7 @@ class ScryfallDatabase {
       whereArgs.addAll(languages.map(Variable.withString));
     }
     whereArgs.add(Variable.withInt(limit));
-
-    final rows = await db.customSelect(
+    final sql = StringBuffer(
       '''
       SELECT
         cards.id AS id,
@@ -760,6 +760,14 @@ class ScryfallDatabase {
       ORDER BY cards.name ASC, cards.set_code ASC, cards.collector_number ASC
       LIMIT ?
       ''',
+    );
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      whereArgs.add(Variable.withInt(offset));
+    }
+
+    final rows = await db.customSelect(
+      sql.toString(),
       variables: whereArgs,
     ).get();
 
@@ -798,6 +806,7 @@ class ScryfallDatabase {
     List<String> types = const [],
     List<String> languages = const [],
     int limit = 200,
+    int? offset,
   }) async {
     final db = await open();
     final whereClauses = <String>[];
@@ -861,8 +870,7 @@ class ScryfallDatabase {
     final whereSql =
         whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
 
-    variables.add(Variable.withInt(limit));
-    final rows = await db.customSelect(
+    final sql = StringBuffer(
       '''
       SELECT
         cards.id AS id,
@@ -877,6 +885,14 @@ class ScryfallDatabase {
       ORDER BY cards.name ASC
       LIMIT ?
       ''',
+    );
+    variables.add(Variable.withInt(limit));
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
       variables: variables,
     ).get();
 

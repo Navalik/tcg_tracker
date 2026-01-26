@@ -27,6 +27,7 @@ class CollectionDetailPage extends StatefulWidget {
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
   static const int _pageSize = 120;
   final List<CollectionCardEntry> _cards = [];
+  final Map<String, Map<String, dynamic>?> _cardJsonCache = {};
   final ScrollController _scrollController = ScrollController();
   bool _loading = true;
   bool _loadingMore = false;
@@ -99,6 +100,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _hasMore = true;
       _loadedOffset = 0;
       _cards.clear();
+      _cardJsonCache.clear();
       _setTotalsByCode = {};
     });
     if (_scrollController.hasClients) {
@@ -1177,14 +1179,25 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Map<String, dynamic>? _decodeCardJson(CollectionCardEntry entry) {
+    final cached = _cardJsonCache[entry.cardId];
+    if (cached != null || _cardJsonCache.containsKey(entry.cardId)) {
+      return cached;
+    }
     final raw = entry.cardJson;
     if (raw == null || raw.isEmpty) {
+      _cardJsonCache[entry.cardId] = null;
       return null;
     }
-    final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) {
-      return decoded;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        _cardJsonCache[entry.cardId] = decoded;
+        return decoded;
+      }
+    } catch (_) {
+      // Ignore invalid JSON and cache the miss to avoid repeated work.
     }
+    _cardJsonCache[entry.cardId] = null;
     return null;
   }
 
