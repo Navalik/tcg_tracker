@@ -213,9 +213,18 @@ class ScryfallDatabase {
     });
   }
 
-  Future<List<CollectionCardEntry>> fetchCollectionCards(int collectionId) async {
+  Future<List<CollectionCardEntry>> fetchCollectionCards(
+    int collectionId, {
+    int? limit,
+    int? offset,
+  }) async {
     final db = await open();
-    final rows = await db.customSelect(
+    var resolvedLimit = limit;
+    if (offset != null && resolvedLimit == null) {
+      resolvedLimit = -1;
+    }
+    final variables = <Variable>[Variable.withInt(collectionId)];
+    final sql = StringBuffer(
       '''
       SELECT
         collection_cards.card_id AS card_id,
@@ -234,7 +243,18 @@ class ScryfallDatabase {
       WHERE collection_cards.collection_id = ?
       ORDER BY cards.name ASC
       ''',
-      variables: [Variable.withInt(collectionId)],
+    );
+    if (resolvedLimit != null) {
+      sql.write(' LIMIT ?');
+      variables.add(Variable.withInt(resolvedLimit));
+    }
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: variables,
     ).get();
 
     return rows
@@ -259,9 +279,18 @@ class ScryfallDatabase {
         .toList();
   }
 
-  Future<List<CollectionCardEntry>> fetchOwnedCards() async {
+
+  Future<List<CollectionCardEntry>> fetchOwnedCards({
+    int? limit,
+    int? offset,
+  }) async {
     final db = await open();
-    final rows = await db.customSelect(
+    var resolvedLimit = limit;
+    if (offset != null && resolvedLimit == null) {
+      resolvedLimit = -1;
+    }
+    final variables = <Variable>[];
+    final sql = StringBuffer(
       '''
       SELECT
         collection_cards.card_id AS card_id,
@@ -279,7 +308,19 @@ class ScryfallDatabase {
       JOIN cards ON cards.id = collection_cards.card_id
       GROUP BY collection_cards.card_id
       ORDER BY cards.name ASC
-      ''',
+      '''
+    );
+    if (resolvedLimit != null) {
+      sql.write(' LIMIT ?');
+      variables.add(Variable.withInt(resolvedLimit));
+    }
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: variables,
     ).get();
 
     return rows
@@ -304,12 +345,23 @@ class ScryfallDatabase {
         .toList();
   }
 
+
   Future<List<CollectionCardEntry>> fetchSetCollectionCards(
     int collectionId,
-    String setCode,
-  ) async {
+    String setCode, {
+    int? limit,
+    int? offset,
+  }) async {
     final db = await open();
-    final rows = await db.customSelect(
+    var resolvedLimit = limit;
+    if (offset != null && resolvedLimit == null) {
+      resolvedLimit = -1;
+    }
+    final variables = <Variable>[
+      Variable.withInt(collectionId),
+      Variable.withString(setCode),
+    ];
+    final sql = StringBuffer(
       '''
       SELECT
         cards.id AS card_id,
@@ -329,11 +381,19 @@ class ScryfallDatabase {
         AND collection_cards.collection_id = ?
       WHERE cards.set_code = ?
       ORDER BY cards.name ASC
-      ''',
-      variables: [
-        Variable.withInt(collectionId),
-        Variable.withString(setCode),
-      ],
+      '''
+    );
+    if (resolvedLimit != null) {
+      sql.write(' LIMIT ?');
+      variables.add(Variable.withInt(resolvedLimit));
+    }
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: variables,
     ).get();
 
     return rows
@@ -357,6 +417,7 @@ class ScryfallDatabase {
         )
         .toList();
   }
+
 
   Future<void> addCardToCollection(int collectionId, String cardId) async {
     final db = await open();
@@ -736,6 +797,7 @@ class ScryfallDatabase {
     List<String> rarities = const [],
     List<String> types = const [],
     List<String> languages = const [],
+    int limit = 200,
   }) async {
     final db = await open();
     final whereClauses = <String>[];
@@ -799,6 +861,7 @@ class ScryfallDatabase {
     final whereSql =
         whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
 
+    variables.add(Variable.withInt(limit));
     final rows = await db.customSelect(
       '''
       SELECT
@@ -812,6 +875,7 @@ class ScryfallDatabase {
       FROM cards
       $whereSql
       ORDER BY cards.name ASC
+      LIMIT ?
       ''',
       variables: variables,
     ).get();
