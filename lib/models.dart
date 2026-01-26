@@ -29,7 +29,7 @@ class CardSearchResult {
     if (setCode.isEmpty && collectorNumber.isEmpty) {
       return name;
     }
-    return '$name (${subtitleLabel})';
+    return '$name ($subtitleLabel)';
   }
 }
 

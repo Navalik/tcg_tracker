@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class CollectionDetailPage extends StatefulWidget {
   const CollectionDetailPage({
@@ -25,8 +25,13 @@ class CollectionDetailPage extends StatefulWidget {
 
 
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
+  static const int _pageSize = 120;
   final List<CollectionCardEntry> _cards = [];
+  final ScrollController _scrollController = ScrollController();
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _loadedOffset = 0;
   CollectionViewMode _viewMode = CollectionViewMode.list;
   bool _showOwned = true;
   bool _showMissing = true;
@@ -45,6 +50,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     super.initState();
     _loadCards();
     _loadViewMode();
+    _scrollController.addListener(_onScroll);
     if (widget.autoOpenAddCard && !widget.isSetCollection) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _autoAddShown) {
@@ -66,33 +72,121 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     });
   }
 
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients || _loadingMore || !_hasMore) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels > position.maxScrollExtent - 400) {
+      _loadMoreCards();
+    }
+  }
+
+
   Future<void> _loadCards() async {
-    final cards = widget.isAllCards
-        ? await ScryfallDatabase.instance.fetchOwnedCards()
-        : widget.isSetCollection
-            ? await ScryfallDatabase.instance.fetchSetCollectionCards(
-                widget.collectionId,
-                widget.setCode ?? '',
-              )
-            : await ScryfallDatabase.instance
-                .fetchCollectionCards(widget.collectionId);
-    final setCodes = cards
-        .map((entry) => entry.setCode.trim().toLowerCase())
-        .where((code) => code.isNotEmpty)
-        .toSet()
-        .toList();
-    final totals = await ScryfallDatabase.instance
-        .fetchSetTotalsForCodes(setCodes);
     if (!mounted) {
       return;
     }
     setState(() {
-      _cards
-        ..clear()
-        ..addAll(cards);
-      _setTotalsByCode = totals;
+      _loading = true;
+      _loadingMore = false;
+      _hasMore = true;
+      _loadedOffset = 0;
+      _cards.clear();
+      _setTotalsByCode = {};
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    await _loadMoreCards(initial: true);
+  }
+
+  Future<void> _loadMoreCards({bool initial = false}) async {
+    if (_loadingMore || !_hasMore) {
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _loadingMore = true;
+      });
+    }
+    final cards = widget.isAllCards
+        ? await ScryfallDatabase.instance.fetchOwnedCards(
+            limit: _pageSize,
+            offset: _loadedOffset,
+          )
+        : widget.isSetCollection
+            ? await ScryfallDatabase.instance.fetchSetCollectionCards(
+                widget.collectionId,
+                widget.setCode ?? '',
+                limit: _pageSize,
+                offset: _loadedOffset,
+              )
+            : await ScryfallDatabase.instance.fetchCollectionCards(
+                widget.collectionId,
+                limit: _pageSize,
+                offset: _loadedOffset,
+              );
+
+    final newSetCodes = cards
+        .map((entry) => entry.setCode.trim().toLowerCase())
+        .where((code) => code.isNotEmpty)
+        .where((code) => !_setTotalsByCode.containsKey(code))
+        .toSet()
+        .toList();
+    final totals = newSetCodes.isEmpty
+        ? <String, int>{}
+        : await ScryfallDatabase.instance.fetchSetTotalsForCodes(newSetCodes);
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _cards.addAll(cards);
+      _setTotalsByCode.addAll(totals);
+      _loadedOffset += cards.length;
+      _hasMore = cards.length == _pageSize;
+      _loadingMore = false;
       _loading = false;
     });
+    _maybePrefetchIfShort();
+  }
+
+  void _maybePrefetchIfShort() {
+    if (!_hasMore || _loadingMore) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _loadingMore || !_hasMore) {
+        return;
+      }
+      if (!_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      if (position.maxScrollExtent <= 200) {
+        _loadMoreCards();
+      }
+    });
+  }
+
+  Widget _buildLoadMoreIndicator() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 16),
+      child: Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
   }
 
   List<CollectionCardEntry> _baseVisibleCards() {
@@ -325,7 +419,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (progress.isEmpty) {
       return setLabel;
     }
-    return '$setLabel • $progress';
+    return '$setLabel â€¢ $progress';
   }
 
   Future<void> _showAdvancedFilters() async {
@@ -421,7 +515,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -858,21 +952,25 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         selection.cardIds,
       );
       await _syncAllCardsQuantities(selection.cardIds);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              AppLocalizations.of(context)!.addedCards(selection.count),
-            ),
-          ),
-        );
+      if (!context.mounted) {
+        return;
       }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.addedCards(selection.count),
+          ),
+        ),
+      );
     } else {
       await ScryfallDatabase.instance.addCardToCollection(
         widget.collectionId,
         selection.cardIds.first,
       );
       await _syncAllCardsQuantities([selection.cardIds.first]);
+    }
+    if (!mounted) {
+      return;
     }
     await _loadCards();
   }
@@ -907,7 +1005,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -1148,7 +1246,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -1221,10 +1319,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               await _syncAllCardsQuantities([entry.cardId]);
                             }
                           }
-                          if (!mounted) {
+                          if (!context.mounted) {
                             return;
                           }
                           Navigator.of(context).pop();
+                          if (!mounted) {
+                            return;
+                          }
                           await _loadCards();
                         },
                         child: Text(
@@ -1268,10 +1369,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               altArt: altArt,
                             );
                           }
-                          if (!mounted) {
+                          if (!context.mounted) {
                             return;
                           }
                           Navigator.of(context).pop();
+                          if (!mounted) {
+                            return;
+                          }
                           await _loadCards();
                         },
                         child: Text(l10n.save),
@@ -1337,7 +1441,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.35),
+                      color: Colors.black.withValues(alpha: 0.35),
                       blurRadius: 18,
                       offset: const Offset(0, 10),
                     ),
@@ -1383,10 +1487,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           else
             _viewMode == CollectionViewMode.list
                 ? ListView.separated(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(20),
-                    itemCount: visibleCards.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount:
+                        visibleCards.length + (_loadingMore ? 1 : 0),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
+                      if (index >= visibleCards.length) {
+                        return _buildLoadMoreIndicator();
+                      }
                       final entry = visibleCards[index];
                       final isMissing =
                           widget.isSetCollection && entry.quantity == 0;
@@ -1530,6 +1639,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     },
                   )
                 : GridView.builder(
+                    controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1538,12 +1648,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       crossAxisSpacing: 16,
                       childAspectRatio: 0.72,
                     ),
-                    itemCount: visibleCards.length,
+                    itemCount:
+                        visibleCards.length + (_loadingMore ? 1 : 0),
                     itemBuilder: (context, index) {
+                      if (index >= visibleCards.length) {
+                        return _buildLoadMoreIndicator();
+                      }
                       final entry = visibleCards[index];
                       final isMissing =
                           widget.isSetCollection && entry.quantity == 0;
-                      final hasCornerQuantity = entry.quantity > 1;
                       return GestureDetector(
                         onTap: () => _showCardDetails(entry),
                         onLongPress: () => _showCardActions(entry),
@@ -1585,7 +1698,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                 left: 8,
                                                 child: Material(
                                                   color: const Color(0xFF1C1713)
-                                                      .withOpacity(0.9),
+                                                      .withValues(alpha: 0.9),
                                                   shape: const CircleBorder(),
                                                   child: InkWell(
                                                     customBorder:
@@ -1778,3 +1891,4 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     );
   }
 }
+

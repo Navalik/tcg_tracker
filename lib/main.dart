@@ -30,11 +30,11 @@ part 'parts/ui_helpers.dart';
 
 
 void main() {
-  runApp(const MyApp());
+  runApp(const TCGTracker());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class TCGTracker extends StatelessWidget {
+  const TCGTracker({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +42,8 @@ class MyApp extends StatelessWidget {
       seedColor: const Color(0xFFC9A043),
       brightness: Brightness.dark,
       surface: const Color(0xFF1C1510),
-      background: const Color(0xFF0E0A08),
     );
+    const scaffoldBackground = Color(0xFF0E0A08);
     final textTheme = GoogleFonts.sourceSans3TextTheme(
       ThemeData(brightness: Brightness.dark).textTheme,
     ).apply(
@@ -68,7 +68,7 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: colorScheme,
         textTheme: scaledTextTheme,
-        scaffoldBackgroundColor: colorScheme.background,
+        scaffoldBackgroundColor: scaffoldBackground,
         cardColor: const Color(0xFF171411),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,

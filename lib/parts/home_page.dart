@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class CollectionHomePage extends StatefulWidget {
   const CollectionHomePage({super.key});
@@ -221,12 +221,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.75),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFF3A2F24)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.35),
+              color: Colors.black.withValues(alpha: 0.35),
               blurRadius: 16,
               offset: const Offset(0, 8),
             ),
@@ -426,12 +426,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           child: Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withOpacity(0.7),
+              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: const Color(0xFF3A2F24)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withValues(alpha: 0.35),
                   blurRadius: 16,
                   offset: const Offset(0, 8),
                 ),
@@ -489,6 +489,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     if (_cardsMissing && _selectedBulkType == null) {
       await Future<void>.delayed(Duration.zero);
+      if (!mounted) {
+        return;
+      }
       final selected =
           await _showBulkTypePicker(context, allowCancel: false);
       if (!mounted) {
@@ -651,7 +654,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     try {
       id = await ScryfallDatabase.instance.addCollection(name);
     } catch (error) {
-      if (!mounted) {
+      if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -669,6 +672,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _collections.add(CollectionInfo(id: id, name: name, cardCount: 0));
     });
 
+    if (!context.mounted) {
+      return;
+    }
     final addCards = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -689,19 +695,23 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       },
     );
-    if (addCards == true && mounted) {
-      Navigator.of(context)
-          .push(
-            MaterialPageRoute(
-              builder: (_) => CollectionDetailPage(
-                collectionId: id,
-                name: name,
-                autoOpenAddCard: true,
-              ),
-            ),
-          )
-          .then((_) => _loadCollections());
+    if (addCards != true) {
+      return;
     }
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => CollectionDetailPage(
+              collectionId: id,
+              name: name,
+              autoOpenAddCard: true,
+            ),
+          ),
+        )
+        .then((_) => _loadCollections());
   }
 
   Future<void> _addSetCollection(BuildContext context) async {
@@ -710,7 +720,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final sets = await ScryfallDatabase.instance.fetchAvailableSets();
-    if (!mounted) {
+    if (!context.mounted) {
       return;
     }
     if (sets.isEmpty) {
@@ -755,7 +765,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       child: ListView.separated(
                         shrinkWrap: true,
                         itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        separatorBuilder: (_, _) => const Divider(height: 1),
                         itemBuilder: (context, index) {
                           final set = filtered[index];
                           return ListTile(
@@ -784,6 +794,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (selected == null) {
       return;
     }
+    if (!context.mounted) {
+      return;
+    }
 
     final resolvedName = _setCollectionName(selected.code);
     if (_collections.any((item) => item.name == resolvedName)) {
@@ -801,7 +814,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     try {
       id = await ScryfallDatabase.instance.addCollection(resolvedName);
     } catch (error) {
-      if (!mounted) {
+      if (!context.mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -838,6 +851,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return _CreateCollectionSheet();
       },
     );
+    if (!context.mounted) {
+      return;
+    }
     if (selection == _CollectionCreateAction.custom) {
       await _addCollection(context);
     } else if (selection == _CollectionCreateAction.setBased) {
@@ -851,6 +867,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       backgroundColor: Colors.transparent,
       builder: (context) => const _HomeAddSheet(),
     );
+    if (!context.mounted) {
+      return;
+    }
     if (selection == _HomeAddAction.addCards) {
       await _openAddCardsForAllCards(context);
     } else if (selection == _HomeAddAction.addCardsToCollection) {
@@ -902,11 +921,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .toList();
     if (candidates.isEmpty) {
       await _loadCollections();
+      if (!context.mounted) {
+        return;
+      }
       candidates = _collections
           .where((collection) => collection.name != _allCardsCollectionName)
           .toList();
     }
     if (candidates.isEmpty) {
+      if (!context.mounted) {
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -914,6 +939,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         ),
       );
+      return;
+    }
+    if (!context.mounted) {
       return;
     }
     final selected = await showModalBottomSheet<CollectionInfo>(
@@ -925,7 +953,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         isSetCollection: _isSetCollection,
       ),
     );
-    if (selected == null || !mounted) {
+    if (selected == null || !context.mounted) {
       return;
     }
     final isSet = _isSetCollection(selected);
@@ -1120,6 +1148,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (_bulkDownloadUri == null) {
       await _checkScryfallBulk();
     }
+    if (!mounted) {
+      return;
+    }
     if (_bulkDownloadUri == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1229,6 +1260,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final storedLanguages = await AppSettings.loadSearchLanguages();
+    if (!mounted) {
+      return;
+    }
     final allowedLanguages =
         storedLanguages.isEmpty ? {'en'} : storedLanguages;
     setState(() {
@@ -1328,10 +1362,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     try {
       await ScryfallDatabase.instance.rebuildCardsFts();
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop();
     }
   }
 
@@ -1364,7 +1397,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFE9C46A).withOpacity(0.35),
+                  color: const Color(0xFFE9C46A).withValues(alpha: 0.35),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -1632,7 +1665,7 @@ class _CollectionCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.35),
+                  color: Colors.black.withValues(alpha: 0.35),
                   blurRadius: 18,
                   offset: const Offset(0, 10),
                 ),
@@ -1704,7 +1737,6 @@ class _DividerGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Container(
       height: 2,
       decoration: BoxDecoration(
@@ -1735,7 +1767,7 @@ class _HomeAddSheet extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1796,7 +1828,7 @@ class _PickCollectionSheet extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1814,7 +1846,7 @@ class _PickCollectionSheet extends StatelessWidget {
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: collections.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final collection = collections[index];
                 final isSet = isSetCollection(collection);
@@ -1849,7 +1881,7 @@ class _CreateCollectionSheet extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 18,
             offset: const Offset(0, 10),
           ),
@@ -1980,7 +2012,7 @@ class _SnakeProgressBar extends StatelessWidget {
                       widthFactor: clampedValue,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: fillColor.withOpacity(0.4),
+                          color: fillColor.withValues(alpha: 0.4),
                           borderRadius: BorderRadius.circular(999),
                         ),
                       ),
@@ -1992,9 +2024,9 @@ class _SnakeProgressBar extends StatelessWidget {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            highlightColor.withOpacity(0.1),
+                            highlightColor.withValues(alpha: 0.1),
                             highlightColor,
-                            highlightColor.withOpacity(0.1),
+                            highlightColor.withValues(alpha: 0.1),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(999),
@@ -2010,3 +2042,4 @@ class _SnakeProgressBar extends StatelessWidget {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class _CardDetail {
   const _CardDetail(this.label, this.value);
@@ -122,7 +122,7 @@ Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) 
       borderRadius: BorderRadius.circular(16),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withOpacity(0.35),
+          color: Colors.black.withValues(alpha: 0.35),
           blurRadius: 18,
           offset: const Offset(0, 10),
         ),
@@ -141,7 +141,7 @@ Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) 
     borderRadius: BorderRadius.circular(16),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withOpacity(0.35),
+        color: Colors.black.withValues(alpha: 0.35),
         blurRadius: 18,
         offset: const Offset(0, 10),
       ),
@@ -176,3 +176,4 @@ Widget _raritySquare(String raw) {
     ),
   );
 }
+

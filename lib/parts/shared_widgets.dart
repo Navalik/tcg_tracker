@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class _AppBackground extends StatelessWidget {
   const _AppBackground();
@@ -37,12 +37,12 @@ class _AppBackground extends StatelessWidget {
                 width: 120,
                 height: 180,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.7),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.7),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.35),
+                      color: Colors.black.withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -60,12 +60,12 @@ class _AppBackground extends StatelessWidget {
                 width: 140,
                 height: 200,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.6),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -83,12 +83,12 @@ class _AppBackground extends StatelessWidget {
                 width: 130,
                 height: 190,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.5),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.28),
+                      color: Colors.black.withValues(alpha: 0.28),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -106,12 +106,12 @@ class _AppBackground extends StatelessWidget {
                 width: 110,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.45),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
+                      color: Colors.black.withValues(alpha: 0.25),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -129,12 +129,12 @@ class _AppBackground extends StatelessWidget {
                 width: 90,
                 height: 130,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.4),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.4),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.22),
+                      color: Colors.black.withValues(alpha: 0.22),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -152,12 +152,12 @@ class _AppBackground extends StatelessWidget {
                 width: 120,
                 height: 170,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.35),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.35),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.25),
+                      color: Colors.black.withValues(alpha: 0.25),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -175,12 +175,12 @@ class _AppBackground extends StatelessWidget {
                 width: 80,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.3),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -198,12 +198,12 @@ class _AppBackground extends StatelessWidget {
                 width: 100,
                 height: 150,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.32),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.32),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.24),
+                      color: Colors.black.withValues(alpha: 0.24),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -221,12 +221,12 @@ class _AppBackground extends StatelessWidget {
                 width: 90,
                 height: 130,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.28),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -244,12 +244,12 @@ class _AppBackground extends StatelessWidget {
                 width: 110,
                 height: 160,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.26),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.26),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.22),
+                      color: Colors.black.withValues(alpha: 0.22),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -267,12 +267,12 @@ class _AppBackground extends StatelessWidget {
                 width: 95,
                 height: 140,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.3),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -290,12 +290,12 @@ class _AppBackground extends StatelessWidget {
                 width: 100,
                 height: 150,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.28),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.28),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.22),
+                      color: Colors.black.withValues(alpha: 0.22),
                       blurRadius: 12,
                       offset: const Offset(0, 6),
                     ),
@@ -313,12 +313,12 @@ class _AppBackground extends StatelessWidget {
                 width: 80,
                 height: 120,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1B1410).withOpacity(0.25),
+                  color: const Color(0xFF1B1410).withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFF3A2F24), width: 1),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       blurRadius: 10,
                       offset: const Offset(0, 5),
                     ),
@@ -374,3 +374,4 @@ class _AppBackground extends StatelessWidget {
     );
   }
 }
+

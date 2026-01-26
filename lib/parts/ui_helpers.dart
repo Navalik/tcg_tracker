@@ -47,7 +47,7 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
         BlendMode.srcIn,
       ),
       placeholderBuilder: (_) => _emptySetIcon(size - 12),
-      errorBuilder: (_, __, ___) => _emptySetIcon(size - 12),
+      errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
     ),
   );
 }

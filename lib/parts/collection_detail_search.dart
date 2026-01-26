@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class _CardSearchSelection {
   _CardSearchSelection.single(CardSearchResult card)
@@ -7,9 +7,8 @@ class _CardSearchSelection {
         count = 1,
         cardIds = [card.id];
 
-  _CardSearchSelection.bulk(List<CardSearchResult> cards)
-      : cards = cards,
-        isBulk = true,
+  _CardSearchSelection.bulk(this.cards)
+      : isBulk = true,
         count = cards.length,
         cardIds = cards.map((card) => card.id).toList(growable: false);
 
@@ -120,6 +119,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           rarities: _selectedRarities.toList(),
           types: _selectedTypes.toList(),
           languages: _searchLanguages.toList(),
+          limit: 200,
         );
       } else {
         results = await ScryfallDatabase.instance.searchCardsByName(
@@ -369,6 +369,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
     }
 
+    if (!mounted) {
+      return;
+    }
+
     final tempRarities = _selectedRarities.toSet();
     final tempSetCodes = _selectedSetCodes.toSet();
     final tempColors = _selectedColors.toSet();
@@ -444,7 +448,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.35),
+                    color: Colors.black.withValues(alpha: 0.35),
                     blurRadius: 18,
                     offset: const Offset(0, 10),
                   ),
@@ -689,6 +693,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         rarities: _selectedRarities.toList(),
         types: _selectedTypes.toList(),
         languages: _searchLanguages.toList(),
+        limit: 200,
       );
       final filtered = candidates.where(_matchesAdvancedFilters).toList();
       if (!mounted) {
@@ -856,7 +861,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         if (!confirmed) {
                           return;
                         }
-                        if (!mounted) {
+                        if (!context.mounted) {
                           return;
                         }
                         Navigator.of(context)
@@ -912,7 +917,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               shrinkWrap: true,
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                               itemCount: visibleResults.length,
-                              separatorBuilder: (_, __) =>
+                              separatorBuilder: (_, _) =>
                                   const SizedBox(height: 10),
                               itemBuilder: (context, index) {
                                 final card = visibleResults[index];
@@ -977,16 +982,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   void _showPreview(CardSearchResult card) {
-    final imageUrl = card.imageUri;
-    if (imageUrl == null || imageUrl.isEmpty) {
+    final imageUrl = card.imageUri ?? '';
+    if (imageUrl.isEmpty) {
       return;
     }
     _hidePreview(immediate: true);
 
     final overlay = Overlay.of(context, rootOverlay: true);
-    if (overlay == null) {
-      return;
-    }
 
     _previewController.value = 0;
     _previewEntry = OverlayEntry(
@@ -999,7 +1001,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           behavior: HitTestBehavior.opaque,
           onTap: () => _hidePreview(immediate: false),
           child: Material(
-            color: Colors.black.withOpacity(0.72),
+            color: Colors.black.withValues(alpha: 0.72),
             child: Center(
               child: FadeTransition(
                 opacity: _previewOpacity,
@@ -1016,7 +1018,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.5),
+                            color: Colors.black.withValues(alpha: 0.5),
                             blurRadius: 24,
                             offset: const Offset(0, 12),
                           ),
@@ -1077,3 +1079,4 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _previewEntry = null;
   }
 }
+

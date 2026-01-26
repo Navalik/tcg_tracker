@@ -132,7 +132,7 @@ class _SettingsPageState extends State<SettingsPage> {
             child: ListView.separated(
               shrinkWrap: true,
               itemCount: options.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final code = options[index];
                 return ListTile(
@@ -190,6 +190,9 @@ class _SettingsPageState extends State<SettingsPage> {
     if (selected == null || selected == _bulkType) {
       return;
     }
+    if (!mounted) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -244,10 +247,9 @@ class _SettingsPageState extends State<SettingsPage> {
       await ScryfallDatabase.instance.hardReset();
       await _deleteBulkFiles();
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop();
     }
 
     if (!mounted) {
@@ -323,7 +325,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _addGame() async {
     final manager = PurchaseManager.instance;
-    if (!manager.isPro && _enabledGames.length >= 1) {
+    if (!manager.isPro && _enabledGames.isNotEmpty) {
       await _showGameLimitDialog();
       return;
     }
@@ -440,10 +442,9 @@ class _SettingsPageState extends State<SettingsPage> {
       await ScryfallDatabase.instance.hardReset();
       await _deleteBulkFiles();
     } finally {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        Navigator.of(context).pop();
       }
-      Navigator.of(context).pop();
     }
 
     if (!mounted) {

@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class ProPage extends StatefulWidget {
   const ProPage({super.key});
@@ -59,12 +59,12 @@ class _ProPageState extends State<ProPage> {
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
                       color:
-                          Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                          Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: const Color(0xFF3A2F24)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.35),
+                          color: Colors.black.withValues(alpha: 0.35),
                           blurRadius: 16,
                           offset: const Offset(0, 8),
                         ),
@@ -154,3 +154,4 @@ class _ProPageState extends State<ProPage> {
     );
   }
 }
+
