@@ -678,6 +678,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (name == null) {
       return;
     }
+    if (!context.mounted) {
+      return;
+    }
 
     final filter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(

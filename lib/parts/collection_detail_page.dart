@@ -47,6 +47,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   final Set<String> _selectedTypes = {};
   int? _manaValueMin;
   int? _manaValueMax;
+  int? _ownedCount;
+  int? _missingCount;
   bool _autoAddShown = false;
   Map<String, int> _setTotalsByCode = {};
 
@@ -127,7 +129,64 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
+    await _refreshCounts();
     await _loadMoreCards(initial: true);
+  }
+
+  CollectionFilter? _effectiveFilter() {
+    final fallbackFilter = widget.isSetCollection &&
+            (widget.setCode?.trim().isNotEmpty ?? false)
+        ? CollectionFilter(sets: {widget.setCode!.trim().toLowerCase()})
+        : null;
+    return widget.filter ?? fallbackFilter;
+  }
+
+  Future<void> _refreshCounts() async {
+    if (!mounted) {
+      return;
+    }
+    if (!_isFilterCollection) {
+      final total = await ScryfallDatabase.instance.countCollectionCards(
+        widget.collectionId,
+        searchQuery: _searchQuery,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _ownedCount = total;
+        _missingCount = 0;
+      });
+      return;
+    }
+    final filter = _effectiveFilter();
+    if (filter == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _ownedCount = 0;
+        _missingCount = 0;
+      });
+      return;
+    }
+    final owned = await ScryfallDatabase.instance
+        .countOwnedCardsForFilterWithSearch(
+      filter,
+      searchQuery: _searchQuery,
+    );
+    final total =
+        await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+      filter,
+      searchQuery: _searchQuery,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _ownedCount = owned;
+      _missingCount = (total - owned).clamp(0, total);
+    });
   }
 
   Future<void> _loadMoreCards({bool initial = false}) async {
@@ -139,10 +198,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _loadingMore = true;
       });
     }
-    final ownedCollectionId = _ownedCollectionId;
-    if (!widget.isAllCards && ownedCollectionId == null) {
+    if (!_showOwned && !_showMissing) {
       if (mounted) {
         setState(() {
+          _cards.clear();
           _loadingMore = false;
           _loading = false;
           _hasMore = false;
@@ -150,52 +209,76 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       }
       return;
     }
-    final fallbackFilter = widget.isSetCollection &&
-            (widget.setCode?.trim().isNotEmpty ?? false)
-        ? CollectionFilter(sets: {widget.setCode!.trim().toLowerCase()})
-        : null;
-    final filter = widget.filter ?? fallbackFilter;
-    final cards = widget.isAllCards
-        ? await ScryfallDatabase.instance.fetchOwnedCards(
-            searchQuery: _searchQuery,
-            limit: _pageSize,
-            offset: _loadedOffset,
-          )
-        : filter != null
-            ? await ScryfallDatabase.instance.fetchFilteredCollectionCards(
-                filter,
-                searchQuery: _searchQuery,
-                limit: _pageSize,
-                offset: _loadedOffset,
-              )
-            : await ScryfallDatabase.instance.fetchCollectionCards(
-                widget.collectionId,
-                limit: _pageSize,
-                offset: _loadedOffset,
-              );
+    try {
+      final ownedCollectionId = _ownedCollectionId;
+      if (!widget.isAllCards && ownedCollectionId == null) {
+        if (mounted) {
+          setState(() {
+            _loadingMore = false;
+            _loading = false;
+            _hasMore = false;
+          });
+        }
+        return;
+      }
+      final filter = _effectiveFilter();
+      final ownedOnly = _showOwned && !_showMissing;
+      final missingOnly = _showMissing && !_showOwned;
+      final cards = widget.isAllCards
+          ? await ScryfallDatabase.instance.fetchOwnedCards(
+              searchQuery: _searchQuery,
+              limit: _pageSize,
+              offset: _loadedOffset,
+            )
+          : filter != null
+              ? await ScryfallDatabase.instance.fetchFilteredCollectionCards(
+                  filter,
+                  searchQuery: _searchQuery,
+                  ownedOnly: ownedOnly,
+                  missingOnly: missingOnly,
+                  limit: _pageSize,
+                  offset: _loadedOffset,
+                )
+              : await ScryfallDatabase.instance.fetchCollectionCards(
+                  widget.collectionId,
+                  limit: _pageSize,
+                  offset: _loadedOffset,
+                );
 
-    final newSetCodes = cards
-        .map((entry) => entry.setCode.trim().toLowerCase())
-        .where((code) => code.isNotEmpty)
-        .where((code) => !_setTotalsByCode.containsKey(code))
-        .toSet()
-        .toList();
-    final totals = newSetCodes.isEmpty
-        ? <String, int>{}
-        : await ScryfallDatabase.instance.fetchSetTotalsForCodes(newSetCodes);
+      final newSetCodes = cards
+          .map((entry) => entry.setCode.trim().toLowerCase())
+          .where((code) => code.isNotEmpty)
+          .where((code) => !_setTotalsByCode.containsKey(code))
+          .toSet()
+          .toList();
+      final totals = newSetCodes.isEmpty
+          ? <String, int>{}
+          : await ScryfallDatabase.instance.fetchSetTotalsForCodes(newSetCodes);
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cards.addAll(cards);
+        _setTotalsByCode.addAll(totals);
+        _loadedOffset += cards.length;
+        _hasMore = cards.length == _pageSize;
+        _loadingMore = false;
+        _loading = false;
+      });
+      _maybePrefetchIfShort();
+    } catch (error, stackTrace) {
+      debugPrint('CollectionDetailPage _loadMoreCards failed: $error');
+      debugPrint('$stackTrace');
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _loadingMore = false;
+        _loading = false;
+        _hasMore = false;
+      });
     }
-    setState(() {
-      _cards.addAll(cards);
-      _setTotalsByCode.addAll(totals);
-      _loadedOffset += cards.length;
-      _hasMore = cards.length == _pageSize;
-      _loadingMore = false;
-      _loading = false;
-    });
-    _maybePrefetchIfShort();
   }
 
   void _maybePrefetchIfShort() {
@@ -780,8 +863,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Widget _buildSetHeader() {
-    final ownedCount = _cards.where((entry) => entry.quantity > 0).length;
-    final missingCount = _cards.length - ownedCount;
+    final ownedCount =
+        _ownedCount ?? _cards.where((entry) => entry.quantity > 0).length;
+    final missingCount =
+        _missingCount ?? (_cards.length - ownedCount).clamp(0, _cards.length);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
@@ -820,6 +905,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                   setState(() {
                     _showOwned = value;
                   });
+                  _loadCards();
                 },
               ),
               FilterChip(
@@ -831,6 +917,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                   setState(() {
                     _showMissing = value;
                   });
+                  _loadCards();
                 },
               ),
             ],
