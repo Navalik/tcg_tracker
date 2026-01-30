@@ -42,10 +42,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   late final Animation<double> _previewOpacity;
   late final Animation<double> _previewScale;
   final Map<String, Map<String, dynamic>?> _cardJsonCache = {};
-  Set<String> _searchLanguages = {};
-  bool _loadingLanguages = true;
   bool _searching = false;
-  bool _showAllLanguages = false;
   String _artistQuery = '';
   String _flavorQuery = '';
   String? _pendingQuery;
@@ -59,6 +56,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _showResults = true;
   bool _countLoading = false;
   int? _filterTotalCount;
+  Map<String, String>? _availableSetCodesCache;
 
   @override
   void initState() {
@@ -189,10 +187,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<String> _effectiveLanguages() {
-    if (_showAllLanguages) {
-      return const [];
-    }
-    return _searchLanguages.toList();
+    return const ['en'];
   }
 
   Future<void> _loadNextPage(String query, {bool replace = false}) async {
@@ -264,15 +259,25 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
   }
 
+  Future<Map<String, String>> _getAvailableSetCodes() async {
+    final cached = _availableSetCodesCache;
+    if (cached != null) {
+      return cached;
+    }
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final map = <String, String>{};
+    for (final set in sets) {
+      map[set.code.trim().toLowerCase()] =
+          set.name.trim().isNotEmpty ? set.name.trim() : set.code.toUpperCase();
+    }
+    _availableSetCodesCache = map;
+    return map;
+  }
+
   Future<void> _loadSearchLanguages() async {
-    final stored = await AppSettings.loadSearchLanguages();
     if (!mounted) {
       return;
     }
-    setState(() {
-      _searchLanguages = stored.isEmpty ? {'en'} : stored;
-      _loadingLanguages = false;
-    });
     if (_query.isNotEmpty) {
       await _runSearch();
     }
@@ -283,57 +288,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       return _results;
     }
     return _results;
-  }
-
-  bool _matchesAdvancedFilters(CardSearchResult card) {
-    if (_selectedRarities.isNotEmpty) {
-      final rarity = _resultRarity(card);
-      if (rarity.isEmpty || !_selectedRarities.contains(rarity)) {
-        return false;
-      }
-    }
-    if (_selectedSetCodes.isNotEmpty) {
-      final code = card.setCode.trim().toLowerCase();
-      if (!_selectedSetCodes.contains(code)) {
-        return false;
-      }
-    }
-    if (_selectedColors.isNotEmpty) {
-      final colors = _resultColors(card);
-      if (colors.intersection(_selectedColors).isEmpty) {
-        return false;
-      }
-    }
-    if (_selectedTypes.isNotEmpty) {
-      final types = _resultTypes(card);
-      if (types.intersection(_selectedTypes).isEmpty) {
-        return false;
-      }
-    }
-    if (_manaValueMin != null || _manaValueMax != null) {
-      final manaValue = _resultManaValue(card);
-      if (_manaValueMin != null && manaValue < _manaValueMin!) {
-        return false;
-      }
-      if (_manaValueMax != null && manaValue > _manaValueMax!) {
-        return false;
-      }
-    }
-    if (_artistQuery.trim().isNotEmpty) {
-      final artist = _resultArtist(card);
-      if (artist.isEmpty ||
-          !artist.contains(_artistQuery.trim().toLowerCase())) {
-        return false;
-      }
-    }
-    if (_flavorQuery.trim().isNotEmpty) {
-      final flavor = _resultFlavor(card);
-      if (flavor.isEmpty ||
-          !flavor.contains(_flavorQuery.trim().toLowerCase())) {
-        return false;
-      }
-    }
-    return true;
   }
 
   String _resultRarity(CardSearchResult card) {
@@ -379,60 +333,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
     }
     return matches;
-  }
-
-  double _resultManaValue(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final value = data?['cmc'];
-    if (value is num) {
-      return value.toDouble();
-    }
-    if (value is String) {
-      return double.tryParse(value) ?? 0;
-    }
-    return 0;
-  }
-
-  String _resultArtist(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final entries = <String>[];
-    final artist = data?['artist']?.toString().trim();
-    if (artist != null && artist.isNotEmpty) {
-      entries.add(artist);
-    }
-    final faces = data?['card_faces'];
-    if (faces is List) {
-      for (final face in faces) {
-        if (face is Map<String, dynamic>) {
-          final faceArtist = face['artist']?.toString().trim();
-          if (faceArtist != null && faceArtist.isNotEmpty) {
-            entries.add(faceArtist);
-          }
-        }
-      }
-    }
-    return entries.map((value) => value.toLowerCase()).join(' ');
-  }
-
-  String _resultFlavor(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final entries = <String>[];
-    final flavor = data?['flavor_text']?.toString().trim();
-    if (flavor != null && flavor.isNotEmpty) {
-      entries.add(flavor);
-    }
-    final faces = data?['card_faces'];
-    if (faces is List) {
-      for (final face in faces) {
-        if (face is Map<String, dynamic>) {
-          final faceFlavor = face['flavor_text']?.toString().trim();
-          if (faceFlavor != null && faceFlavor.isNotEmpty) {
-            entries.add(faceFlavor);
-          }
-        }
-      }
-    }
-    return entries.map((value) => value.toLowerCase()).join(' ');
   }
 
   Map<String, dynamic>? _decodeCardJson(String? raw) {
@@ -531,13 +431,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
     }
 
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
-    for (final set in sets) {
-      availableSetCodes[set.code.trim().toLowerCase()] =
-          set.name.trim().isNotEmpty
-              ? set.name.trim()
-              : set.code.toUpperCase();
-    }
+    final sets = await _getAvailableSetCodes();
+    availableSetCodes.addAll(sets);
 
     if (_selectedSetCodes.isNotEmpty) {
       final missing = _selectedSetCodes
@@ -980,7 +875,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     _query = nameValue;
     _showResults = true;
-    _showAllLanguages = false;
     await _runSearch();
   }
 
@@ -1134,16 +1028,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     ),
                   ),
                 ),
-                if (_loadingLanguages)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else if (!showSummary &&
+                if (!showSummary &&
                     (_query.isNotEmpty || (filtersActive && _query.isEmpty)) &&
                     filtersActive &&
                     _filterTotalCount != null)
