@@ -97,6 +97,7 @@ class TCGTracker extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
       themeMode: ThemeMode.dark,
       home: const CollectionHomePage(),
     );

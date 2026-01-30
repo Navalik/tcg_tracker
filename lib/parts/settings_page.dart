@@ -9,10 +9,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
-  bool _loadingLanguages = true;
   bool _loadingGames = true;
-  List<String> _languageOptions = [];
-  Set<String> _selectedLanguages = {};
   String? _bulkType;
   List<String> _enabledGames = [];
   String? _primaryGameId;
@@ -24,9 +21,6 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final stored = await AppSettings.loadSearchLanguages();
-    final cachedLanguages = await AppSettings.loadAvailableLanguages();
-    final allOptions = AppSettings.languageCodes.toList()..sort();
     final bulkType = await AppSettings.loadBulkType();
     final enabledGames = await AppSettings.loadEnabledGames();
     final primaryGameId = await AppSettings.loadPrimaryGameId();
@@ -34,149 +28,12 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     setState(() {
-      _selectedLanguages = stored.isEmpty ? {'en'} : stored;
-      _languageOptions = cachedLanguages.isEmpty ? allOptions : cachedLanguages;
       _bulkType = bulkType;
       _enabledGames = enabledGames;
       _primaryGameId = primaryGameId;
       _loading = false;
-      _loadingLanguages = cachedLanguages.isEmpty;
       _loadingGames = false;
     });
-    if (cachedLanguages.isNotEmpty) {
-      return;
-    }
-    final available = AppSettings.languageCodes.toList()..sort();
-    if (!mounted) {
-      return;
-    }
-    final resolved =
-        available.isEmpty ? AppSettings.defaultLanguages : available;
-    await AppSettings.saveAvailableLanguages(resolved);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _languageOptions = resolved;
-      _loadingLanguages = false;
-    });
-  }
-
-  Future<void> _saveLanguages() async {
-    await AppSettings.saveSearchLanguages(_selectedLanguages);
-  }
-
-  String _languageLabel(String code) {
-    final l10n = AppLocalizations.of(context)!;
-    switch (code) {
-      case 'en':
-        return l10n.languageEnglish;
-      case 'it':
-        return l10n.languageItalian;
-      case 'fr':
-        return l10n.languageFrench;
-      case 'de':
-        return l10n.languageGerman;
-      case 'es':
-        return l10n.languageSpanish;
-      case 'pt':
-        return l10n.languagePortuguese;
-      case 'ja':
-        return l10n.languageJapanese;
-      case 'ko':
-        return l10n.languageKorean;
-      case 'ru':
-        return l10n.languageRussian;
-      case 'zhs':
-        return l10n.languageChineseSimplified;
-      case 'zht':
-        return l10n.languageChineseTraditional;
-      case 'ar':
-        return l10n.languageArabic;
-      case 'he':
-        return l10n.languageHebrew;
-      case 'la':
-        return l10n.languageLatin;
-      case 'grc':
-        return l10n.languageGreek;
-      case 'sa':
-        return l10n.languageSanskrit;
-      case 'ph':
-        return l10n.languagePhyrexian;
-      case 'qya':
-        return l10n.languageQuenya;
-      default:
-        return code.toUpperCase();
-    }
-  }
-
-  Future<void> _addLanguage() async {
-    final options = _languageOptions
-        .where((code) => !_selectedLanguages.contains(code))
-        .toList()
-      ..sort();
-    if (options.isEmpty) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allLanguagesAdded,
-      );
-      return;
-    }
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.addLanguage),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: options.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final code = options[index];
-                return ListTile(
-                  title: Text(_languageLabel(code)),
-                  subtitle: Text(code),
-                  onTap: () => Navigator.of(context).pop(code),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-          ],
-        );
-      },
-    );
-    if (selected == null) {
-      return;
-    }
-    setState(() {
-      _selectedLanguages.add(selected);
-    });
-    await _saveLanguages();
-    if (!mounted) {
-      return;
-    }
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.languageAddedDownloadAgain,
-    );
-  }
-
-  Future<void> _removeLanguage(String code) async {
-    if (code == 'en') {
-      return;
-    }
-    setState(() {
-      _selectedLanguages.remove(code);
-    });
-    await _saveLanguages();
   }
 
   Future<void> _changeBulkType() async {
@@ -480,7 +337,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final selectedLanguages = _selectedLanguages.toList()..sort();
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -495,49 +351,6 @@ class _SettingsPageState extends State<SettingsPage> {
             ListView(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
               children: [
-                Text(
-                  l10n.searchLanguages,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.searchLanguagesSubtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFBFAE95),
-                      ),
-                ),
-                const SizedBox(height: 12),
-                if (_loadingLanguages)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  ...selectedLanguages.map(
-                    (code) => ListTile(
-                      title: Text(_languageLabel(code)),
-                      subtitle: Text(code),
-                      contentPadding: EdgeInsets.zero,
-                      trailing: code == 'en'
-                          ? Text(l10n.defaultLabel)
-                          : IconButton(
-                              tooltip: l10n.remove,
-                              icon: const Icon(Icons.remove_circle_outline),
-                              onPressed: () => _removeLanguage(code),
-                            ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _loadingLanguages ? null : _addLanguage,
-                  icon: const Icon(Icons.add),
-                  label: Text(l10n.addLanguage),
-                ),
-                const SizedBox(height: 24),
                 Text(
                   l10n.cardDatabase,
                   style: Theme.of(context).textTheme.titleMedium,

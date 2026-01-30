@@ -5,20 +5,22 @@ class _AppBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Color(0xFF0B0806),
-            Color(0xFF1A120C),
-            Color(0xFF2E2217),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return SizedBox.expand(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Color(0xFF0B0806),
+              Color(0xFF1A120C),
+              Color(0xFF2E2217),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-      ),
-      child: Stack(
-        children: [
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
           Positioned.fill(
             child: Opacity(
               opacity: 0.14,
@@ -369,7 +371,8 @@ class _AppBackground extends StatelessWidget {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

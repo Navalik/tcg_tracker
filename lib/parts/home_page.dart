@@ -1335,12 +1335,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (_bulkImporting) {
       return;
     }
-    final storedLanguages = await AppSettings.loadSearchLanguages();
     if (!mounted) {
       return;
     }
-    final allowedLanguages =
-        storedLanguages.isEmpty ? {'en'} : storedLanguages;
+    const allowedLanguages = {'en'};
     setState(() {
       _bulkImporting = true;
       _bulkImportProgress = 0;

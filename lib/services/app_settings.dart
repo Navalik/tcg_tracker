@@ -38,12 +38,7 @@ class AppSettings {
   ];
 
   static Future<Set<String>> loadSearchLanguages() async {
-    final prefs = await SharedPreferences.getInstance();
-    final values = prefs.getStringList(_prefsKeySearchLanguages) ?? [];
-    if (values.isEmpty) {
-      return {'en'};
-    }
-    return values.toSet();
+    return {'en'};
   }
 
   static Future<bool> loadSearchAllLanguages() async {
@@ -53,13 +48,7 @@ class AppSettings {
 
   static Future<void> saveSearchLanguages(Set<String> languages) async {
     final prefs = await SharedPreferences.getInstance();
-    if (languages.isEmpty) {
-      languages = {'en'};
-    }
-    await prefs.setStringList(
-      _prefsKeySearchLanguages,
-      languages.toList()..sort(),
-    );
+    await prefs.setStringList(_prefsKeySearchLanguages, ['en']);
   }
 
   static Future<void> saveSearchAllLanguages(bool value) async {
