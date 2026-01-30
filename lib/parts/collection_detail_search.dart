@@ -27,7 +27,7 @@ class _CardSearchSheet extends StatefulWidget {
 
 class _CardSearchSheetState extends State<_CardSearchSheet>
     with SingleTickerProviderStateMixin {
-  static const int _pageSize = 80;
+  static const int _pageSize = 100;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   Timer? _debounce;
@@ -45,6 +45,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Set<String> _searchLanguages = {};
   bool _loadingLanguages = true;
   bool _searching = false;
+  bool _showAllLanguages = false;
   String _artistQuery = '';
   String _flavorQuery = '';
   String? _pendingQuery;
@@ -55,6 +56,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   final Set<String> _selectedTypes = {};
   int? _manaValueMin;
   int? _manaValueMax;
+  bool _showResults = true;
+  bool _countLoading = false;
+  int? _filterTotalCount;
 
   @override
   void initState() {
@@ -107,6 +111,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
       return;
     }
+    if (!_showResults && _hasActiveAdvancedFilters()) {
+      await _refreshFilterCount();
+      return;
+    }
     if (_searching) {
       _pendingQuery = _query;
       return;
@@ -125,6 +133,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final currentQuery = _query;
     try {
       await _loadNextPage(currentQuery, replace: true);
+      if (mounted && _hasActiveAdvancedFilters()) {
+        await _refreshFilterCount();
+      }
     } finally {
       if (mounted && _loading) {
         setState(() {
@@ -148,6 +159,42 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
   }
 
+  Future<void> _refreshFilterCount() async {
+    if (!mounted) {
+      return;
+    }
+    if (!_hasActiveAdvancedFilters()) {
+      setState(() {
+        _filterTotalCount = null;
+        _countLoading = false;
+      });
+      return;
+    }
+    setState(() {
+      _countLoading = true;
+    });
+    final filter = _buildAdvancedFilter();
+    final total =
+        await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+      filter,
+      searchQuery: _query.isEmpty ? null : _query,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _filterTotalCount = total;
+      _countLoading = false;
+    });
+  }
+
+  List<String> _effectiveLanguages() {
+    if (_showAllLanguages) {
+      return const [];
+    }
+    return _searchLanguages.toList();
+  }
+
   Future<void> _loadNextPage(String query, {bool replace = false}) async {
     if (_loadingMore || !_hasMore) {
       return;
@@ -158,19 +205,29 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       });
     }
     List<CardSearchResult> page;
-    if (query.isEmpty) {
+    final hasAdvancedFilters = _hasActiveAdvancedFilters();
+    if (hasAdvancedFilters) {
+      final filter = _buildAdvancedFilter();
+      page = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+        filter,
+        searchQuery: query.isEmpty ? null : query,
+        languages: _effectiveLanguages(),
+        limit: _pageSize,
+        offset: _offset,
+      );
+    } else if (query.isEmpty) {
       page = await ScryfallDatabase.instance.fetchCardsForFilters(
         setCodes: _selectedSetCodes.toList(),
         rarities: _selectedRarities.toList(),
         types: _selectedTypes.toList(),
-        languages: _searchLanguages.toList(),
+        languages: _effectiveLanguages(),
         limit: _pageSize,
         offset: _offset,
       );
     } else {
       page = await ScryfallDatabase.instance.searchCardsByName(
         query,
-        languages: _searchLanguages.toList(),
+        languages: _effectiveLanguages(),
         limit: _pageSize,
         offset: _offset,
       );
@@ -191,6 +248,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     });
   }
 
+  CollectionFilter _buildAdvancedFilter() {
+    final artist = _artistQuery.trim();
+    final flavor = _flavorQuery.trim();
+    return CollectionFilter(
+      name: null,
+      artist: artist.isEmpty ? null : artist,
+      flavor: flavor.isEmpty ? null : flavor,
+      manaMin: _manaValueMin,
+      manaMax: _manaValueMax,
+      sets: _selectedSetCodes,
+      rarities: _selectedRarities,
+      colors: _selectedColors,
+      types: _selectedTypes,
+    );
+  }
+
   Future<void> _loadSearchLanguages() async {
     final stored = await AppSettings.loadSearchLanguages();
     if (!mounted) {
@@ -206,15 +279,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<CardSearchResult> _filteredResults() {
-    if (_selectedRarities.isEmpty &&
-        _selectedSetCodes.isEmpty &&
-        _selectedColors.isEmpty &&
-        _selectedTypes.isEmpty &&
-        _manaValueMin == null &&
-        _manaValueMax == null) {
+    if (_hasActiveAdvancedFilters()) {
       return _results;
     }
-    return _results.where(_matchesAdvancedFilters).toList();
+    return _results;
   }
 
   bool _matchesAdvancedFilters(CardSearchResult card) {
@@ -433,44 +501,57 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final availableSetCodes = <String, String>{};
     final availableColors = <String>{};
     final availableTypes = <String>{};
+
+    const fallbackRarities = ['common', 'uncommon', 'rare', 'mythic'];
+    const fallbackColors = ['W', 'U', 'B', 'R', 'G', 'C'];
+    const fallbackTypes = [
+      'Artifact',
+      'Creature',
+      'Enchantment',
+      'Instant',
+      'Land',
+      'Planeswalker',
+      'Sorcery',
+      'Battle',
+      'Tribal',
+    ];
+
     if (_results.isEmpty) {
-      const fallbackRarities = ['common', 'uncommon', 'rare', 'mythic'];
-      const fallbackColors = ['W', 'U', 'B', 'R', 'G', 'C'];
-      const fallbackTypes = [
-        'Artifact',
-        'Creature',
-        'Enchantment',
-        'Instant',
-        'Land',
-        'Planeswalker',
-        'Sorcery',
-        'Battle',
-        'Tribal',
-      ];
       availableRarities.addAll(fallbackRarities);
       availableColors.addAll(fallbackColors);
       availableTypes.addAll(fallbackTypes);
-      final sets = await ScryfallDatabase.instance.fetchAvailableSets();
-      for (final set in sets) {
-        availableSetCodes[set.code.trim().toLowerCase()] =
-            set.name.trim().isNotEmpty
-                ? set.name.trim()
-                : set.code.toUpperCase();
-      }
     } else {
       for (final card in _results) {
         final rarity = _resultRarity(card);
         if (rarity.isNotEmpty) {
           availableRarities.add(rarity);
         }
-        if (card.setCode.trim().isNotEmpty) {
-          availableSetCodes[card.setCode.trim().toLowerCase()] =
-              card.setName.trim().isNotEmpty
-                  ? card.setName.trim()
-                  : card.setCode.toUpperCase();
-        }
         availableColors.addAll(_resultColors(card));
         availableTypes.addAll(_resultTypes(card));
+      }
+    }
+
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    for (final set in sets) {
+      availableSetCodes[set.code.trim().toLowerCase()] =
+          set.name.trim().isNotEmpty
+              ? set.name.trim()
+              : set.code.toUpperCase();
+    }
+
+    if (_selectedSetCodes.isNotEmpty) {
+      final missing = _selectedSetCodes
+          .where((code) => !availableSetCodes.containsKey(code))
+          .toList();
+      if (missing.isNotEmpty) {
+        final names =
+            await ScryfallDatabase.instance.fetchSetNamesForCodes(missing);
+        for (final entry in names.entries) {
+          availableSetCodes[entry.key.trim().toLowerCase()] =
+              entry.value.trim().isNotEmpty
+                  ? entry.value.trim()
+                  : entry.key.toUpperCase();
+        }
       }
     }
 
@@ -638,24 +719,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           });
                         },
                       ),
-                      if (setQuery.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          height: sortedSets.length > 16 ? 200 : null,
-                          child: SingleChildScrollView(
-                            child: buildChipRow<MapEntry<String, String>>(
-                              filteredSets,
-                              (value) => tempSetCodes.contains(value.key),
-                              (value) {
-                                if (!tempSetCodes.add(value.key)) {
-                                  tempSetCodes.remove(value.key);
-                                }
-                              },
-                              (value) => value.value,
-                            ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: sortedSets.length > 16 ? 200 : null,
+                        child: SingleChildScrollView(
+                          child: buildChipRow<MapEntry<String, String>>(
+                            filteredSets,
+                            (value) => tempSetCodes.contains(value.key),
+                            (value) {
+                              if (!tempSetCodes.add(value.key)) {
+                                tempSetCodes.remove(value.key);
+                              }
+                            },
+                            (value) => value.value,
                           ),
                         ),
-                      ],
+                      ),
                     ],
                     if (sortedColors.isNotEmpty) ...[
                       const SizedBox(height: 16),
@@ -900,11 +979,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       );
     }
     _query = nameValue;
-    if (_searching) {
-      _pendingFilterRefresh = true;
-    } else {
-      await _runSearch();
-    }
+    _showResults = true;
+    _showAllLanguages = false;
+    await _runSearch();
   }
 
   Future<void> _bulkAddByFilters() async {
@@ -926,14 +1003,29 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _loading = true;
     });
     try {
-      final candidates = await ScryfallDatabase.instance.fetchCardsForFilters(
-        setCodes: _selectedSetCodes.toList(),
-        rarities: _selectedRarities.toList(),
-        types: _selectedTypes.toList(),
-        languages: _searchLanguages.toList(),
-        limit: 200,
-      );
-      final filtered = candidates.where(_matchesAdvancedFilters).toList();
+      final filter = _buildAdvancedFilter();
+      final allResults = <CardSearchResult>[];
+      const pageSize = 200;
+      var offset = 0;
+      while (true) {
+        final page =
+            await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+          filter,
+          searchQuery: _query.isEmpty ? null : _query,
+          languages: _effectiveLanguages(),
+          limit: pageSize,
+          offset: offset,
+        );
+        if (page.isEmpty) {
+          break;
+        }
+        allResults.addAll(page);
+        if (page.length < pageSize) {
+          break;
+        }
+        offset += page.length;
+      }
+      final filtered = allResults;
       if (!mounted) {
         return;
       }
@@ -989,6 +1081,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final sheetHeight = mediaQuery.size.height * 0.78;
     final visibleResults = _filteredResults();
     final filtersActive = _hasActiveAdvancedFilters();
+    final showSummary = filtersActive && !_showResults;
     return Padding(
       padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
       child: Container(
@@ -1050,54 +1143,30 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   )
-                else if (_query.isNotEmpty ||
-                    (filtersActive && _query.isEmpty))
+                else if (!showSummary &&
+                    (_query.isNotEmpty || (filtersActive && _query.isEmpty)) &&
+                    filtersActive &&
+                    _filterTotalCount != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      filtersActive
-                          ? l10n.resultsWithFilters(
-                              visibleResults.length,
-                              _results.length,
-                              (_searchLanguages.toList()..sort()).join(', '),
-                            )
-                          : l10n.resultsWithoutFilters(
-                              _results.length,
-                              (_searchLanguages.toList()..sort()).join(', '),
-                            ),
+                      l10n.filteredResultsSummary(
+                        visibleResults.length,
+                        _filterTotalCount!,
+                      ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: const Color(0xFFBFAE95),
                           ),
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (!_loading && filtersActive && _query.isEmpty)
+                if (!_loading && filtersActive)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: OutlinedButton.icon(
                       onPressed: _bulkAddByFilters,
                       icon: const Icon(Icons.playlist_add_check),
                       label: Text(l10n.addFilteredCards),
-                    ),
-                  ),
-                if (!_loading && visibleResults.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: OutlinedButton.icon(
-                      onPressed: () async {
-                        final confirmed =
-                            await _confirmBulkAdd(visibleResults.length);
-                        if (!confirmed) {
-                          return;
-                        }
-                        if (!context.mounted) {
-                          return;
-                        }
-                        Navigator.of(context)
-                            .pop(_CardSearchSelection.bulk(visibleResults));
-                      },
-                      icon: const Icon(Icons.playlist_add),
-                      label: Text(l10n.addAllResults),
                     ),
                   ),
                 Expanded(
@@ -1142,7 +1211,93 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 ],
                               ),
                             )
-                          : ListView.separated(
+                          : showSummary
+                              ? Center(
+                                  child: Container(
+                                    margin: const EdgeInsets.all(24),
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1C1713),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: const Color(0xFF322A22),
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          l10n.filteredResultsTitle,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        if (_countLoading)
+                                          const Padding(
+                                            padding: EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            child: SizedBox(
+                                              width: 22,
+                                              height: 22,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          Text(
+                                            _filterTotalCount == null
+                                                ? '-'
+                                                : _filterTotalCount!.toString(),
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .headlineMedium,
+                                          ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          l10n.filteredCardsCountLabel,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: const Color(0xFFBFAE95),
+                                              ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: FilledButton(
+                                                onPressed: _countLoading
+                                                    ? null
+                                                    : _bulkAddByFilters,
+                                                child: Text(l10n.addAll),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: OutlinedButton(
+                                                onPressed: _countLoading
+                                                    ? null
+                                                    : () async {
+                                                        setState(() {
+                                                          _showResults = true;
+                                                        });
+                                                        await _runSearch();
+                                                      },
+                                                child: Text(l10n.viewResults),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
                               shrinkWrap: true,
                               padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
                               itemCount: visibleResults.length +

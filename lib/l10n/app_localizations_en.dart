@@ -84,7 +84,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get typeFlavorTextHint => 'Type flavor text';
 
   @override
-  String get loadMore => 'Load more';
+  String get loadMore => 'Load more results';
 
   @override
   String get defaultLabel => 'Default';
@@ -698,6 +698,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addAllResults => 'Add all results';
 
   @override
+  String get filteredResultsTitle => 'Filtered results';
+
+  @override
+  String get filteredCardsCountLabel => 'Cards matching your filters';
+
+  @override
+  String get refineSearchToSeeMore =>
+      'Refine your search to view more than 100 cards.';
+
+  @override
+  String get viewResults => 'View results';
+
+  @override
   String get searchCardTitle => 'Search card';
 
   @override
@@ -793,4 +806,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get detailArtist => 'Artist';
+
+  @override
+  String get sortBy => 'Sort by';
+
+  @override
+  String get selectCards => 'Select cards';
+
+  @override
+  String selectedCardsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selected',
+      one: '1 selected',
+      zero: '0 selected',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get selectAll => 'Select all';
+
+  @override
+  String get deselectAll => 'Deselect all';
+
+  @override
+  String get deleteCardsTitle => 'Delete selected cards?';
+
+  @override
+  String deleteCardsBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count cards',
+      one: '1 card',
+      zero: '0 cards',
+    );
+    return 'This will delete $_temp0 from this collection.';
+  }
+
+  @override
+  String filteredResultsSummary(int visible, int total) {
+    return 'Results: $visible/$total';
+  }
+
+  @override
+  String get viewMoreResults => 'View more results';
 }

@@ -1551,6 +1551,89 @@ class ScryfallDatabase {
         .toList();
   }
 
+  Future<List<CardSearchResult>> fetchCardsForAdvancedFilters(
+    CollectionFilter filter, {
+    String? searchQuery,
+    List<String> languages = const [],
+    int limit = 200,
+    int? offset,
+  }) async {
+    final db = await open();
+    final filterQuery = _buildFilterQuery(filter);
+    final whereClauses = [...filterQuery.whereClauses];
+    final variables = <Variable>[...filterQuery.variables];
+
+    final query = searchQuery?.trim();
+    if (query != null && query.isNotEmpty) {
+      whereClauses.add(
+        '(LOWER(cards.name) LIKE ? OR LOWER(cards.collector_number) LIKE ?)',
+      );
+      final like = '%${query.toLowerCase()}%';
+      variables.add(Variable.withString(like));
+      variables.add(Variable.withString(like));
+    }
+
+    if (languages.isNotEmpty) {
+      final normalized = languages
+          .map((lang) => lang.trim().toLowerCase())
+          .where((lang) => lang.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+          'LOWER(cards.lang) IN (${List.filled(normalized.length, '?').join(', ')})',
+        );
+        variables.addAll(
+          normalized.map((lang) => Variable.withString(lang)),
+        );
+      }
+    }
+
+    final whereSql =
+        whereClauses.isEmpty ? '' : 'WHERE ${whereClauses.join(' AND ')}';
+    final sql = StringBuffer(
+      '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.collector_number AS collector_number,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces,
+        cards.card_json AS card_json
+      FROM cards
+      $whereSql
+      ORDER BY cards.name ASC
+      LIMIT ?
+      ''',
+    );
+    variables.add(Variable.withInt(limit));
+    if (offset != null) {
+      sql.write(' OFFSET ?');
+      variables.add(Variable.withInt(offset));
+    }
+    final rows = await db.customSelect(
+      sql.toString(),
+      variables: variables,
+    ).get();
+
+    return rows
+        .map(
+          (row) => CardSearchResult(
+            id: row.read<String>('id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: _extractSetName(row.readNullable<String>('card_json')),
+            collectorNumber: row.read<String>('collector_number'),
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+            cardJson: row.readNullable<String>('card_json'),
+          ),
+        )
+        .toList();
+  }
+
   Future<Map<String, int>> fetchSetTotalsForCodes(
     List<String> setCodes,
   ) async {

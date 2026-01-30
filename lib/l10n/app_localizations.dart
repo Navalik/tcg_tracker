@@ -227,7 +227,7 @@ abstract class AppLocalizations {
   /// No description provided for @loadMore.
   ///
   /// In en, this message translates to:
-  /// **'Load more'**
+  /// **'Load more results'**
   String get loadMore;
 
   /// No description provided for @defaultLabel.
@@ -1328,6 +1328,30 @@ abstract class AppLocalizations {
   /// **'Add all results'**
   String get addAllResults;
 
+  /// No description provided for @filteredResultsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Filtered results'**
+  String get filteredResultsTitle;
+
+  /// No description provided for @filteredCardsCountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cards matching your filters'**
+  String get filteredCardsCountLabel;
+
+  /// No description provided for @refineSearchToSeeMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Refine your search to view more than 100 cards.'**
+  String get refineSearchToSeeMore;
+
+  /// No description provided for @viewResults.
+  ///
+  /// In en, this message translates to:
+  /// **'View results'**
+  String get viewResults;
+
   /// No description provided for @searchCardTitle.
   ///
   /// In en, this message translates to:
@@ -1501,6 +1525,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artist'**
   String get detailArtist;
+
+  /// No description provided for @sortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get sortBy;
+
+  /// No description provided for @selectCards.
+  ///
+  /// In en, this message translates to:
+  /// **'Select cards'**
+  String get selectCards;
+
+  /// No description provided for @selectedCardsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0 {0 selected} =1 {1 selected} other {{count} selected}}'**
+  String selectedCardsCount(int count);
+
+  /// No description provided for @selectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get selectAll;
+
+  /// No description provided for @deselectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Deselect all'**
+  String get deselectAll;
+
+  /// No description provided for @deleteCardsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete selected cards?'**
+  String get deleteCardsTitle;
+
+  /// No description provided for @deleteCardsBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will delete {count, plural, =0 {0 cards} =1 {1 card} other {{count} cards}} from this collection.'**
+  String deleteCardsBody(int count);
+
+  /// No description provided for @filteredResultsSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Results: {visible}/{total}'**
+  String filteredResultsSummary(int visible, int total);
+
+  /// No description provided for @viewMoreResults.
+  ///
+  /// In en, this message translates to:
+  /// **'View more results'**
+  String get viewMoreResults;
 }
 
 class _AppLocalizationsDelegate

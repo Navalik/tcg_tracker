@@ -698,6 +698,19 @@ class AppLocalizationsIt extends AppLocalizations {
   String get addAllResults => 'Add all results';
 
   @override
+  String get filteredResultsTitle => 'Risultati filtrati';
+
+  @override
+  String get filteredCardsCountLabel => 'Carte che corrispondono ai filtri';
+
+  @override
+  String get refineSearchToSeeMore =>
+      'Raffina la ricerca per vedere più di 100 carte.';
+
+  @override
+  String get viewResults => 'Visualizza risultati';
+
+  @override
   String get searchCardTitle => 'Search card';
 
   @override
@@ -793,4 +806,51 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get detailArtist => 'Artist';
+
+  @override
+  String get sortBy => 'Ordina per';
+
+  @override
+  String get selectCards => 'Seleziona carte';
+
+  @override
+  String selectedCardsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count selezionate',
+      one: '1 selezionata',
+      zero: '0 selezionate',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get selectAll => 'Seleziona tutto';
+
+  @override
+  String get deselectAll => 'Deseleziona tutto';
+
+  @override
+  String get deleteCardsTitle => 'Eliminare le carte selezionate?';
+
+  @override
+  String deleteCardsBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count carte',
+      one: '1 carta',
+      zero: '0 carte',
+    );
+    return 'Questo eliminera $_temp0 da questa collezione.';
+  }
+
+  @override
+  String filteredResultsSummary(int visible, int total) {
+    return 'Risultati: $visible/$total';
+  }
+
+  @override
+  String get viewMoreResults => 'Visualizza altri risultati';
 }

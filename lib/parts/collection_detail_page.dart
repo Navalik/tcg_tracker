@@ -1,5 +1,11 @@
 ﻿part of 'package:tcg_tracker/main.dart';
 
+enum _CardSortMode {
+  name,
+  color,
+  type,
+}
+
 class CollectionDetailPage extends StatefulWidget {
   const CollectionDetailPage({
     super.key,
@@ -51,6 +57,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   int? _missingCount;
   bool _autoAddShown = false;
   Map<String, int> _setTotalsByCode = {};
+  _CardSortMode _sortMode = _CardSortMode.name;
+  bool _selectionMode = false;
+  final Set<String> _selectedCardIds = {};
 
   bool get _isFilterCollection =>
       !widget.isAllCards && (widget.filter != null || widget.isSetCollection);
@@ -125,6 +134,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _cards.clear();
       _cardJsonCache.clear();
       _setTotalsByCode = {};
+      _selectionMode = false;
+      _selectedCardIds.clear();
     });
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -342,6 +353,224 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return base;
     }
     return base.where(_matchesAdvancedFilters).toList();
+  }
+
+  List<CollectionCardEntry> _sortedCards() {
+    final base = _filteredCards();
+    if (base.length < 2) {
+      return base;
+    }
+    final sorted = List<CollectionCardEntry>.from(base);
+    int compareName(CollectionCardEntry a, CollectionCardEntry b) {
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    }
+
+    int compareColor(CollectionCardEntry a, CollectionCardEntry b) {
+      final keyA = _colorSortKey(a);
+      final keyB = _colorSortKey(b);
+      final primary = keyA.compareTo(keyB);
+      if (primary != 0) {
+        return primary;
+      }
+      return compareName(a, b);
+    }
+
+    int compareType(CollectionCardEntry a, CollectionCardEntry b) {
+      final keyA = _typeSortKey(a);
+      final keyB = _typeSortKey(b);
+      final primary = keyA.compareTo(keyB);
+      if (primary != 0) {
+        return primary;
+      }
+      return compareName(a, b);
+    }
+
+    switch (_sortMode) {
+      case _CardSortMode.name:
+        sorted.sort(compareName);
+        break;
+      case _CardSortMode.color:
+        sorted.sort(compareColor);
+        break;
+      case _CardSortMode.type:
+        sorted.sort(compareType);
+        break;
+    }
+    return sorted;
+  }
+
+  String _colorSortKey(CollectionCardEntry entry) {
+    const order = ['W', 'U', 'B', 'R', 'G', 'C'];
+    final colors = _cardColors(entry).toList()
+      ..sort((a, b) => order.indexOf(a).compareTo(order.indexOf(b)));
+    return colors.join();
+  }
+
+  String _typeSortKey(CollectionCardEntry entry) {
+    const order = [
+      'Artifact',
+      'Creature',
+      'Enchantment',
+      'Instant',
+      'Land',
+      'Planeswalker',
+      'Sorcery',
+      'Battle',
+      'Tribal',
+    ];
+    final types = _cardTypes(entry);
+    if (types.isEmpty) {
+      return '';
+    }
+    for (final type in order) {
+      if (types.contains(type)) {
+        return type;
+      }
+    }
+    final sorted = types.toList()..sort();
+    return sorted.join('/');
+  }
+
+  void _toggleSelection(CollectionCardEntry entry) {
+    setState(() {
+      _selectionMode = true;
+      if (!_selectedCardIds.add(entry.cardId)) {
+        _selectedCardIds.remove(entry.cardId);
+      }
+      if (_selectedCardIds.isEmpty) {
+        _selectionMode = false;
+      }
+    });
+  }
+
+  void _exitSelection() {
+    if (!_selectionMode && _selectedCardIds.isEmpty) {
+      return;
+    }
+    setState(() {
+      _selectionMode = false;
+      _selectedCardIds.clear();
+    });
+  }
+
+  bool _isSelected(CollectionCardEntry entry) {
+    return _selectedCardIds.contains(entry.cardId);
+  }
+
+  bool _areAllVisibleSelected(List<CollectionCardEntry> visibleCards) {
+    if (visibleCards.isEmpty) {
+      return false;
+    }
+    for (final entry in visibleCards) {
+      if (!_selectedCardIds.contains(entry.cardId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  void _toggleSelectAll(List<CollectionCardEntry> visibleCards) {
+    if (visibleCards.isEmpty) {
+      return;
+    }
+    final ids = visibleCards.map((entry) => entry.cardId).toSet();
+    setState(() {
+      _selectionMode = true;
+      final allSelected = ids.every(_selectedCardIds.contains);
+      if (allSelected) {
+        _selectedCardIds.removeAll(ids);
+        if (_selectedCardIds.isEmpty) {
+          _selectionMode = false;
+        }
+      } else {
+        _selectedCardIds.addAll(ids);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null || _selectedCardIds.isEmpty) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final count = _selectedCardIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.deleteCardsTitle),
+          content: Text(l10n.deleteCardsBody(count)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.delete),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) {
+      return;
+    }
+    final ids = _selectedCardIds.toList(growable: false);
+    final isFilterCollection = !widget.isAllCards;
+    for (final cardId in ids) {
+      if (isFilterCollection) {
+        await ScryfallDatabase.instance.upsertCollectionCard(
+          ownedCollectionId,
+          cardId,
+          quantity: 0,
+          foil: false,
+          altArt: false,
+        );
+      } else {
+        await ScryfallDatabase.instance.deleteCollectionCard(
+          ownedCollectionId,
+          cardId,
+        );
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    _exitSelection();
+    await _loadCards();
+  }
+
+  String _sortLabel(_CardSortMode mode, AppLocalizations l10n) {
+    switch (mode) {
+      case _CardSortMode.name:
+        return l10n.cardName;
+      case _CardSortMode.color:
+        return l10n.colorLabel;
+      case _CardSortMode.type:
+        return l10n.typeLabel;
+    }
+  }
+
+  Widget _buildSelectionBadge(bool selected) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFE9C46A) : const Color(0xFF1C1713),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: selected ? const Color(0xFFE9C46A) : const Color(0xFF3A2F24),
+          width: 1.5,
+        ),
+      ),
+      child: Icon(
+        selected ? Icons.check : Icons.circle_outlined,
+        size: 14,
+        color: selected ? const Color(0xFF1C1510) : const Color(0xFFBFAE95),
+      ),
+    );
   }
 
   bool _matchesAdvancedFilters(CollectionCardEntry entry) {
@@ -1408,11 +1637,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final visibleCards = _filteredCards();
+    final visibleCards = _sortedCards();
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
-        title: Text(widget.name),
+        title: Text(
+          _selectionMode
+              ? l10n.selectedCardsCount(_selectedCardIds.length)
+              : (widget.isAllCards ? '' : widget.name),
+        ),
         bottom: _isFilterCollection
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(108),
@@ -1420,14 +1653,74 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               )
             : null,
         actions: [
+          PopupMenuButton<_CardSortMode>(
+            tooltip: l10n.sortBy,
+            icon: const Icon(Icons.sort),
+            onSelected: (mode) {
+              setState(() {
+                _sortMode = mode;
+              });
+            },
+            itemBuilder: (context) {
+              return _CardSortMode.values
+                  .map(
+                    (mode) => PopupMenuItem(
+                      value: mode,
+                      child: Row(
+                        children: [
+                          if (_sortMode == mode)
+                            const Icon(Icons.check, size: 18)
+                          else
+                            const SizedBox(width: 18),
+                          const SizedBox(width: 8),
+                          Text(_sortLabel(mode, l10n)),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList();
+            },
+          ),
+          IconButton(
+            tooltip: _selectionMode ? l10n.cancel : l10n.selectCards,
+            icon: Icon(_selectionMode ? Icons.close : Icons.check_box_outlined),
+            onPressed: () {
+              if (_selectionMode) {
+                _exitSelection();
+              } else {
+                setState(() {
+                  _selectionMode = true;
+                  _selectedCardIds.clear();
+                });
+              }
+            },
+          ),
+          if (_selectionMode)
+            IconButton(
+              tooltip: _areAllVisibleSelected(visibleCards)
+                  ? l10n.deselectAll
+                  : l10n.selectAll,
+              icon: Icon(
+                _areAllVisibleSelected(visibleCards)
+                    ? Icons.remove_done
+                    : Icons.select_all,
+              ),
+              onPressed: () => _toggleSelectAll(visibleCards),
+            ),
+          if (_selectionMode)
+            IconButton(
+              tooltip: l10n.delete,
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _selectedCardIds.isEmpty ? null : _deleteSelected,
+            ),
           IconButton(
             tooltip: _viewMode == CollectionViewMode.list
                 ? l10n.gallery
                 : l10n.list,
             icon: Icon(
-      _viewMode == CollectionViewMode.list
-          ? Icons.grid_view
-          : Icons.list,
+              _viewMode == CollectionViewMode.list
+                  ? Icons.grid_view
+                  : Icons.list,
             ),
             onPressed: () {
               setState(() {
@@ -1515,8 +1808,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           _isFilterCollection && entry.quantity == 0;
                       final hasCornerQuantity = entry.quantity > 1;
                       return GestureDetector(
-                        onTap: () => _showCardDetails(entry),
-                        onLongPress: () => _showCardActions(entry),
+                        onTap: () {
+                          if (_selectionMode) {
+                            _toggleSelection(entry);
+                            return;
+                          }
+                          _showCardDetails(entry);
+                        },
+                        onLongPress: () {
+                          if (_selectionMode) {
+                            _toggleSelection(entry);
+                            return;
+                          }
+                          _showCardActions(entry);
+                        },
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
@@ -1610,14 +1915,23 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           icon: const Icon(
                                               Icons.add_circle_outline),
                                           color: const Color(0xFFE9C46A),
-                                          onPressed: () =>
-                                              _quickAddCard(entry),
+                                          onPressed: _selectionMode
+                                              ? null
+                                              : () => _quickAddCard(entry),
                                         ),
                                       ],
                                     ],
                                   ),
                                 ),
                               ),
+                              if (_selectionMode || _isSelected(entry))
+                                Positioned(
+                                  top: 6,
+                                  left: 6,
+                                  child: _buildSelectionBadge(
+                                    _isSelected(entry),
+                                  ),
+                                ),
                               if (isMissing)
                                 Positioned(
                                   top: 6,
@@ -1672,8 +1986,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       final isMissing =
                           _isFilterCollection && entry.quantity == 0;
                       return GestureDetector(
-                        onTap: () => _showCardDetails(entry),
-                        onLongPress: () => _showCardActions(entry),
+                        onTap: () {
+                          if (_selectionMode) {
+                            _toggleSelection(entry);
+                            return;
+                          }
+                          _showCardDetails(entry);
+                        },
+                        onLongPress: () {
+                          if (_selectionMode) {
+                            _toggleSelection(entry);
+                            return;
+                          }
+                          _showCardActions(entry);
+                        },
                         child: Opacity(
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
@@ -1705,8 +2031,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                     entry.imageUri!,
                                                     fit: BoxFit.cover,
                                                   ),
-                                            if (_isFilterCollection ||
-                                                widget.isAllCards)
+                                            if ((_isFilterCollection ||
+                                                    widget.isAllCards) &&
+                                                !_selectionMode)
                                               Positioned(
                                                 top: 8,
                                                 left: 8,
@@ -1859,6 +2186,14 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   ],
                                 ),
                               ),
+                              if (_selectionMode || _isSelected(entry))
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  child: _buildSelectionBadge(
+                                    _isSelected(entry),
+                                  ),
+                                ),
                               if (entry.quantity > 1)
                                 Positioned(
                                   top: 0,
