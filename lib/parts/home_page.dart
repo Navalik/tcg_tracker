@@ -912,6 +912,245 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
+  Future<void> _onScanCardPressed() async {
+    final scanResult = await Navigator.of(context).push<_CardScanResult>(
+      MaterialPageRoute(
+        builder: (_) => const _CardScannerPage(),
+      ),
+    );
+    if (!mounted || scanResult == null) {
+      return;
+    }
+
+    if (scanResult.kind == _CardScanKind.ocr) {
+      final setCodes = await _fetchKnownSetCodes();
+      if (!mounted) {
+        return;
+      }
+      final ocrSeed = _buildOcrSearchSeed(
+        scanResult.value,
+        knownSetCodes: setCodes,
+      );
+      if (ocrSeed == null) {
+        showAppSnackBar(
+          context,
+          'No card text recognized. Try better light and focus.',
+        );
+        return;
+      }
+      await _openScannedCardSearch(
+        query: ocrSeed.query,
+        initialSetCode: ocrSeed.setCode,
+        initialCollectorNumber: ocrSeed.collectorNumber,
+      );
+      return;
+    }
+
+    final query = _extractScanQuery(scanResult.value);
+    if (query.isEmpty) {
+      showAppSnackBar(
+        context,
+        'Unable to read a valid card value.',
+      );
+      return;
+    }
+    await _openScannedCardSearch(query: query);
+  }
+
+  Future<Set<String>> _fetchKnownSetCodes() async {
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    return sets
+        .map((set) => set.code.trim().toLowerCase())
+        .where((code) => code.isNotEmpty)
+        .toSet();
+  }
+
+  _OcrSearchSeed? _buildOcrSearchSeed(
+    String rawText, {
+    required Set<String> knownSetCodes,
+  }) {
+    final text = rawText.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+
+    final lines = text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return null;
+    }
+
+    var bestName = '';
+    for (final line in lines.take(5)) {
+      final hasDigits = RegExp(r'\d').hasMatch(line);
+      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(line);
+      if (hasLetters && !hasDigits && line.length >= 3) {
+        bestName = line;
+        break;
+      }
+    }
+    if (bestName.isEmpty) {
+      bestName = lines.firstWhere(
+        (line) => RegExp(r'[A-Za-z]').hasMatch(line),
+        orElse: () => '',
+      );
+    }
+
+    String? setCode;
+    String? collectorNumber;
+    for (final rawLine in lines.reversed) {
+      final upperLine = rawLine.toUpperCase();
+      final tokens = upperLine
+          .split(RegExp(r'[^A-Z0-9/]'))
+          .where((token) => token.isNotEmpty)
+          .toList();
+      if (tokens.isEmpty) {
+        continue;
+      }
+
+      for (var i = 0; i < tokens.length; i++) {
+        final token = tokens[i];
+        if (setCode == null && knownSetCodes.contains(token.toLowerCase())) {
+          setCode = token.toLowerCase();
+          final next = (i + 1 < tokens.length) ? tokens[i + 1] : null;
+          final fromNext = _normalizeCollectorNumber(next ?? '');
+          if (fromNext != null) {
+            collectorNumber = fromNext;
+          }
+        }
+
+        if (collectorNumber == null && token.contains('/')) {
+          final part = token.split('/').first;
+          final normalized = _normalizeCollectorNumber(part);
+          if (normalized != null) {
+            collectorNumber = normalized;
+          }
+        }
+
+        collectorNumber ??= _normalizeCollectorNumber(token);
+      }
+
+      if (setCode != null && collectorNumber != null) {
+        break;
+      }
+    }
+
+    if (bestName.isEmpty &&
+        setCode == null &&
+        collectorNumber == null) {
+      return null;
+    }
+
+    final fallbackQuery = bestName.isEmpty ? lines.first : bestName;
+    final query =
+        (collectorNumber != null &&
+                collectorNumber.isNotEmpty &&
+                setCode != null &&
+                setCode.isNotEmpty)
+            ? collectorNumber
+            : fallbackQuery;
+    return _OcrSearchSeed(
+      query: query,
+      setCode: setCode,
+      collectorNumber: collectorNumber,
+    );
+  }
+
+  String? _normalizeCollectorNumber(String input) {
+    final value = input.trim().toLowerCase();
+    if (value.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'^(\d{1,4}[a-z]?)$').firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+    return match.group(1);
+  }
+
+  Future<void> _openScannedCardSearch({
+    required String query,
+    String? initialSetCode,
+    String? initialCollectorNumber,
+  }) async {
+    CollectionInfo? allCards;
+    for (final collection in _collections) {
+      if (collection.name == _allCardsCollectionName) {
+        allCards = collection;
+        break;
+      }
+    }
+    if (allCards == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      );
+      return;
+    }
+    final selection = await showModalBottomSheet<_CardSearchSelection>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CardSearchSheet(
+        initialQuery: query,
+        initialSetCode: initialSetCode,
+        initialCollectorNumber: initialCollectorNumber,
+      ),
+    );
+    if (!mounted || selection == null) {
+      return;
+    }
+
+    if (selection.isBulk) {
+      await ScryfallDatabase.instance.addCardsToCollection(
+        allCards.id,
+        selection.cardIds,
+      );
+    } else {
+      await ScryfallDatabase.instance.addCardToCollection(
+        allCards.id,
+        selection.cardIds.first,
+      );
+    }
+    if (!mounted) {
+      return;
+    }
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.addedCards(selection.count),
+    );
+    await _loadCollections();
+  }
+
+  String _extractScanQuery(String rawValue) {
+    final trimmed = rawValue.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    final uri = Uri.tryParse(trimmed);
+    if (uri != null) {
+      final query = uri.queryParameters['q']?.trim();
+      if (query != null && query.isNotEmpty) {
+        return query;
+      }
+      if (uri.host.toLowerCase().contains('scryfall.com')) {
+        final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
+        if (segments.isNotEmpty) {
+          final last = Uri.decodeComponent(segments.last)
+              .replaceAll('-', ' ')
+              .trim();
+          if (last.isNotEmpty) {
+            return last;
+          }
+        }
+      }
+    }
+    return trimmed;
+  }
+
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
     CollectionInfo? allCards;
     for (final collection in _collections) {
@@ -1670,9 +1909,27 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showHomeAddOptions(context),
-        child: const Icon(Icons.add),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: SizedBox(
+          width: double.infinity,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              FloatingActionButton(
+                heroTag: 'home_scan_fab',
+                onPressed: _onScanCardPressed,
+                child: const Icon(Icons.search),
+              ),
+              FloatingActionButton(
+                heroTag: 'home_add_fab',
+                onPressed: () => _showHomeAddOptions(context),
+                child: const Icon(Icons.add),
+              ),
+            ],
+          ),
+        ),
       ),
       bottomNavigationBar: (_bulkUpdateAvailable ||
               _bulkDownloading ||
@@ -2582,6 +2839,195 @@ class _TitleLockup extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+enum _CardScanKind { barcode, ocr }
+
+class _CardScanResult {
+  const _CardScanResult({
+    required this.kind,
+    required this.value,
+  });
+
+  final _CardScanKind kind;
+  final String value;
+}
+
+class _OcrSearchSeed {
+  const _OcrSearchSeed({
+    required this.query,
+    this.setCode,
+    this.collectorNumber,
+  });
+
+  final String query;
+  final String? setCode;
+  final String? collectorNumber;
+}
+
+class _CardScannerPage extends StatefulWidget {
+  const _CardScannerPage();
+
+  @override
+  State<_CardScannerPage> createState() => _CardScannerPageState();
+}
+
+class _CardScannerPageState extends State<_CardScannerPage> {
+  final MobileScannerController _controller = MobileScannerController();
+  final ImagePicker _imagePicker = ImagePicker();
+  final TextRecognizer _textRecognizer = TextRecognizer(
+    script: TextRecognitionScript.latin,
+  );
+  bool _handled = false;
+  bool _processingOcr = false;
+  String _status = 'Scan barcode/QR or use OCR photo.';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _textRecognizer.close();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled || !mounted || _processingOcr) {
+      return;
+    }
+    for (final barcode in capture.barcodes) {
+      final raw = barcode.rawValue?.trim();
+      if (raw == null || raw.isEmpty) {
+        continue;
+      }
+      _handled = true;
+      Navigator.of(context).pop(
+        _CardScanResult(kind: _CardScanKind.barcode, value: raw),
+      );
+      return;
+    }
+  }
+
+  Future<void> _scanOcrFromCamera() async {
+    if (_processingOcr || _handled) {
+      return;
+    }
+    setState(() {
+      _processingOcr = true;
+      _status = 'Capturing photo...';
+    });
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 90,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (image == null) {
+        if (mounted) {
+          setState(() {
+            _status = 'Scan canceled.';
+          });
+        }
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = 'Reading card text...';
+      });
+      final recognized = await _textRecognizer.processImage(
+        InputImage.fromFilePath(image.path),
+      );
+      final recognizedText = recognized.text.trim();
+      if (!mounted) {
+        return;
+      }
+      if (recognizedText.isEmpty) {
+        setState(() {
+          _status = 'No text found. Try better light and focus.';
+        });
+        return;
+      }
+      _handled = true;
+      Navigator.of(context).pop(
+        _CardScanResult(kind: _CardScanKind.ocr, value: recognizedText),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _status = 'OCR failed. Try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingOcr = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Scan card'),
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+          ),
+          IgnorePointer(
+            child: Center(
+              child: Container(
+                width: 260,
+                height: 180,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFE9C46A),
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 20,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _status,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFEFE7D8),
+                      ),
+                ),
+                const SizedBox(height: 10),
+                FilledButton.icon(
+                  onPressed: _processingOcr ? null : _scanOcrFromCamera,
+                  icon: _processingOcr
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.document_scanner_outlined),
+                  label: const Text('Recognize card (OCR)'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -19,7 +19,15 @@ class _CardSearchSelection {
 }
 
 class _CardSearchSheet extends StatefulWidget {
-  const _CardSearchSheet();
+  const _CardSearchSheet({
+    this.initialQuery,
+    this.initialSetCode,
+    this.initialCollectorNumber,
+  });
+
+  final String? initialQuery;
+  final String? initialSetCode;
+  final String? initialCollectorNumber;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
@@ -72,6 +80,21 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
     _focusNode.requestFocus();
     _controller.addListener(_onQueryChanged);
+    final initialSetCode = widget.initialSetCode?.trim().toLowerCase();
+    if (initialSetCode != null && initialSetCode.isNotEmpty) {
+      _selectedSetCodes.add(initialSetCode);
+    }
+    final initialQuery = widget.initialQuery?.trim();
+    final initialCollector = widget.initialCollectorNumber?.trim();
+    final seedQuery = (initialQuery != null && initialQuery.isNotEmpty)
+        ? initialQuery
+        : ((initialCollector != null && initialCollector.isNotEmpty)
+            ? initialCollector
+            : null);
+    if (seedQuery != null) {
+      _controller.text = seedQuery;
+      _query = seedQuery;
+    }
     _loadSearchLanguages();
   }
 
