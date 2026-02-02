@@ -79,21 +79,36 @@ class _CornerBadgePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-List<Color> _manaAccentColors(String? cardJson) {
-  if (cardJson == null || cardJson.isEmpty) {
-    return const [];
-  }
-  final decoded = jsonDecode(cardJson);
-  if (decoded is! Map<String, dynamic>) {
-    return const [];
-  }
-  final colors = (decoded['colors'] as List?)?.whereType<String>().toList() ??
-      (decoded['color_identity'] as List?)?.whereType<String>().toList() ??
-      <String>[];
+List<Color> _manaAccentColors(Set<String> colors) {
   if (colors.isEmpty) {
+    return const [];
+  }
+  if (colors.length == 1 && colors.contains('C')) {
     return const [Color(0xFFB9B1A5)];
   }
   return colors.map(_manaColorFromCode).toList();
+}
+
+Set<String> _parseColorSet(String colors, String colorIdentity) {
+  final values = <String>{};
+  void addFrom(String raw) {
+    if (raw.trim().isEmpty) {
+      return;
+    }
+    for (final part in raw.split(',')) {
+      final value = part.trim().toUpperCase();
+      if (value.isNotEmpty) {
+        values.add(value);
+      }
+    }
+  }
+
+  addFrom(colors);
+  addFrom(colorIdentity);
+  if (values.isEmpty) {
+    return {'C'};
+  }
+  return values;
 }
 
 Color _manaColorFromCode(String code) {
@@ -115,7 +130,9 @@ Color _manaColorFromCode(String code) {
 
 Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) {
   final base = Theme.of(context).colorScheme.surface;
-  final accents = _manaAccentColors(entry.cardJson);
+  final accents = _manaAccentColors(
+    _parseColorSet(entry.colors, entry.colorIdentity),
+  );
   if (accents.isEmpty) {
     return BoxDecoration(
       color: base,

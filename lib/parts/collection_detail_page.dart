@@ -35,7 +35,6 @@ class CollectionDetailPage extends StatefulWidget {
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
   static const int _pageSize = 120;
   final List<CollectionCardEntry> _cards = [];
-  final Map<String, Map<String, dynamic>?> _cardJsonCache = {};
   final ScrollController _scrollController = ScrollController();
   bool _loading = true;
   bool _loadingMore = false;
@@ -132,7 +131,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _hasMore = true;
       _loadedOffset = 0;
       _cards.clear();
-      _cardJsonCache.clear();
       _setTotalsByCode = {};
       _selectionMode = false;
       _selectedCardIds.clear();
@@ -611,24 +609,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Set<String> _cardColors(CollectionCardEntry entry) {
-    final data = _decodeCardJson(entry);
-    if (data == null) {
-      return {'C'};
-    }
-    final colors = (data['colors'] as List?)?.whereType<String>().toList() ??
-        (data['color_identity'] as List?)
-            ?.whereType<String>()
-            .toList() ??
-        <String>[];
-    if (colors.isEmpty) {
-      return {'C'};
-    }
-    return colors.map((code) => code.toUpperCase()).toSet();
+    return _parseColorSet(entry.colors, entry.colorIdentity);
   }
 
   Set<String> _cardTypes(CollectionCardEntry entry) {
-    final data = _decodeCardJson(entry);
-    final typeLine = data?['type_line']?.toString() ?? '';
+    final typeLine = entry.typeLine.trim();
     if (typeLine.isEmpty) {
       return {};
     }
@@ -653,15 +638,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   double _cardManaValue(CollectionCardEntry entry) {
-    final data = _decodeCardJson(entry);
-    final value = data?['cmc'];
-    if (value is num) {
-      return value.toDouble();
-    }
-    if (value is String) {
-      return double.tryParse(value) ?? 0;
-    }
-    return 0;
+    return entry.manaValue ?? 0;
   }
 
   bool _hasActiveAdvancedFilters() {
@@ -681,52 +658,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   int? _setTotalForEntry(CollectionCardEntry entry) {
-    final data = _decodeCardJson(entry);
-    int? parseTotal(dynamic raw) {
-      if (raw is num) {
-        final value = raw.toInt();
-        return value > 0 ? value : null;
-      }
-      if (raw is String) {
-        final parsed = int.tryParse(raw.trim());
-        if (parsed != null && parsed > 0) {
-          return parsed;
-        }
-      }
-      return null;
-    }
-
-    if (data != null) {
-      final direct = [
-        data['printed_total'],
-        data['set_total'],
-        data['printedTotal'],
-        data['setTotal'],
-        data['total'],
-      ];
-      for (final raw in direct) {
-        final parsed = parseTotal(raw);
-        if (parsed != null) {
-          return parsed;
-        }
-      }
-
-      final setData = data['set'];
-      if (setData is Map<String, dynamic>) {
-        final nested = [
-          setData['printed_total'],
-          setData['set_total'],
-          setData['printedTotal'],
-          setData['setTotal'],
-          setData['total'],
-        ];
-        for (final raw in nested) {
-          final parsed = parseTotal(raw);
-          if (parsed != null) {
-            return parsed;
-          }
-        }
-      }
+    final direct = entry.setTotal;
+    if (direct != null && direct > 0) {
+      return direct;
     }
     final code = entry.setCode.trim().toLowerCase();
     final fromMap = _setTotalsByCode[code];
@@ -1226,13 +1160,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Future<void> _showCardDetails(CollectionCardEntry entry) async {
     final l10n = AppLocalizations.of(context)!;
     final details = _parseCardDetails(l10n, entry);
-    final cardData = _decodeCardJson(entry);
-    final typeLine = _safeCardField(cardData, 'type_line');
-    final manaCost = _safeCardField(cardData, 'mana_cost');
-    final oracleText = _safeCardField(cardData, 'oracle_text');
-    final power = _safeCardField(cardData, 'power');
-    final toughness = _safeCardField(cardData, 'toughness');
-    final loyalty = _safeCardField(cardData, 'loyalty');
+    final typeLine = entry.typeLine.trim();
+    final manaCost = entry.manaCost.trim();
+    final oracleText = entry.oracleText.trim();
+    final power = entry.power.trim();
+    final toughness = entry.toughness.trim();
+    final loyalty = entry.loyalty.trim();
     final stats = _joinStats(power, toughness);
     await showModalBottomSheet<void>(
       context: context,
@@ -1386,26 +1319,19 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _CardDetail(l10n.detailSet, setLabel),
       _CardDetail(l10n.detailCollector, entry.collectorNumber),
     ];
-    final data = _decodeCardJson(entry);
-    if (data == null) {
-      return details.where((item) => item.value.isNotEmpty).toList();
-    }
-    void add(String label, dynamic value) {
-      if (value == null) {
-        return;
-      }
-      final text = value.toString().trim();
+    void add(String label, String value) {
+      final text = value.trim();
       if (text.isEmpty) {
         return;
       }
       details.add(_CardDetail(label, text));
     }
 
-    add(l10n.detailRarity, data['rarity']);
-    add(l10n.detailSetName, data['set_name']);
-    add(l10n.detailLanguage, data['lang']);
-    add(l10n.detailRelease, data['released_at']);
-    add(l10n.detailArtist, data['artist']);
+    add(l10n.detailRarity, entry.rarity);
+    add(l10n.detailSetName, entry.setName);
+    add(l10n.detailLanguage, entry.lang);
+    add(l10n.detailRelease, entry.releasedAt);
+    add(l10n.detailArtist, entry.artist);
     return details.where((item) => item.value.isNotEmpty).toList();
   }
 
@@ -1422,40 +1348,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return p;
     }
     return '$p/$t';
-  }
-
-  Map<String, dynamic>? _decodeCardJson(CollectionCardEntry entry) {
-    final cached = _cardJsonCache[entry.cardId];
-    if (cached != null || _cardJsonCache.containsKey(entry.cardId)) {
-      return cached;
-    }
-    final raw = entry.cardJson;
-    if (raw == null || raw.isEmpty) {
-      _cardJsonCache[entry.cardId] = null;
-      return null;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        _cardJsonCache[entry.cardId] = decoded;
-        return decoded;
-      }
-    } catch (_) {
-      // Ignore invalid JSON and cache the miss to avoid repeated work.
-    }
-    _cardJsonCache[entry.cardId] = null;
-    return null;
-  }
-
-  String _safeCardField(Map<String, dynamic>? data, String key) {
-    if (data == null) {
-      return '';
-    }
-    final value = data[key];
-    if (value == null) {
-      return '';
-    }
-    return value.toString().trim();
   }
 
   Widget _buildDetailGrid(List<_CardDetail> details) {

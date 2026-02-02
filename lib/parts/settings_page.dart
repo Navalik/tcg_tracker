@@ -9,10 +9,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
-  bool _loadingGames = true;
   String? _bulkType;
-  List<String> _enabledGames = [];
-  String? _primaryGameId;
+  String _appVersion = '0.1.0';
 
   @override
   void initState() {
@@ -22,17 +20,20 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     final bulkType = await AppSettings.loadBulkType();
-    final enabledGames = await AppSettings.loadEnabledGames();
-    final primaryGameId = await AppSettings.loadPrimaryGameId();
+    var appVersion = _appVersion;
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      appVersion = packageInfo.version;
+    } catch (_) {
+      appVersion = _appVersion;
+    }
     if (!mounted) {
       return;
     }
     setState(() {
       _bulkType = bulkType;
-      _enabledGames = enabledGames;
-      _primaryGameId = primaryGameId;
+      _appVersion = appVersion;
       _loading = false;
-      _loadingGames = false;
     });
   }
 
@@ -117,124 +118,6 @@ class _SettingsPageState extends State<SettingsPage> {
       context,
       AppLocalizations.of(context)!.databaseChangedGoHome,
     );
-  }
-
-  Future<void> _setPrimaryGame(String id) async {
-    if (id.isEmpty) {
-      return;
-    }
-    if (!_enabledGames.contains(id)) {
-      _enabledGames = [..._enabledGames, id];
-      await AppSettings.saveEnabledGames(_enabledGames);
-    }
-    await AppSettings.savePrimaryGameId(id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _primaryGameId = id;
-    });
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.primaryGameSet(
-            _gameLabel(AppLocalizations.of(context)!, id),
-          ),
-    );
-  }
-
-  Future<void> _showGameLimitDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.gameLimitReachedTitle),
-          content: Text(l10n.gameLimitReachedBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.notNow),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProPage(),
-                  ),
-                );
-              },
-              child: Text(l10n.upgrade),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _addGame() async {
-    final manager = PurchaseManager.instance;
-    if (!manager.isPro && _enabledGames.isNotEmpty) {
-      await _showGameLimitDialog();
-      return;
-    }
-    final remaining = _gameOptions
-        .where((option) => !_enabledGames.contains(option.id))
-        .toList();
-    if (remaining.isEmpty) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allGamesAdded,
-      );
-      return;
-    }
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.addGame),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: remaining
-                .map(
-                  (option) => ListTile(
-                    title: Text(option.name),
-                    subtitle: Text(_gameDescription(l10n, option.id)),
-                    onTap: () => Navigator.of(context).pop(option.id),
-                  ),
-                )
-                .toList(),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.cancel),
-            ),
-          ],
-        );
-      },
-    );
-    if (selected == null || selected.isEmpty) {
-      return;
-    }
-    final updated = [..._enabledGames, selected];
-    await AppSettings.saveEnabledGames(updated);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _enabledGames = updated;
-      _primaryGameId ??= selected;
-    });
-    await AppSettings.savePrimaryGameId(_primaryGameId!);
-  }
-
-  String _gameStatusLabel(String id) {
-    if (_primaryGameId == id) {
-      return AppLocalizations.of(context)!.primaryLabel;
-    }
-    return AppLocalizations.of(context)!.addedLabel;
   }
 
   Future<void> _performHardReset() async {
@@ -374,46 +257,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  l10n.games,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.gamesSubtitle,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFBFAE95),
-                      ),
-                ),
-                const SizedBox(height: 12),
-                if (_loadingGames)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: SizedBox(
-                      height: 16,
-                      width: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  ..._enabledGames.map(
-                    (id) => ListTile(
-                      title: Text(_gameLabel(l10n, id)),
-                      subtitle: Text(_gameStatusLabel(id)),
-                      contentPadding: EdgeInsets.zero,
-                      trailing: TextButton(
-                        onPressed: () => _setPrimaryGame(id),
-                        child: Text(l10n.makePrimary),
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _addGame,
-                  icon: const Icon(Icons.add),
-                  label: Text(l10n.addGame),
-                ),
-                const SizedBox(height: 24),
-                Text(
                   l10n.pro,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
@@ -447,6 +290,24 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     );
                   },
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Info',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'App details.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  title: const Text('App version'),
+                  subtitle: Text(_appVersion),
+                  contentPadding: EdgeInsets.zero,
                 ),
                 const SizedBox(height: 24),
                 Text(

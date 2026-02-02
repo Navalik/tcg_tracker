@@ -9,8 +9,6 @@ class AppSettings {
   static const _prefsKeyCollectionViewMode = 'collection_view_mode';
   static const _prefsKeyBulkType = 'scryfall_bulk_type';
   static const _prefsKeyProUnlocked = 'pro_unlocked';
-  static const _prefsKeyPrimaryGameId = 'primary_game_id';
-  static const _prefsKeyEnabledGames = 'enabled_games';
 
   static const List<String> languageCodes = [
     'en',
@@ -71,35 +69,18 @@ class AppSettings {
 
   static Future<String?> loadBulkType() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefsKeyBulkType);
+    final stored = prefs.getString(_prefsKeyBulkType);
+    if (stored != null && stored.isNotEmpty) {
+      return stored;
+    }
+    const fallback = 'oracle_cards';
+    await prefs.setString(_prefsKeyBulkType, fallback);
+    return fallback;
   }
 
   static Future<void> saveBulkType(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyBulkType, value);
-  }
-
-  static Future<String?> loadPrimaryGameId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefsKeyPrimaryGameId);
-  }
-
-  static Future<void> savePrimaryGameId(String value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKeyPrimaryGameId, value);
-  }
-
-  static Future<List<String>> loadEnabledGames() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList(_prefsKeyEnabledGames) ?? [];
-  }
-
-  static Future<void> saveEnabledGames(List<String> games) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _prefsKeyEnabledGames,
-      games.toSet().toList(),
-    );
   }
 
   static Future<bool> loadProUnlocked() async {
@@ -120,8 +101,6 @@ class AppSettings {
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
     await prefs.remove(_prefsKeyProUnlocked);
-    await prefs.remove(_prefsKeyPrimaryGameId);
-    await prefs.remove(_prefsKeyEnabledGames);
   }
 
   static Future<CollectionViewMode> loadCollectionViewMode() async {

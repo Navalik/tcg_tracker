@@ -5,8 +5,11 @@ class CardSearchResult {
     required this.setCode,
     required this.setName,
     required this.collectorNumber,
+    required this.rarity,
+    required this.typeLine,
+    required this.colors,
+    required this.colorIdentity,
     this.imageUri,
-    this.cardJson,
   });
 
   final String id;
@@ -14,8 +17,11 @@ class CardSearchResult {
   final String setCode;
   final String setName;
   final String collectorNumber;
+  final String rarity;
+  final String typeLine;
+  final String colors;
+  final String colorIdentity;
   final String? imageUri;
-  final String? cardJson;
 
   String get subtitleLabel {
     return _formatSetLabel(
@@ -55,26 +61,50 @@ class CollectionCardEntry {
     required this.name,
     required this.setCode,
     required this.setName,
+    required this.setTotal,
     required this.collectorNumber,
     required this.rarity,
+    required this.typeLine,
+    required this.manaCost,
+    required this.oracleText,
+    required this.manaValue,
+    required this.lang,
+    required this.artist,
+    required this.power,
+    required this.toughness,
+    required this.loyalty,
+    required this.colors,
+    required this.colorIdentity,
+    required this.releasedAt,
     required this.quantity,
     required this.foil,
     required this.altArt,
     this.imageUri,
-    this.cardJson,
   });
 
   final String cardId;
   final String name;
   final String setCode;
   final String setName;
+  final int? setTotal;
   final String collectorNumber;
   final String rarity;
+  final String typeLine;
+  final String manaCost;
+  final String oracleText;
+  final double? manaValue;
+  final String lang;
+  final String artist;
+  final String power;
+  final String toughness;
+  final String loyalty;
+  final String colors;
+  final String colorIdentity;
+  final String releasedAt;
   final int quantity;
   final bool foil;
   final bool altArt;
   final String? imageUri;
-  final String? cardJson;
 
   String get subtitleLabel {
     return _formatSetLabel(
@@ -139,7 +169,6 @@ class CollectionFilter {
   const CollectionFilter({
     this.name,
     this.artist,
-    this.flavor,
     this.manaMin,
     this.manaMax,
     this.sets = const {},
@@ -150,7 +179,6 @@ class CollectionFilter {
 
   final String? name;
   final String? artist;
-  final String? flavor;
   final int? manaMin;
   final int? manaMax;
   final Set<String> sets;
@@ -161,7 +189,6 @@ class CollectionFilter {
   Map<String, dynamic> toJson() => {
         'name': name,
         'artist': artist,
-        'flavor': flavor,
         'manaMin': manaMin,
         'manaMax': manaMax,
         'sets': sets.toList(),
@@ -181,7 +208,6 @@ class CollectionFilter {
     return CollectionFilter(
       name: json['name'] as String?,
       artist: json['artist'] as String?,
-      flavor: json['flavor'] as String?,
       manaMin: json['manaMin'] is int ? json['manaMin'] as int : null,
       manaMax: json['manaMax'] is int ? json['manaMax'] as int : null,
       sets: Set<String>.from(json['sets'] as List? ?? const []),

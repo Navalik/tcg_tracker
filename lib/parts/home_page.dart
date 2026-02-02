@@ -12,7 +12,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
   static const int _freeCollectionLimit = 5;
-  String? _selectedGameId;
   bool _isProUnlocked = false;
   late final PurchaseManager _purchaseManager;
   late final VoidCallback _purchaseListener;
@@ -53,7 +52,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     _purchaseManager.addListener(_purchaseListener);
     unawaited(_purchaseManager.init());
     _isProUnlocked = _purchaseManager.isPro;
-    unawaited(_loadGameSelection());
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
@@ -126,75 +124,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _filterHasCriteria(CollectionFilter filter) {
     return (filter.name?.trim().isNotEmpty ?? false) ||
         (filter.artist?.trim().isNotEmpty ?? false) ||
-        (filter.flavor?.trim().isNotEmpty ?? false) ||
         filter.manaMin != null ||
         filter.manaMax != null ||
         filter.sets.isNotEmpty ||
         filter.rarities.isNotEmpty ||
         filter.colors.isNotEmpty ||
         filter.types.isNotEmpty;
-  }
-
-  Future<void> _loadGameSelection() async {
-    final primary = await AppSettings.loadPrimaryGameId();
-    final enabled = await AppSettings.loadEnabledGames();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selectedGameId = primary;
-    });
-    if (primary == null || primary.isEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _promptInitialGameSelection();
-        }
-      });
-    } else if (!enabled.contains(primary)) {
-      await AppSettings.saveEnabledGames([...enabled, primary]);
-    }
-  }
-
-  Future<void> _promptInitialGameSelection() async {
-    final selected = await showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.chooseYourGameTitle),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: _gameOptions
-                .map(
-                  (option) => ListTile(
-                    title: Text(option.name),
-                    subtitle: Text(_gameDescription(l10n, option.id)),
-                    onTap: () => Navigator.of(context).pop(option.id),
-                  ),
-                )
-                .toList(),
-          ),
-        );
-      },
-    );
-    if (selected == null || selected.isEmpty) {
-      return;
-    }
-    await _setPrimaryGame(selected);
-  }
-
-  Future<void> _setPrimaryGame(String id) async {
-    final enabled = await AppSettings.loadEnabledGames();
-    final updated = enabled.contains(id) ? enabled : [...enabled, id];
-    await AppSettings.saveEnabledGames(updated);
-    await AppSettings.savePrimaryGameId(id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selectedGameId = id;
-    });
   }
 
   Future<void> _showCollectionLimitDialog() async {
@@ -296,6 +231,35 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final collections = await ScryfallDatabase.instance.fetchCollections();
     final owned = await ScryfallDatabase.instance.countOwnedCards();
     if (!mounted) {
+      return;
+    }
+    final hasAllCards = collections
+        .any((collection) => collection.name == _allCardsCollectionName);
+    if (!hasAllCards) {
+      final id =
+          await ScryfallDatabase.instance.addCollection(
+            _allCardsCollectionName,
+            type: CollectionType.all,
+          );
+      if (!mounted) {
+        return;
+      }
+      final updated = [
+        CollectionInfo(
+          id: id,
+          name: _allCardsCollectionName,
+          cardCount: owned,
+          type: CollectionType.all,
+          filter: null,
+        ),
+        ...collections,
+      ];
+      setState(() {
+        _collections
+          ..clear()
+          ..addAll(updated);
+        _totalCardCount = owned;
+      });
       return;
     }
     if (collections.isEmpty) {
@@ -604,6 +568,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         AppLocalizations.of(context)!.scryfallBulkUpdateAvailable,
       );
     }
+    await _maybeStartBulkDownload();
   }
 
   Future<void> _checkCardsInstalled() async {
@@ -613,16 +578,29 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (count > 0) {
+      final needsReimport =
+          await ScryfallDatabase.instance.needsLightReimport();
+      if (!mounted) {
+        return;
+      }
+      if (!needsReimport) {
+        setState(() {
+          _cardsMissing = false;
+          _totalCardCount = owned;
+        });
+        return;
+      }
       setState(() {
-        _cardsMissing = false;
+        _cardsMissing = true;
         _totalCardCount = owned;
       });
-      return;
     }
-    setState(() {
-      _cardsMissing = true;
-      _totalCardCount = owned;
-    });
+    if (count == 0) {
+      setState(() {
+        _cardsMissing = true;
+        _totalCardCount = owned;
+      });
+    }
     final bulkType = _selectedBulkType;
     if (bulkType == null) {
       return;
@@ -637,6 +615,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkUpdatedAtRaw = result.updatedAtRaw ?? _bulkUpdatedAtRaw;
       _bulkUpdateAvailable = true;
     });
+    await _maybeStartBulkDownload();
+  }
+
+  Future<void> _maybeStartBulkDownload() async {
+    if (_bulkDownloading || _bulkImporting) {
+      return;
+    }
+    if (_bulkDownloadUri == null) {
+      return;
+    }
+    if (!_cardsMissing && !_bulkUpdateAvailable) {
+      return;
+    }
+    await _downloadBulkFile(_bulkDownloadUri!);
   }
 
   Future<void> _addCollection(BuildContext context) async {
@@ -1651,16 +1643,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           icon: const Icon(Icons.cloud_download, size: 18),
                           label: Text(l10n.importNow),
                         ),
-                      if (_selectedGameId != null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          l10n.gameLabel(_gameLabel(l10n, _selectedGameId)),
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: const Color(0xFFBFAE95),
-                                  ),
-                        ),
-                      ],
                       if (_bulkDownloading || _bulkImporting)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -1975,7 +1957,6 @@ class _CollectionFilterBuilderPageState
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _artistController = TextEditingController();
-  final TextEditingController _flavorController = TextEditingController();
   final TextEditingController _manaMinController = TextEditingController();
   final TextEditingController _manaMaxController = TextEditingController();
 
@@ -2005,7 +1986,6 @@ class _CollectionFilterBuilderPageState
     if (initial != null) {
       _nameController.text = initial.name ?? '';
       _artistController.text = initial.artist ?? '';
-      _flavorController.text = initial.flavor ?? '';
       if (initial.manaMin != null) {
         _manaMinController.text = initial.manaMin.toString();
       }
@@ -2027,7 +2007,6 @@ class _CollectionFilterBuilderPageState
     _artistDebounce?.cancel();
     _nameController.dispose();
     _artistController.dispose();
-    _flavorController.dispose();
     _manaMinController.dispose();
     _manaMaxController.dispose();
     super.dispose();
@@ -2089,11 +2068,9 @@ class _CollectionFilterBuilderPageState
     }
     final name = _nameController.text.trim();
     final artist = _artistController.text.trim();
-    final flavor = _flavorController.text.trim();
     return CollectionFilter(
       name: name.isEmpty ? null : name,
       artist: artist.isEmpty ? null : artist,
-      flavor: flavor.isEmpty ? null : flavor,
       manaMin: minValue,
       manaMax: maxValue,
       sets: _selectedSets,
@@ -2106,7 +2083,6 @@ class _CollectionFilterBuilderPageState
   bool _hasCriteria(CollectionFilter filter) {
     return (filter.name?.trim().isNotEmpty ?? false) ||
         (filter.artist?.trim().isNotEmpty ?? false) ||
-        (filter.flavor?.trim().isNotEmpty ?? false) ||
         filter.manaMin != null ||
         filter.manaMax != null ||
         filter.sets.isNotEmpty ||
@@ -2473,20 +2449,6 @@ class _CollectionFilterBuilderPageState
               ),
           ],
           const SizedBox(height: 16),
-          Text(
-            l10n.flavorText,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _flavorController,
-            decoration: InputDecoration(
-              hintText: l10n.typeFlavorTextHint,
-              prefixIcon: const Icon(Icons.format_quote),
-            ),
-            onChanged: (_) => _schedulePreviewUpdate(),
-          ),
-          const SizedBox(height: 20),
           Text(
             l10n.cardCount(_previewTotal ?? 0),
             style: Theme.of(context).textTheme.titleSmall,

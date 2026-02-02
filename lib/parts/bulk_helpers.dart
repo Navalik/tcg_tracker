@@ -8,16 +8,6 @@ class _BulkOption {
   final String type;
 }
 
-class _GameOption {
-  const _GameOption({
-    required this.id,
-    required this.name,
-  });
-
-  final String id;
-  final String name;
-}
-
 const String _allCardsCollectionName = 'All cards';
 const String _legacyMyCollectionName = 'My collection';
 const String _setPrefix = 'Set: ';
@@ -34,20 +24,6 @@ const List<_BulkOption> _bulkOptions = [
   ),
 ];
 
-const List<_GameOption> _gameOptions = [
-  _GameOption(
-    id: 'pokemon',
-    name: 'Pokemon',
-  ),
-  _GameOption(
-    id: 'magic',
-    name: 'Magic',
-  ),
-  _GameOption(
-    id: 'yugioh',
-    name: 'Yu-Gi-Oh',
-  ),
-];
 
 String _bulkTypeLabel(AppLocalizations l10n, String? type) {
   if (type == null) {
@@ -90,31 +66,6 @@ String _bulkTypeDescription(AppLocalizations l10n, String type) {
 String _bulkTypeFileName(String type) {
   final sanitized = type.replaceAll(RegExp(r'[^a-z0-9_]+'), '_');
   return 'scryfall_$sanitized.json';
-}
-
-String _gameLabel(AppLocalizations l10n, String? id) {
-  if (id == null || id.isEmpty) {
-    return l10n.notSelected;
-  }
-  for (final option in _gameOptions) {
-    if (option.id == id) {
-      return option.name;
-    }
-  }
-  return id;
-}
-
-String _gameDescription(AppLocalizations l10n, String id) {
-  switch (id) {
-    case 'pokemon':
-      return l10n.gamePokemonDescription;
-    case 'magic':
-      return l10n.gameMagicDescription;
-    case 'yugioh':
-      return l10n.gameYugiohDescription;
-    default:
-      return '';
-  }
 }
 
 Future<String?> _showBulkTypePicker(

@@ -41,10 +41,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   late final AnimationController _previewController;
   late final Animation<double> _previewOpacity;
   late final Animation<double> _previewScale;
-  final Map<String, Map<String, dynamic>?> _cardJsonCache = {};
   bool _searching = false;
   String _artistQuery = '';
-  String _flavorQuery = '';
   String? _pendingQuery;
   bool _pendingFilterRefresh = false;
   final Set<String> _selectedRarities = {};
@@ -121,7 +119,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _searching = true;
     _offset = 0;
     _hasMore = true;
-    _cardJsonCache.clear();
     setState(() {
       _loading = true;
       _loadingMore = false;
@@ -245,11 +242,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   CollectionFilter _buildAdvancedFilter() {
     final artist = _artistQuery.trim();
-    final flavor = _flavorQuery.trim();
     return CollectionFilter(
       name: null,
       artist: artist.isEmpty ? null : artist,
-      flavor: flavor.isEmpty ? null : flavor,
       manaMin: _manaValueMin,
       manaMax: _manaValueMax,
       sets: _selectedSetCodes,
@@ -291,27 +286,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   String _resultRarity(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final value = data?['rarity']?.toString().trim().toLowerCase() ?? '';
-    return value;
+    return card.rarity.trim().toLowerCase();
   }
 
   Set<String> _resultColors(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final colors = (data?['colors'] as List?)?.whereType<String>().toList() ??
-        (data?['color_identity'] as List?)
-            ?.whereType<String>()
-            .toList() ??
-        <String>[];
-    if (colors.isEmpty) {
-      return {'C'};
-    }
-    return colors.map((code) => code.toUpperCase()).toSet();
+    return _parseColorSet(card.colors, card.colorIdentity);
   }
 
   Set<String> _resultTypes(CardSearchResult card) {
-    final data = _decodeCardJson(card.cardJson);
-    final typeLine = data?['type_line']?.toString() ?? '';
+    final typeLine = card.typeLine;
     if (typeLine.isEmpty) {
       return {};
     }
@@ -335,34 +318,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return matches;
   }
 
-  Map<String, dynamic>? _decodeCardJson(String? raw) {
-    if (raw == null || raw.isEmpty) {
-      return null;
-    }
-    final cached = _cardJsonCache[raw];
-    if (cached != null || _cardJsonCache.containsKey(raw)) {
-      return cached;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        _cardJsonCache[raw] = decoded;
-        return decoded;
-      }
-    } catch (_) {
-      // Ignore invalid JSON and cache the miss to avoid repeated work.
-    }
-    _cardJsonCache[raw] = null;
-    return null;
-  }
-
   bool _hasActiveAdvancedFilters() {
     return _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _artistQuery.trim().isNotEmpty ||
-        _flavorQuery.trim().isNotEmpty ||
         _manaValueMin != null ||
         _manaValueMax != null;
   }
@@ -372,8 +333,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedSetCodes.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
-        _artistQuery.trim().isNotEmpty ||
-        _flavorQuery.trim().isNotEmpty;
+        _artistQuery.trim().isNotEmpty;
   }
 
   String _colorLabel(String code) {
@@ -460,7 +420,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final tempTypes = _selectedTypes.toSet();
     final nameController = TextEditingController(text: _query);
     final artistController = TextEditingController(text: _artistQuery);
-    final flavorController = TextEditingController(text: _flavorQuery);
     List<String> artistSuggestions = [];
     bool loadingArtists = false;
     Timer? artistDebounce;
@@ -775,19 +734,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           ),
                         ),
                     ],
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.flavorText,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: flavorController,
-                      decoration: InputDecoration(
-                        hintText: l10n.typeFlavorTextHint,
-                        prefixIcon: const Icon(Icons.format_quote),
-                      ),
-                    ),
                     if (sortedRarities.isEmpty &&
                         sortedSets.isEmpty &&
                         sortedColors.isEmpty &&
@@ -807,7 +753,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               tempTypes.clear();
                               nameController.clear();
                               artistController.clear();
-                              flavorController.clear();
                               artistSuggestions = [];
                               loadingArtists = false;
                               minController.clear();
@@ -862,7 +807,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         ..clear()
         ..addAll(tempTypes);
       _artistQuery = artistController.text.trim();
-      _flavorQuery = flavorController.text.trim();
       _manaValueMin = minValue;
       _manaValueMax = maxValue;
     });

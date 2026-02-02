@@ -48,6 +48,28 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _setNameMeta = const VerificationMeta(
+    'setName',
+  );
+  @override
+  late final GeneratedColumn<String> setName = GeneratedColumn<String>(
+    'set_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _setTotalMeta = const VerificationMeta(
+    'setTotal',
+  );
+  @override
+  late final GeneratedColumn<int> setTotal = GeneratedColumn<int>(
+    'set_total',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _collectorNumberMeta = const VerificationMeta(
     'collectorNumber',
   );
@@ -85,6 +107,86 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
   @override
   late final GeneratedColumn<String> manaCost = GeneratedColumn<String>(
     'mana_cost',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _oracleTextMeta = const VerificationMeta(
+    'oracleText',
+  );
+  @override
+  late final GeneratedColumn<String> oracleText = GeneratedColumn<String>(
+    'oracle_text',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cmcMeta = const VerificationMeta('cmc');
+  @override
+  late final GeneratedColumn<double> cmc = GeneratedColumn<double>(
+    'cmc',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorsMeta = const VerificationMeta('colors');
+  @override
+  late final GeneratedColumn<String> colors = GeneratedColumn<String>(
+    'colors',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorIdentityMeta = const VerificationMeta(
+    'colorIdentity',
+  );
+  @override
+  late final GeneratedColumn<String> colorIdentity = GeneratedColumn<String>(
+    'color_identity',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _artistMeta = const VerificationMeta('artist');
+  @override
+  late final GeneratedColumn<String> artist = GeneratedColumn<String>(
+    'artist',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _powerMeta = const VerificationMeta('power');
+  @override
+  late final GeneratedColumn<String> power = GeneratedColumn<String>(
+    'power',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _toughnessMeta = const VerificationMeta(
+    'toughness',
+  );
+  @override
+  late final GeneratedColumn<String> toughness = GeneratedColumn<String>(
+    'toughness',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _loyaltyMeta = const VerificationMeta(
+    'loyalty',
+  );
+  @override
+  late final GeneratedColumn<String> loyalty = GeneratedColumn<String>(
+    'loyalty',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -149,10 +251,20 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     oracleId,
     name,
     setCode,
+    setName,
+    setTotal,
     collectorNumber,
     rarity,
     typeLine,
     manaCost,
+    oracleText,
+    cmc,
+    colors,
+    colorIdentity,
+    artist,
+    power,
+    toughness,
+    loyalty,
     lang,
     releasedAt,
     imageUris,
@@ -196,6 +308,18 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         setCode.isAcceptableOrUnknown(data['set_code']!, _setCodeMeta),
       );
     }
+    if (data.containsKey('set_name')) {
+      context.handle(
+        _setNameMeta,
+        setName.isAcceptableOrUnknown(data['set_name']!, _setNameMeta),
+      );
+    }
+    if (data.containsKey('set_total')) {
+      context.handle(
+        _setTotalMeta,
+        setTotal.isAcceptableOrUnknown(data['set_total']!, _setTotalMeta),
+      );
+    }
     if (data.containsKey('collector_number')) {
       context.handle(
         _collectorNumberMeta,
@@ -221,6 +345,57 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
       context.handle(
         _manaCostMeta,
         manaCost.isAcceptableOrUnknown(data['mana_cost']!, _manaCostMeta),
+      );
+    }
+    if (data.containsKey('oracle_text')) {
+      context.handle(
+        _oracleTextMeta,
+        oracleText.isAcceptableOrUnknown(data['oracle_text']!, _oracleTextMeta),
+      );
+    }
+    if (data.containsKey('cmc')) {
+      context.handle(
+        _cmcMeta,
+        cmc.isAcceptableOrUnknown(data['cmc']!, _cmcMeta),
+      );
+    }
+    if (data.containsKey('colors')) {
+      context.handle(
+        _colorsMeta,
+        colors.isAcceptableOrUnknown(data['colors']!, _colorsMeta),
+      );
+    }
+    if (data.containsKey('color_identity')) {
+      context.handle(
+        _colorIdentityMeta,
+        colorIdentity.isAcceptableOrUnknown(
+          data['color_identity']!,
+          _colorIdentityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('artist')) {
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
+    }
+    if (data.containsKey('power')) {
+      context.handle(
+        _powerMeta,
+        power.isAcceptableOrUnknown(data['power']!, _powerMeta),
+      );
+    }
+    if (data.containsKey('toughness')) {
+      context.handle(
+        _toughnessMeta,
+        toughness.isAcceptableOrUnknown(data['toughness']!, _toughnessMeta),
+      );
+    }
+    if (data.containsKey('loyalty')) {
+      context.handle(
+        _loyaltyMeta,
+        loyalty.isAcceptableOrUnknown(data['loyalty']!, _loyaltyMeta),
       );
     }
     if (data.containsKey('lang')) {
@@ -278,6 +453,14 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         DriftSqlType.string,
         data['${effectivePrefix}set_code'],
       ),
+      setName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}set_name'],
+      ),
+      setTotal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}set_total'],
+      ),
       collectorNumber: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}collector_number'],
@@ -293,6 +476,38 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
       manaCost: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}mana_cost'],
+      ),
+      oracleText: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}oracle_text'],
+      ),
+      cmc: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}cmc'],
+      ),
+      colors: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}colors'],
+      ),
+      colorIdentity: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color_identity'],
+      ),
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      ),
+      power: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}power'],
+      ),
+      toughness: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}toughness'],
+      ),
+      loyalty: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}loyalty'],
       ),
       lang: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -328,10 +543,20 @@ class Card extends DataClass implements Insertable<Card> {
   final String? oracleId;
   final String name;
   final String? setCode;
+  final String? setName;
+  final int? setTotal;
   final String? collectorNumber;
   final String? rarity;
   final String? typeLine;
   final String? manaCost;
+  final String? oracleText;
+  final double? cmc;
+  final String? colors;
+  final String? colorIdentity;
+  final String? artist;
+  final String? power;
+  final String? toughness;
+  final String? loyalty;
   final String? lang;
   final String? releasedAt;
   final String? imageUris;
@@ -342,10 +567,20 @@ class Card extends DataClass implements Insertable<Card> {
     this.oracleId,
     required this.name,
     this.setCode,
+    this.setName,
+    this.setTotal,
     this.collectorNumber,
     this.rarity,
     this.typeLine,
     this.manaCost,
+    this.oracleText,
+    this.cmc,
+    this.colors,
+    this.colorIdentity,
+    this.artist,
+    this.power,
+    this.toughness,
+    this.loyalty,
     this.lang,
     this.releasedAt,
     this.imageUris,
@@ -363,6 +598,12 @@ class Card extends DataClass implements Insertable<Card> {
     if (!nullToAbsent || setCode != null) {
       map['set_code'] = Variable<String>(setCode);
     }
+    if (!nullToAbsent || setName != null) {
+      map['set_name'] = Variable<String>(setName);
+    }
+    if (!nullToAbsent || setTotal != null) {
+      map['set_total'] = Variable<int>(setTotal);
+    }
     if (!nullToAbsent || collectorNumber != null) {
       map['collector_number'] = Variable<String>(collectorNumber);
     }
@@ -374,6 +615,30 @@ class Card extends DataClass implements Insertable<Card> {
     }
     if (!nullToAbsent || manaCost != null) {
       map['mana_cost'] = Variable<String>(manaCost);
+    }
+    if (!nullToAbsent || oracleText != null) {
+      map['oracle_text'] = Variable<String>(oracleText);
+    }
+    if (!nullToAbsent || cmc != null) {
+      map['cmc'] = Variable<double>(cmc);
+    }
+    if (!nullToAbsent || colors != null) {
+      map['colors'] = Variable<String>(colors);
+    }
+    if (!nullToAbsent || colorIdentity != null) {
+      map['color_identity'] = Variable<String>(colorIdentity);
+    }
+    if (!nullToAbsent || artist != null) {
+      map['artist'] = Variable<String>(artist);
+    }
+    if (!nullToAbsent || power != null) {
+      map['power'] = Variable<String>(power);
+    }
+    if (!nullToAbsent || toughness != null) {
+      map['toughness'] = Variable<String>(toughness);
+    }
+    if (!nullToAbsent || loyalty != null) {
+      map['loyalty'] = Variable<String>(loyalty);
     }
     if (!nullToAbsent || lang != null) {
       map['lang'] = Variable<String>(lang);
@@ -403,6 +668,12 @@ class Card extends DataClass implements Insertable<Card> {
       setCode: setCode == null && nullToAbsent
           ? const Value.absent()
           : Value(setCode),
+      setName: setName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(setName),
+      setTotal: setTotal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(setTotal),
       collectorNumber: collectorNumber == null && nullToAbsent
           ? const Value.absent()
           : Value(collectorNumber),
@@ -415,6 +686,28 @@ class Card extends DataClass implements Insertable<Card> {
       manaCost: manaCost == null && nullToAbsent
           ? const Value.absent()
           : Value(manaCost),
+      oracleText: oracleText == null && nullToAbsent
+          ? const Value.absent()
+          : Value(oracleText),
+      cmc: cmc == null && nullToAbsent ? const Value.absent() : Value(cmc),
+      colors: colors == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colors),
+      colorIdentity: colorIdentity == null && nullToAbsent
+          ? const Value.absent()
+          : Value(colorIdentity),
+      artist: artist == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artist),
+      power: power == null && nullToAbsent
+          ? const Value.absent()
+          : Value(power),
+      toughness: toughness == null && nullToAbsent
+          ? const Value.absent()
+          : Value(toughness),
+      loyalty: loyalty == null && nullToAbsent
+          ? const Value.absent()
+          : Value(loyalty),
       lang: lang == null && nullToAbsent ? const Value.absent() : Value(lang),
       releasedAt: releasedAt == null && nullToAbsent
           ? const Value.absent()
@@ -441,10 +734,20 @@ class Card extends DataClass implements Insertable<Card> {
       oracleId: serializer.fromJson<String?>(json['oracleId']),
       name: serializer.fromJson<String>(json['name']),
       setCode: serializer.fromJson<String?>(json['setCode']),
+      setName: serializer.fromJson<String?>(json['setName']),
+      setTotal: serializer.fromJson<int?>(json['setTotal']),
       collectorNumber: serializer.fromJson<String?>(json['collectorNumber']),
       rarity: serializer.fromJson<String?>(json['rarity']),
       typeLine: serializer.fromJson<String?>(json['typeLine']),
       manaCost: serializer.fromJson<String?>(json['manaCost']),
+      oracleText: serializer.fromJson<String?>(json['oracleText']),
+      cmc: serializer.fromJson<double?>(json['cmc']),
+      colors: serializer.fromJson<String?>(json['colors']),
+      colorIdentity: serializer.fromJson<String?>(json['colorIdentity']),
+      artist: serializer.fromJson<String?>(json['artist']),
+      power: serializer.fromJson<String?>(json['power']),
+      toughness: serializer.fromJson<String?>(json['toughness']),
+      loyalty: serializer.fromJson<String?>(json['loyalty']),
       lang: serializer.fromJson<String?>(json['lang']),
       releasedAt: serializer.fromJson<String?>(json['releasedAt']),
       imageUris: serializer.fromJson<String?>(json['imageUris']),
@@ -460,10 +763,20 @@ class Card extends DataClass implements Insertable<Card> {
       'oracleId': serializer.toJson<String?>(oracleId),
       'name': serializer.toJson<String>(name),
       'setCode': serializer.toJson<String?>(setCode),
+      'setName': serializer.toJson<String?>(setName),
+      'setTotal': serializer.toJson<int?>(setTotal),
       'collectorNumber': serializer.toJson<String?>(collectorNumber),
       'rarity': serializer.toJson<String?>(rarity),
       'typeLine': serializer.toJson<String?>(typeLine),
       'manaCost': serializer.toJson<String?>(manaCost),
+      'oracleText': serializer.toJson<String?>(oracleText),
+      'cmc': serializer.toJson<double?>(cmc),
+      'colors': serializer.toJson<String?>(colors),
+      'colorIdentity': serializer.toJson<String?>(colorIdentity),
+      'artist': serializer.toJson<String?>(artist),
+      'power': serializer.toJson<String?>(power),
+      'toughness': serializer.toJson<String?>(toughness),
+      'loyalty': serializer.toJson<String?>(loyalty),
       'lang': serializer.toJson<String?>(lang),
       'releasedAt': serializer.toJson<String?>(releasedAt),
       'imageUris': serializer.toJson<String?>(imageUris),
@@ -477,10 +790,20 @@ class Card extends DataClass implements Insertable<Card> {
     Value<String?> oracleId = const Value.absent(),
     String? name,
     Value<String?> setCode = const Value.absent(),
+    Value<String?> setName = const Value.absent(),
+    Value<int?> setTotal = const Value.absent(),
     Value<String?> collectorNumber = const Value.absent(),
     Value<String?> rarity = const Value.absent(),
     Value<String?> typeLine = const Value.absent(),
     Value<String?> manaCost = const Value.absent(),
+    Value<String?> oracleText = const Value.absent(),
+    Value<double?> cmc = const Value.absent(),
+    Value<String?> colors = const Value.absent(),
+    Value<String?> colorIdentity = const Value.absent(),
+    Value<String?> artist = const Value.absent(),
+    Value<String?> power = const Value.absent(),
+    Value<String?> toughness = const Value.absent(),
+    Value<String?> loyalty = const Value.absent(),
     Value<String?> lang = const Value.absent(),
     Value<String?> releasedAt = const Value.absent(),
     Value<String?> imageUris = const Value.absent(),
@@ -491,12 +814,24 @@ class Card extends DataClass implements Insertable<Card> {
     oracleId: oracleId.present ? oracleId.value : this.oracleId,
     name: name ?? this.name,
     setCode: setCode.present ? setCode.value : this.setCode,
+    setName: setName.present ? setName.value : this.setName,
+    setTotal: setTotal.present ? setTotal.value : this.setTotal,
     collectorNumber: collectorNumber.present
         ? collectorNumber.value
         : this.collectorNumber,
     rarity: rarity.present ? rarity.value : this.rarity,
     typeLine: typeLine.present ? typeLine.value : this.typeLine,
     manaCost: manaCost.present ? manaCost.value : this.manaCost,
+    oracleText: oracleText.present ? oracleText.value : this.oracleText,
+    cmc: cmc.present ? cmc.value : this.cmc,
+    colors: colors.present ? colors.value : this.colors,
+    colorIdentity: colorIdentity.present
+        ? colorIdentity.value
+        : this.colorIdentity,
+    artist: artist.present ? artist.value : this.artist,
+    power: power.present ? power.value : this.power,
+    toughness: toughness.present ? toughness.value : this.toughness,
+    loyalty: loyalty.present ? loyalty.value : this.loyalty,
     lang: lang.present ? lang.value : this.lang,
     releasedAt: releasedAt.present ? releasedAt.value : this.releasedAt,
     imageUris: imageUris.present ? imageUris.value : this.imageUris,
@@ -509,12 +844,26 @@ class Card extends DataClass implements Insertable<Card> {
       oracleId: data.oracleId.present ? data.oracleId.value : this.oracleId,
       name: data.name.present ? data.name.value : this.name,
       setCode: data.setCode.present ? data.setCode.value : this.setCode,
+      setName: data.setName.present ? data.setName.value : this.setName,
+      setTotal: data.setTotal.present ? data.setTotal.value : this.setTotal,
       collectorNumber: data.collectorNumber.present
           ? data.collectorNumber.value
           : this.collectorNumber,
       rarity: data.rarity.present ? data.rarity.value : this.rarity,
       typeLine: data.typeLine.present ? data.typeLine.value : this.typeLine,
       manaCost: data.manaCost.present ? data.manaCost.value : this.manaCost,
+      oracleText: data.oracleText.present
+          ? data.oracleText.value
+          : this.oracleText,
+      cmc: data.cmc.present ? data.cmc.value : this.cmc,
+      colors: data.colors.present ? data.colors.value : this.colors,
+      colorIdentity: data.colorIdentity.present
+          ? data.colorIdentity.value
+          : this.colorIdentity,
+      artist: data.artist.present ? data.artist.value : this.artist,
+      power: data.power.present ? data.power.value : this.power,
+      toughness: data.toughness.present ? data.toughness.value : this.toughness,
+      loyalty: data.loyalty.present ? data.loyalty.value : this.loyalty,
       lang: data.lang.present ? data.lang.value : this.lang,
       releasedAt: data.releasedAt.present
           ? data.releasedAt.value
@@ -532,10 +881,20 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('oracleId: $oracleId, ')
           ..write('name: $name, ')
           ..write('setCode: $setCode, ')
+          ..write('setName: $setName, ')
+          ..write('setTotal: $setTotal, ')
           ..write('collectorNumber: $collectorNumber, ')
           ..write('rarity: $rarity, ')
           ..write('typeLine: $typeLine, ')
           ..write('manaCost: $manaCost, ')
+          ..write('oracleText: $oracleText, ')
+          ..write('cmc: $cmc, ')
+          ..write('colors: $colors, ')
+          ..write('colorIdentity: $colorIdentity, ')
+          ..write('artist: $artist, ')
+          ..write('power: $power, ')
+          ..write('toughness: $toughness, ')
+          ..write('loyalty: $loyalty, ')
           ..write('lang: $lang, ')
           ..write('releasedAt: $releasedAt, ')
           ..write('imageUris: $imageUris, ')
@@ -546,21 +905,31 @@ class Card extends DataClass implements Insertable<Card> {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     oracleId,
     name,
     setCode,
+    setName,
+    setTotal,
     collectorNumber,
     rarity,
     typeLine,
     manaCost,
+    oracleText,
+    cmc,
+    colors,
+    colorIdentity,
+    artist,
+    power,
+    toughness,
+    loyalty,
     lang,
     releasedAt,
     imageUris,
     cardFaces,
     cardJson,
-  );
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -569,10 +938,20 @@ class Card extends DataClass implements Insertable<Card> {
           other.oracleId == this.oracleId &&
           other.name == this.name &&
           other.setCode == this.setCode &&
+          other.setName == this.setName &&
+          other.setTotal == this.setTotal &&
           other.collectorNumber == this.collectorNumber &&
           other.rarity == this.rarity &&
           other.typeLine == this.typeLine &&
           other.manaCost == this.manaCost &&
+          other.oracleText == this.oracleText &&
+          other.cmc == this.cmc &&
+          other.colors == this.colors &&
+          other.colorIdentity == this.colorIdentity &&
+          other.artist == this.artist &&
+          other.power == this.power &&
+          other.toughness == this.toughness &&
+          other.loyalty == this.loyalty &&
           other.lang == this.lang &&
           other.releasedAt == this.releasedAt &&
           other.imageUris == this.imageUris &&
@@ -585,10 +964,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> oracleId;
   final Value<String> name;
   final Value<String?> setCode;
+  final Value<String?> setName;
+  final Value<int?> setTotal;
   final Value<String?> collectorNumber;
   final Value<String?> rarity;
   final Value<String?> typeLine;
   final Value<String?> manaCost;
+  final Value<String?> oracleText;
+  final Value<double?> cmc;
+  final Value<String?> colors;
+  final Value<String?> colorIdentity;
+  final Value<String?> artist;
+  final Value<String?> power;
+  final Value<String?> toughness;
+  final Value<String?> loyalty;
   final Value<String?> lang;
   final Value<String?> releasedAt;
   final Value<String?> imageUris;
@@ -600,10 +989,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.oracleId = const Value.absent(),
     this.name = const Value.absent(),
     this.setCode = const Value.absent(),
+    this.setName = const Value.absent(),
+    this.setTotal = const Value.absent(),
     this.collectorNumber = const Value.absent(),
     this.rarity = const Value.absent(),
     this.typeLine = const Value.absent(),
     this.manaCost = const Value.absent(),
+    this.oracleText = const Value.absent(),
+    this.cmc = const Value.absent(),
+    this.colors = const Value.absent(),
+    this.colorIdentity = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.power = const Value.absent(),
+    this.toughness = const Value.absent(),
+    this.loyalty = const Value.absent(),
     this.lang = const Value.absent(),
     this.releasedAt = const Value.absent(),
     this.imageUris = const Value.absent(),
@@ -616,10 +1015,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.oracleId = const Value.absent(),
     required String name,
     this.setCode = const Value.absent(),
+    this.setName = const Value.absent(),
+    this.setTotal = const Value.absent(),
     this.collectorNumber = const Value.absent(),
     this.rarity = const Value.absent(),
     this.typeLine = const Value.absent(),
     this.manaCost = const Value.absent(),
+    this.oracleText = const Value.absent(),
+    this.cmc = const Value.absent(),
+    this.colors = const Value.absent(),
+    this.colorIdentity = const Value.absent(),
+    this.artist = const Value.absent(),
+    this.power = const Value.absent(),
+    this.toughness = const Value.absent(),
+    this.loyalty = const Value.absent(),
     this.lang = const Value.absent(),
     this.releasedAt = const Value.absent(),
     this.imageUris = const Value.absent(),
@@ -633,10 +1042,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? oracleId,
     Expression<String>? name,
     Expression<String>? setCode,
+    Expression<String>? setName,
+    Expression<int>? setTotal,
     Expression<String>? collectorNumber,
     Expression<String>? rarity,
     Expression<String>? typeLine,
     Expression<String>? manaCost,
+    Expression<String>? oracleText,
+    Expression<double>? cmc,
+    Expression<String>? colors,
+    Expression<String>? colorIdentity,
+    Expression<String>? artist,
+    Expression<String>? power,
+    Expression<String>? toughness,
+    Expression<String>? loyalty,
     Expression<String>? lang,
     Expression<String>? releasedAt,
     Expression<String>? imageUris,
@@ -649,10 +1068,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (oracleId != null) 'oracle_id': oracleId,
       if (name != null) 'name': name,
       if (setCode != null) 'set_code': setCode,
+      if (setName != null) 'set_name': setName,
+      if (setTotal != null) 'set_total': setTotal,
       if (collectorNumber != null) 'collector_number': collectorNumber,
       if (rarity != null) 'rarity': rarity,
       if (typeLine != null) 'type_line': typeLine,
       if (manaCost != null) 'mana_cost': manaCost,
+      if (oracleText != null) 'oracle_text': oracleText,
+      if (cmc != null) 'cmc': cmc,
+      if (colors != null) 'colors': colors,
+      if (colorIdentity != null) 'color_identity': colorIdentity,
+      if (artist != null) 'artist': artist,
+      if (power != null) 'power': power,
+      if (toughness != null) 'toughness': toughness,
+      if (loyalty != null) 'loyalty': loyalty,
       if (lang != null) 'lang': lang,
       if (releasedAt != null) 'released_at': releasedAt,
       if (imageUris != null) 'image_uris': imageUris,
@@ -667,10 +1096,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Value<String?>? oracleId,
     Value<String>? name,
     Value<String?>? setCode,
+    Value<String?>? setName,
+    Value<int?>? setTotal,
     Value<String?>? collectorNumber,
     Value<String?>? rarity,
     Value<String?>? typeLine,
     Value<String?>? manaCost,
+    Value<String?>? oracleText,
+    Value<double?>? cmc,
+    Value<String?>? colors,
+    Value<String?>? colorIdentity,
+    Value<String?>? artist,
+    Value<String?>? power,
+    Value<String?>? toughness,
+    Value<String?>? loyalty,
     Value<String?>? lang,
     Value<String?>? releasedAt,
     Value<String?>? imageUris,
@@ -683,10 +1122,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
       oracleId: oracleId ?? this.oracleId,
       name: name ?? this.name,
       setCode: setCode ?? this.setCode,
+      setName: setName ?? this.setName,
+      setTotal: setTotal ?? this.setTotal,
       collectorNumber: collectorNumber ?? this.collectorNumber,
       rarity: rarity ?? this.rarity,
       typeLine: typeLine ?? this.typeLine,
       manaCost: manaCost ?? this.manaCost,
+      oracleText: oracleText ?? this.oracleText,
+      cmc: cmc ?? this.cmc,
+      colors: colors ?? this.colors,
+      colorIdentity: colorIdentity ?? this.colorIdentity,
+      artist: artist ?? this.artist,
+      power: power ?? this.power,
+      toughness: toughness ?? this.toughness,
+      loyalty: loyalty ?? this.loyalty,
       lang: lang ?? this.lang,
       releasedAt: releasedAt ?? this.releasedAt,
       imageUris: imageUris ?? this.imageUris,
@@ -711,6 +1160,12 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (setCode.present) {
       map['set_code'] = Variable<String>(setCode.value);
     }
+    if (setName.present) {
+      map['set_name'] = Variable<String>(setName.value);
+    }
+    if (setTotal.present) {
+      map['set_total'] = Variable<int>(setTotal.value);
+    }
     if (collectorNumber.present) {
       map['collector_number'] = Variable<String>(collectorNumber.value);
     }
@@ -722,6 +1177,30 @@ class CardsCompanion extends UpdateCompanion<Card> {
     }
     if (manaCost.present) {
       map['mana_cost'] = Variable<String>(manaCost.value);
+    }
+    if (oracleText.present) {
+      map['oracle_text'] = Variable<String>(oracleText.value);
+    }
+    if (cmc.present) {
+      map['cmc'] = Variable<double>(cmc.value);
+    }
+    if (colors.present) {
+      map['colors'] = Variable<String>(colors.value);
+    }
+    if (colorIdentity.present) {
+      map['color_identity'] = Variable<String>(colorIdentity.value);
+    }
+    if (artist.present) {
+      map['artist'] = Variable<String>(artist.value);
+    }
+    if (power.present) {
+      map['power'] = Variable<String>(power.value);
+    }
+    if (toughness.present) {
+      map['toughness'] = Variable<String>(toughness.value);
+    }
+    if (loyalty.present) {
+      map['loyalty'] = Variable<String>(loyalty.value);
     }
     if (lang.present) {
       map['lang'] = Variable<String>(lang.value);
@@ -751,10 +1230,20 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('oracleId: $oracleId, ')
           ..write('name: $name, ')
           ..write('setCode: $setCode, ')
+          ..write('setName: $setName, ')
+          ..write('setTotal: $setTotal, ')
           ..write('collectorNumber: $collectorNumber, ')
           ..write('rarity: $rarity, ')
           ..write('typeLine: $typeLine, ')
           ..write('manaCost: $manaCost, ')
+          ..write('oracleText: $oracleText, ')
+          ..write('cmc: $cmc, ')
+          ..write('colors: $colors, ')
+          ..write('colorIdentity: $colorIdentity, ')
+          ..write('artist: $artist, ')
+          ..write('power: $power, ')
+          ..write('toughness: $toughness, ')
+          ..write('loyalty: $loyalty, ')
           ..write('lang: $lang, ')
           ..write('releasedAt: $releasedAt, ')
           ..write('imageUris: $imageUris, ')
@@ -1454,10 +1943,20 @@ typedef $$CardsTableCreateCompanionBuilder =
       Value<String?> oracleId,
       required String name,
       Value<String?> setCode,
+      Value<String?> setName,
+      Value<int?> setTotal,
       Value<String?> collectorNumber,
       Value<String?> rarity,
       Value<String?> typeLine,
       Value<String?> manaCost,
+      Value<String?> oracleText,
+      Value<double?> cmc,
+      Value<String?> colors,
+      Value<String?> colorIdentity,
+      Value<String?> artist,
+      Value<String?> power,
+      Value<String?> toughness,
+      Value<String?> loyalty,
       Value<String?> lang,
       Value<String?> releasedAt,
       Value<String?> imageUris,
@@ -1471,10 +1970,20 @@ typedef $$CardsTableUpdateCompanionBuilder =
       Value<String?> oracleId,
       Value<String> name,
       Value<String?> setCode,
+      Value<String?> setName,
+      Value<int?> setTotal,
       Value<String?> collectorNumber,
       Value<String?> rarity,
       Value<String?> typeLine,
       Value<String?> manaCost,
+      Value<String?> oracleText,
+      Value<double?> cmc,
+      Value<String?> colors,
+      Value<String?> colorIdentity,
+      Value<String?> artist,
+      Value<String?> power,
+      Value<String?> toughness,
+      Value<String?> loyalty,
       Value<String?> lang,
       Value<String?> releasedAt,
       Value<String?> imageUris,
@@ -1511,6 +2020,16 @@ class $$CardsTableFilterComposer extends Composer<_$AppDatabase, $CardsTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get setName => $composableBuilder(
+    column: $table.setName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get setTotal => $composableBuilder(
+    column: $table.setTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get collectorNumber => $composableBuilder(
     column: $table.collectorNumber,
     builder: (column) => ColumnFilters(column),
@@ -1528,6 +2047,46 @@ class $$CardsTableFilterComposer extends Composer<_$AppDatabase, $CardsTable> {
 
   ColumnFilters<String> get manaCost => $composableBuilder(
     column: $table.manaCost,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get oracleText => $composableBuilder(
+    column: $table.oracleText,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get cmc => $composableBuilder(
+    column: $table.cmc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get colors => $composableBuilder(
+    column: $table.colors,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get artist => $composableBuilder(
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get power => $composableBuilder(
+    column: $table.power,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toughness => $composableBuilder(
+    column: $table.toughness,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get loyalty => $composableBuilder(
+    column: $table.loyalty,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1586,6 +2145,16 @@ class $$CardsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get setName => $composableBuilder(
+    column: $table.setName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get setTotal => $composableBuilder(
+    column: $table.setTotal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get collectorNumber => $composableBuilder(
     column: $table.collectorNumber,
     builder: (column) => ColumnOrderings(column),
@@ -1603,6 +2172,46 @@ class $$CardsTableOrderingComposer
 
   ColumnOrderings<String> get manaCost => $composableBuilder(
     column: $table.manaCost,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get oracleText => $composableBuilder(
+    column: $table.oracleText,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get cmc => $composableBuilder(
+    column: $table.cmc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get colors => $composableBuilder(
+    column: $table.colors,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get artist => $composableBuilder(
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get power => $composableBuilder(
+    column: $table.power,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toughness => $composableBuilder(
+    column: $table.toughness,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get loyalty => $composableBuilder(
+    column: $table.loyalty,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1653,6 +2262,12 @@ class $$CardsTableAnnotationComposer
   GeneratedColumn<String> get setCode =>
       $composableBuilder(column: $table.setCode, builder: (column) => column);
 
+  GeneratedColumn<String> get setName =>
+      $composableBuilder(column: $table.setName, builder: (column) => column);
+
+  GeneratedColumn<int> get setTotal =>
+      $composableBuilder(column: $table.setTotal, builder: (column) => column);
+
   GeneratedColumn<String> get collectorNumber => $composableBuilder(
     column: $table.collectorNumber,
     builder: (column) => column,
@@ -1666,6 +2281,34 @@ class $$CardsTableAnnotationComposer
 
   GeneratedColumn<String> get manaCost =>
       $composableBuilder(column: $table.manaCost, builder: (column) => column);
+
+  GeneratedColumn<String> get oracleText => $composableBuilder(
+    column: $table.oracleText,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<double> get cmc =>
+      $composableBuilder(column: $table.cmc, builder: (column) => column);
+
+  GeneratedColumn<String> get colors =>
+      $composableBuilder(column: $table.colors, builder: (column) => column);
+
+  GeneratedColumn<String> get colorIdentity => $composableBuilder(
+    column: $table.colorIdentity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get artist =>
+      $composableBuilder(column: $table.artist, builder: (column) => column);
+
+  GeneratedColumn<String> get power =>
+      $composableBuilder(column: $table.power, builder: (column) => column);
+
+  GeneratedColumn<String> get toughness =>
+      $composableBuilder(column: $table.toughness, builder: (column) => column);
+
+  GeneratedColumn<String> get loyalty =>
+      $composableBuilder(column: $table.loyalty, builder: (column) => column);
 
   GeneratedColumn<String> get lang =>
       $composableBuilder(column: $table.lang, builder: (column) => column);
@@ -1717,10 +2360,20 @@ class $$CardsTableTableManager
                 Value<String?> oracleId = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String?> setCode = const Value.absent(),
+                Value<String?> setName = const Value.absent(),
+                Value<int?> setTotal = const Value.absent(),
                 Value<String?> collectorNumber = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
                 Value<String?> typeLine = const Value.absent(),
                 Value<String?> manaCost = const Value.absent(),
+                Value<String?> oracleText = const Value.absent(),
+                Value<double?> cmc = const Value.absent(),
+                Value<String?> colors = const Value.absent(),
+                Value<String?> colorIdentity = const Value.absent(),
+                Value<String?> artist = const Value.absent(),
+                Value<String?> power = const Value.absent(),
+                Value<String?> toughness = const Value.absent(),
+                Value<String?> loyalty = const Value.absent(),
                 Value<String?> lang = const Value.absent(),
                 Value<String?> releasedAt = const Value.absent(),
                 Value<String?> imageUris = const Value.absent(),
@@ -1732,10 +2385,20 @@ class $$CardsTableTableManager
                 oracleId: oracleId,
                 name: name,
                 setCode: setCode,
+                setName: setName,
+                setTotal: setTotal,
                 collectorNumber: collectorNumber,
                 rarity: rarity,
                 typeLine: typeLine,
                 manaCost: manaCost,
+                oracleText: oracleText,
+                cmc: cmc,
+                colors: colors,
+                colorIdentity: colorIdentity,
+                artist: artist,
+                power: power,
+                toughness: toughness,
+                loyalty: loyalty,
                 lang: lang,
                 releasedAt: releasedAt,
                 imageUris: imageUris,
@@ -1749,10 +2412,20 @@ class $$CardsTableTableManager
                 Value<String?> oracleId = const Value.absent(),
                 required String name,
                 Value<String?> setCode = const Value.absent(),
+                Value<String?> setName = const Value.absent(),
+                Value<int?> setTotal = const Value.absent(),
                 Value<String?> collectorNumber = const Value.absent(),
                 Value<String?> rarity = const Value.absent(),
                 Value<String?> typeLine = const Value.absent(),
                 Value<String?> manaCost = const Value.absent(),
+                Value<String?> oracleText = const Value.absent(),
+                Value<double?> cmc = const Value.absent(),
+                Value<String?> colors = const Value.absent(),
+                Value<String?> colorIdentity = const Value.absent(),
+                Value<String?> artist = const Value.absent(),
+                Value<String?> power = const Value.absent(),
+                Value<String?> toughness = const Value.absent(),
+                Value<String?> loyalty = const Value.absent(),
                 Value<String?> lang = const Value.absent(),
                 Value<String?> releasedAt = const Value.absent(),
                 Value<String?> imageUris = const Value.absent(),
@@ -1764,10 +2437,20 @@ class $$CardsTableTableManager
                 oracleId: oracleId,
                 name: name,
                 setCode: setCode,
+                setName: setName,
+                setTotal: setTotal,
                 collectorNumber: collectorNumber,
                 rarity: rarity,
                 typeLine: typeLine,
                 manaCost: manaCost,
+                oracleText: oracleText,
+                cmc: cmc,
+                colors: colors,
+                colorIdentity: colorIdentity,
+                artist: artist,
+                power: power,
+                toughness: toughness,
+                loyalty: loyalty,
                 lang: lang,
                 releasedAt: releasedAt,
                 imageUris: imageUris,

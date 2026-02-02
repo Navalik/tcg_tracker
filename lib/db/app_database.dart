@@ -18,10 +18,20 @@ class Cards extends Table {
   TextColumn get oracleId => text().nullable()();
   TextColumn get name => text()();
   TextColumn get setCode => text().nullable()();
+  TextColumn get setName => text().nullable()();
+  IntColumn get setTotal => integer().nullable()();
   TextColumn get collectorNumber => text().nullable()();
   TextColumn get rarity => text().nullable()();
   TextColumn get typeLine => text().nullable()();
   TextColumn get manaCost => text().nullable()();
+  TextColumn get oracleText => text().nullable()();
+  RealColumn get cmc => real().nullable()();
+  TextColumn get colors => text().nullable()();
+  TextColumn get colorIdentity => text().nullable()();
+  TextColumn get artist => text().nullable()();
+  TextColumn get power => text().nullable()();
+  TextColumn get toughness => text().nullable()();
+  TextColumn get loyalty => text().nullable()();
   TextColumn get lang => text().nullable()();
   TextColumn get releasedAt => text().nullable()();
   TextColumn get imageUris => text().nullable()();
@@ -71,7 +81,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -93,6 +103,38 @@ class AppDatabase extends _$AppDatabase {
             );
             await customStatement(
               "UPDATE collections SET type = 'set' WHERE lower(name) LIKE 'set: %'",
+            );
+          }
+          if (from < 3) {
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN set_name TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN set_total INTEGER',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN cmc REAL',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN oracle_text TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN colors TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN color_identity TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN artist TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN power TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN toughness TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN loyalty TEXT',
             );
           }
         },
@@ -393,38 +435,20 @@ class ScryfallDatabase {
             continue;
           }
           colorClauses.add(
-            r'''
-            json_extract(cards.card_json, '$.colors') LIKE ?
-            OR json_extract(cards.card_json, '$.color_identity') LIKE ?
-            OR EXISTS (
-              SELECT 1 FROM json_each(cards.card_json, '$.card_faces')
-              WHERE json_extract(value, '$.colors') LIKE ?
-                 OR json_extract(value, '$.color_identity') LIKE ?
-            )
-            ''',
+            r'(cards.colors LIKE ? OR cards.color_identity LIKE ?)',
           );
-          final like = '%"$color"%';
+          final normalizedLike = '%$color%';
           variables.addAll([
-            Variable.withString(like),
-            Variable.withString(like),
-            Variable.withString(like),
-            Variable.withString(like),
+            Variable.withString(normalizedLike),
+            Variable.withString(normalizedLike),
           ]);
         }
         if (normalized.contains('C')) {
           colorClauses.add(
             '''
             (
-              COALESCE(json_array_length(json_extract(cards.card_json, '\$.colors')), 0) = 0
-              AND COALESCE(json_array_length(json_extract(cards.card_json, '\$.color_identity')), 0) = 0
-              AND (
-                json_extract(cards.card_json, '\$.card_faces') IS NULL
-                OR NOT EXISTS (
-                  SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
-                  WHERE COALESCE(json_array_length(json_extract(value, '\$.colors')), 0) > 0
-                     OR COALESCE(json_array_length(json_extract(value, '\$.color_identity')), 0) > 0
-                )
-              )
+              COALESCE(cards.colors, '') = ''
+              AND COALESCE(cards.color_identity, '') = ''
             )
             ''',
           );
@@ -438,50 +462,23 @@ class ScryfallDatabase {
     final artist = filter.artist?.trim();
     if (artist != null && artist.isNotEmpty) {
       whereClauses.add(
-        '''
-        (
-          LOWER(json_extract(cards.card_json, '\$.artist')) LIKE ?
-          OR EXISTS (
-            SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
-            WHERE LOWER(json_extract(value, '\$.artist')) LIKE ?
-          )
-        )
-        ''',
+        'LOWER(COALESCE(cards.artist, \'\')) LIKE ?',
       );
       final like = '%${artist.toLowerCase()}%';
-      variables.add(Variable.withString(like));
-      variables.add(Variable.withString(like));
-    }
-
-    final flavor = filter.flavor?.trim();
-    if (flavor != null && flavor.isNotEmpty) {
-      whereClauses.add(
-        '''
-        (
-          LOWER(json_extract(cards.card_json, '\$.flavor_text')) LIKE ?
-          OR EXISTS (
-            SELECT 1 FROM json_each(cards.card_json, '\$.card_faces')
-            WHERE LOWER(json_extract(value, '\$.flavor_text')) LIKE ?
-          )
-        )
-        ''',
-      );
-      final like = '%${flavor.toLowerCase()}%';
-      variables.add(Variable.withString(like));
       variables.add(Variable.withString(like));
     }
 
     if (filter.manaMin != null) {
       whereClauses.add(
-        'CAST(json_extract(cards.card_json, \'\$.cmc\') AS REAL) >= ?',
+        'COALESCE(cards.cmc, 0) >= ?',
       );
-      variables.add(Variable.withInt(filter.manaMin!));
+      variables.add(Variable.withReal(filter.manaMin!.toDouble()));
     }
     if (filter.manaMax != null) {
       whereClauses.add(
-        'CAST(json_extract(cards.card_json, \'\$.cmc\') AS REAL) <= ?',
+        'COALESCE(cards.cmc, 0) <= ?',
       );
-      variables.add(Variable.withInt(filter.manaMax!));
+      variables.add(Variable.withReal(filter.manaMax!.toDouble()));
     }
 
     return _FilterQuery(whereClauses, variables);
@@ -533,11 +530,25 @@ class ScryfallDatabase {
         collection_cards.alt_art AS alt_art,
         cards.name AS name,
         COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.mana_cost AS mana_cost,
+        cards.oracle_text AS oracle_text,
+        cards.oracle_text AS oracle_text,
+        cards.cmc AS cmc,
+        cards.lang AS lang,
+        cards.released_at AS released_at,
+        cards.artist AS artist,
+        cards.power AS power,
+        cards.toughness AS toughness,
+        cards.loyalty AS loyalty,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM collection_cards
       JOIN cards ON cards.id = collection_cards.card_id
       WHERE collection_cards.collection_id = ?
@@ -563,9 +574,22 @@ class ScryfallDatabase {
             cardId: row.read<String>('card_id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            manaCost: row.readNullable<String>('mana_cost') ?? '',
+            oracleText: row.readNullable<String>('oracle_text') ?? '',
+            manaValue: row.readNullable<double>('cmc'),
+            lang: row.readNullable<String>('lang') ?? '',
+            releasedAt: row.readNullable<String>('released_at') ?? '',
+            artist: row.readNullable<String>('artist') ?? '',
+            power: row.readNullable<String>('power') ?? '',
+            toughness: row.readNullable<String>('toughness') ?? '',
+            loyalty: row.readNullable<String>('loyalty') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
@@ -573,7 +597,6 @@ class ScryfallDatabase {
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -615,11 +638,24 @@ class ScryfallDatabase {
         collection_cards.alt_art AS alt_art,
         cards.name AS name,
         COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.mana_cost AS mana_cost,
+        cards.oracle_text AS oracle_text,
+        cards.cmc AS cmc,
+        cards.lang AS lang,
+        cards.released_at AS released_at,
+        cards.artist AS artist,
+        cards.power AS power,
+        cards.toughness AS toughness,
+        cards.loyalty AS loyalty,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM collection_cards
       JOIN cards ON cards.id = collection_cards.card_id
       $whereSql
@@ -645,9 +681,22 @@ class ScryfallDatabase {
             cardId: row.read<String>('card_id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            manaCost: row.readNullable<String>('mana_cost') ?? '',
+            oracleText: row.readNullable<String>('oracle_text') ?? '',
+            manaValue: row.readNullable<double>('cmc'),
+            lang: row.readNullable<String>('lang') ?? '',
+            releasedAt: row.readNullable<String>('released_at') ?? '',
+            artist: row.readNullable<String>('artist') ?? '',
+            power: row.readNullable<String>('power') ?? '',
+            toughness: row.readNullable<String>('toughness') ?? '',
+            loyalty: row.readNullable<String>('loyalty') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
@@ -655,7 +704,6 @@ class ScryfallDatabase {
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -686,11 +734,24 @@ class ScryfallDatabase {
         COALESCE(collection_cards.alt_art, 0) AS alt_art,
         cards.name AS name,
         cards.set_code AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.mana_cost AS mana_cost,
+        cards.oracle_text AS oracle_text,
+        cards.cmc AS cmc,
+        cards.lang AS lang,
+        cards.released_at AS released_at,
+        cards.artist AS artist,
+        cards.power AS power,
+        cards.toughness AS toughness,
+        cards.loyalty AS loyalty,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM cards
       LEFT JOIN collection_cards
         ON collection_cards.card_id = cards.id
@@ -718,9 +779,22 @@ class ScryfallDatabase {
             cardId: row.read<String>('card_id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            manaCost: row.readNullable<String>('mana_cost') ?? '',
+            oracleText: row.readNullable<String>('oracle_text') ?? '',
+            manaValue: row.readNullable<double>('cmc'),
+            lang: row.readNullable<String>('lang') ?? '',
+            releasedAt: row.readNullable<String>('released_at') ?? '',
+            artist: row.readNullable<String>('artist') ?? '',
+            power: row.readNullable<String>('power') ?? '',
+            toughness: row.readNullable<String>('toughness') ?? '',
+            loyalty: row.readNullable<String>('loyalty') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
@@ -728,7 +802,6 @@ class ScryfallDatabase {
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -784,11 +857,24 @@ class ScryfallDatabase {
         COALESCE(collection_cards.alt_art, 0) AS alt_art,
         cards.name AS name,
         COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.mana_cost AS mana_cost,
+        cards.oracle_text AS oracle_text,
+        cards.cmc AS cmc,
+        cards.lang AS lang,
+        cards.released_at AS released_at,
+        cards.artist AS artist,
+        cards.power AS power,
+        cards.toughness AS toughness,
+        cards.loyalty AS loyalty,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM cards
       LEFT JOIN collection_cards
         ON collection_cards.card_id = cards.id
@@ -816,9 +902,22 @@ class ScryfallDatabase {
             cardId: row.read<String>('card_id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            manaCost: row.readNullable<String>('mana_cost') ?? '',
+            oracleText: row.readNullable<String>('oracle_text') ?? '',
+            manaValue: row.readNullable<double>('cmc'),
+            lang: row.readNullable<String>('lang') ?? '',
+            releasedAt: row.readNullable<String>('released_at') ?? '',
+            artist: row.readNullable<String>('artist') ?? '',
+            power: row.readNullable<String>('power') ?? '',
+            toughness: row.readNullable<String>('toughness') ?? '',
+            loyalty: row.readNullable<String>('loyalty') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
@@ -826,7 +925,6 @@ class ScryfallDatabase {
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -976,10 +1074,14 @@ class ScryfallDatabase {
         cards.id AS id,
         cards.name AS name,
         COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
         cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM cards
       $whereSql
       ORDER BY cards.name ASC
@@ -1001,13 +1103,16 @@ class ScryfallDatabase {
             id: row.read<String>('id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
             collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -1018,7 +1123,10 @@ class ScryfallDatabase {
     int limit = 40,
   }) async {
     final db = await open();
-    final where = <String>[];
+    final where = <String>[
+      "artist IS NOT NULL",
+      "artist != ''",
+    ];
     final variables = <Variable>[];
     final resolvedQuery = query?.trim().toLowerCase();
     if (resolvedQuery != null && resolvedQuery.isNotEmpty) {
@@ -1029,15 +1137,7 @@ class ScryfallDatabase {
     final rows = await db.customSelect(
       '''
       SELECT DISTINCT artist
-      FROM (
-        SELECT json_extract(card_json, '\$.artist') AS artist
-        FROM cards
-        WHERE json_extract(card_json, '\$.artist') IS NOT NULL
-        UNION
-        SELECT json_extract(value, '\$.artist') AS artist
-        FROM cards, json_each(cards.card_json, '\$.card_faces')
-        WHERE json_extract(value, '\$.artist') IS NOT NULL
-      )
+      FROM cards
       $whereSql
       ORDER BY artist ASC
       LIMIT ?
@@ -1282,6 +1382,19 @@ class ScryfallDatabase {
     return 0;
   }
 
+  Future<bool> needsLightReimport() async {
+    final db = await open();
+    final row = await db.customSelect(
+      '''
+      SELECT 1 AS missing
+      FROM cards
+      WHERE set_name IS NULL OR set_name = ''
+      LIMIT 1
+      ''',
+    ).getSingleOrNull();
+    return row != null;
+  }
+
   Future<int> countOwnedCards() async {
     final db = await open();
     final allCardsId = await fetchAllCardsCollectionId();
@@ -1317,7 +1430,7 @@ class ScryfallDatabase {
     final db = await open();
     final rows = await db.customSelect(
       '''
-      SELECT set_code AS set_code, card_json AS card_json
+      SELECT set_code AS set_code, set_name AS set_name
       FROM cards
       WHERE set_code IS NOT NULL AND set_code != ''
       GROUP BY set_code
@@ -1328,7 +1441,7 @@ class ScryfallDatabase {
     final results = <SetInfo>[];
     for (final row in rows) {
       final code = row.read<String>('set_code');
-      final setName = _extractSetName(row.readNullable<String>('card_json'));
+      final setName = row.readNullable<String>('set_name') ?? '';
       results.add(SetInfo(code: code, name: setName.isEmpty ? code : setName));
     }
     results.sort((a, b) => a.name.compareTo(b.name));
@@ -1345,7 +1458,7 @@ class ScryfallDatabase {
     final placeholders = List.filled(setCodes.length, '?').join(', ');
     final rows = await db.customSelect(
       '''
-      SELECT set_code AS set_code, card_json AS card_json
+      SELECT set_code AS set_code, set_name AS set_name
       FROM cards
       WHERE set_code IN ($placeholders)
       GROUP BY set_code
@@ -1356,7 +1469,7 @@ class ScryfallDatabase {
     final result = <String, String>{};
     for (final row in rows) {
       final code = row.read<String>('set_code');
-      final setName = _extractSetName(row.readNullable<String>('card_json'));
+      final setName = row.readNullable<String>('set_name') ?? '';
       result[code] = setName.isEmpty ? code : setName;
     }
     return result;
@@ -1387,8 +1500,12 @@ class ScryfallDatabase {
         cards.id AS id,
         cards.name AS name,
         cards.set_code AS set_code,
-        cards.card_json AS card_json,
+        cards.set_name AS set_name,
         cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards_fts
@@ -1414,13 +1531,16 @@ class ScryfallDatabase {
             id: row.read<String>('id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
             collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -1513,10 +1633,14 @@ class ScryfallDatabase {
         cards.id AS id,
         cards.name AS name,
         cards.set_code AS set_code,
+        cards.set_name AS set_name,
         cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM cards
       $whereSql
       ORDER BY cards.name ASC
@@ -1539,13 +1663,16 @@ class ScryfallDatabase {
             id: row.read<String>('id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
             collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -1596,10 +1723,14 @@ class ScryfallDatabase {
         cards.id AS id,
         cards.name AS name,
         cards.set_code AS set_code,
+        cards.set_name AS set_name,
         cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
         cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces,
-        cards.card_json AS card_json
+        cards.card_faces AS card_faces
       FROM cards
       $whereSql
       ORDER BY cards.name ASC
@@ -1622,13 +1753,16 @@ class ScryfallDatabase {
             id: row.read<String>('id'),
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
-            setName: _extractSetName(row.readNullable<String>('card_json')),
+            setName: row.readNullable<String>('set_name') ?? '',
             collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
             ),
-            cardJson: row.readNullable<String>('card_json'),
           ),
         )
         .toList();
@@ -1663,20 +1797,32 @@ class ScryfallDatabase {
   }
 
   CardsCompanion _mapCardCompanion(Map<String, dynamic> card) {
+    final colors = _extractColorList(card, 'colors');
+    final colorIdentity = _extractColorList(card, 'color_identity');
     return CardsCompanion.insert(
       id: card['id'] as String? ?? '',
       name: card['name'] as String? ?? '',
       oracleId: Value(card['oracle_id'] as String?),
       setCode: Value(card['set'] as String?),
+      setName: Value(card['set_name'] as String?),
+      setTotal: Value(_extractSetTotal(card)),
       collectorNumber: Value(card['collector_number'] as String?),
       rarity: Value(card['rarity'] as String?),
       typeLine: Value(card['type_line'] as String?),
       manaCost: Value(card['mana_cost'] as String?),
+      oracleText: Value(_extractOracleText(card)),
+      cmc: Value(_extractCmc(card)),
+      colors: Value(_encodeColorList(colors)),
+      colorIdentity: Value(_encodeColorList(colorIdentity)),
+      artist: Value(_extractArtist(card)),
+      power: Value(_extractStat(card, 'power')),
+      toughness: Value(_extractStat(card, 'toughness')),
+      loyalty: Value(_extractStat(card, 'loyalty')),
       lang: Value(card['lang'] as String?),
       releasedAt: Value(card['released_at'] as String?),
       imageUris: Value(_encodeJsonField(card['image_uris'])),
       cardFaces: Value(_encodeJsonField(card['card_faces'])),
-      cardJson: Value(_encodeJsonField(card)),
+      cardJson: const Value(null),
     );
   }
 }
@@ -1709,6 +1855,145 @@ String? _encodeJsonField(dynamic value) {
   return jsonEncode(value);
 }
 
+List<String> _extractColorList(Map<String, dynamic> card, String key) {
+  final direct = (card[key] as List?)?.whereType<String>().toList() ?? [];
+  if (direct.isNotEmpty) {
+    return _normalizeColorList(direct);
+  }
+  final faces = card['card_faces'];
+  if (faces is List) {
+    final merged = <String>{};
+    for (final face in faces) {
+      if (face is Map<String, dynamic>) {
+        final list = (face[key] as List?)?.whereType<String>().toList() ?? [];
+        merged.addAll(list);
+      }
+    }
+    if (merged.isNotEmpty) {
+      return _normalizeColorList(merged.toList());
+    }
+  }
+  return const [];
+}
+
+List<String> _normalizeColorList(List<String> colors) {
+  final seen = <String>{};
+  final normalized = <String>[];
+  for (final color in colors) {
+    final value = color.trim().toUpperCase();
+    if (value.isEmpty || seen.contains(value)) {
+      continue;
+    }
+    seen.add(value);
+    normalized.add(value);
+  }
+  return normalized;
+}
+
+String? _encodeColorList(List<String> colors) {
+  if (colors.isEmpty) {
+    return null;
+  }
+  return colors.join(',');
+}
+
+double? _extractCmc(Map<String, dynamic> card) {
+  final value = card['cmc'];
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    return double.tryParse(value);
+  }
+  return null;
+}
+
+String? _extractArtist(Map<String, dynamic> card) {
+  final artist = card['artist'];
+  if (artist is String && artist.trim().isNotEmpty) {
+    return artist.trim();
+  }
+  final faces = card['card_faces'];
+  if (faces is List) {
+    final merged = <String>{};
+    for (final face in faces) {
+      if (face is Map<String, dynamic>) {
+        final faceArtist = face['artist'];
+        if (faceArtist is String && faceArtist.trim().isNotEmpty) {
+          merged.add(faceArtist.trim());
+        }
+      }
+    }
+    if (merged.isNotEmpty) {
+      return merged.join(' // ');
+    }
+  }
+  return null;
+}
+
+String? _extractStat(Map<String, dynamic> card, String key) {
+  final value = card[key];
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
+  }
+  final faces = card['card_faces'];
+  if (faces is List) {
+    for (final face in faces) {
+      if (face is Map<String, dynamic>) {
+        final faceValue = face[key];
+        if (faceValue is String && faceValue.trim().isNotEmpty) {
+          return faceValue.trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+String? _extractOracleText(Map<String, dynamic> card) {
+  final value = card['oracle_text'];
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
+  }
+  final faces = card['card_faces'];
+  if (faces is List) {
+    final texts = <String>[];
+    for (final face in faces) {
+      if (face is Map<String, dynamic>) {
+        final faceText = face['oracle_text'];
+        if (faceText is String && faceText.trim().isNotEmpty) {
+          texts.add(faceText.trim());
+        }
+      }
+    }
+    if (texts.isNotEmpty) {
+      return texts.join('\n\n');
+    }
+  }
+  return null;
+}
+
+int? _extractSetTotal(Map<String, dynamic> card) {
+  final direct = card['printed_total'] ?? card['set_total'];
+  if (direct is num) {
+    return direct.toInt();
+  }
+  if (direct is String) {
+    return int.tryParse(direct.trim());
+  }
+  final setData = card['set'];
+  if (setData is Map<String, dynamic>) {
+    final nested = setData['printed_total'] ?? setData['set_total'];
+    if (nested is num) {
+      return nested.toInt();
+    }
+    if (nested is String) {
+      return int.tryParse(nested.trim());
+    }
+  }
+  return null;
+}
+
 String? _extractImageUrl(String? imageUrisJson, String? cardFacesJson) {
   if (imageUrisJson != null && imageUrisJson.isNotEmpty) {
     final data = _tryDecodeJson(imageUrisJson);
@@ -1733,20 +2018,6 @@ String? _extractImageUrl(String? imageUrisJson, String? cardFacesJson) {
     }
   }
   return null;
-}
-
-String _extractSetName(String? cardJson) {
-  if (cardJson == null || cardJson.isEmpty) {
-    return '';
-  }
-  final data = _tryDecodeJson(cardJson);
-  if (data is Map<String, dynamic>) {
-    final value = data['set_name'];
-    if (value is String && value.trim().isNotEmpty) {
-      return value.trim();
-    }
-  }
-  return '';
 }
 
 dynamic _tryDecodeJson(String value) {
