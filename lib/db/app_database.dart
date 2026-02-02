@@ -1426,6 +1426,14 @@ class ScryfallDatabase {
     });
   }
 
+  Future<void> upsertCardFromScryfall(Map<String, dynamic> card) async {
+    final db = await open();
+    await db.into(db.cards).insert(
+          _mapCardCompanion(card),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
   Future<List<SetInfo>> fetchAvailableSets() async {
     final db = await open();
     final rows = await db.customSelect(
@@ -1524,8 +1532,73 @@ class ScryfallDatabase {
       sql.toString(),
       variables: whereArgs,
     ).get();
+    if (rows.isNotEmpty) {
+      return rows
+          .map(
+            (row) => CardSearchResult(
+              id: row.read<String>('id'),
+              name: row.read<String>('name'),
+              setCode: row.read<String>('set_code'),
+              setName: row.readNullable<String>('set_name') ?? '',
+              collectorNumber: row.read<String>('collector_number'),
+              rarity: row.readNullable<String>('rarity') ?? '',
+              typeLine: row.readNullable<String>('type_line') ?? '',
+              colors: row.readNullable<String>('colors') ?? '',
+              colorIdentity: row.readNullable<String>('color_identity') ?? '',
+              imageUri: _extractImageUrl(
+                row.readNullable<String>('image_uris'),
+                row.readNullable<String>('card_faces'),
+              ),
+            ),
+          )
+          .toList();
+    }
 
-    return rows
+    final normalized = query.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return const [];
+    }
+    final likeArgs = <Variable>[Variable.withString('%$normalized%')];
+    final likeWhere = StringBuffer('LOWER(cards.name) LIKE ?');
+    if (languages != null && languages.isNotEmpty) {
+      final placeholders = List.filled(languages.length, '?').join(', ');
+      likeWhere.write(' AND LOWER(cards.lang) IN ($placeholders)');
+      likeArgs.addAll(
+        languages.map(
+          (lang) => Variable.withString(lang.trim().toLowerCase()),
+        ),
+      );
+    }
+    likeArgs.add(Variable.withInt(limit));
+    final likeSql = StringBuffer(
+      '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        cards.set_code AS set_code,
+        cards.set_name AS set_name,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces
+      FROM cards
+      WHERE ${likeWhere.toString()}
+      ORDER BY cards.name ASC, cards.set_code ASC, cards.collector_number ASC
+      LIMIT ?
+      ''',
+    );
+    if (offset != null) {
+      likeSql.write(' OFFSET ?');
+      likeArgs.add(Variable.withInt(offset));
+    }
+    final likeRows = await db.customSelect(
+      likeSql.toString(),
+      variables: likeArgs,
+    ).get();
+    return likeRows
         .map(
           (row) => CardSearchResult(
             id: row.read<String>('id'),

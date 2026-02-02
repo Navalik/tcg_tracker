@@ -936,10 +936,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
       return;
     }
+    final refinedSeed = await _refineOcrSeed(ocrSeed);
+    if (!mounted) {
+      return;
+    }
     await _openScannedCardSearch(
-      query: ocrSeed.query,
-      initialSetCode: ocrSeed.setCode,
-      initialCollectorNumber: ocrSeed.collectorNumber,
+      query: refinedSeed.query,
+      initialSetCode: refinedSeed.setCode,
+      initialCollectorNumber: refinedSeed.collectorNumber,
     );
   }
 
@@ -969,26 +973,24 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return null;
     }
 
-    var bestName = '';
-    for (final line in lines.take(5)) {
-      final hasDigits = RegExp(r'\d').hasMatch(line);
-      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(line);
-      if (hasLetters && !hasDigits && line.length >= 3) {
-        bestName = _normalizePotentialCardName(line);
-        break;
-      }
-    }
-    if (bestName.isEmpty) {
-      bestName = lines.firstWhere(
-        (line) => RegExp(r'[A-Za-z]').hasMatch(line),
-        orElse: () => '',
-      );
-      bestName = _normalizePotentialCardName(bestName);
-    }
+    final topLines = lines.take(3).toList();
+    final bottomStart = lines.length > 5 ? lines.length - 5 : 0;
+    final bottomLines = lines.sublist(bottomStart);
+    final bestName = _extractLikelyCardName(topLines);
 
     String? setCode;
     String? collectorNumber;
-    for (final rawLine in lines.reversed) {
+    final setAndCollector = _extractSetAndCollectorFromText(
+      bottomLines,
+      knownSetCodes: knownSetCodes,
+    );
+    setCode = setAndCollector.$1;
+    collectorNumber = setAndCollector.$2;
+
+    for (final rawLine in bottomLines.reversed) {
+      if (setCode != null && collectorNumber != null) {
+        break;
+      }
       final upperLine = rawLine.toUpperCase();
       final tokens = upperLine
           .split(RegExp(r'[^A-Z0-9/]'))
@@ -1009,28 +1011,24 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             setCode = detectedSet;
           }
         }
-        if (setCode != null && collectorNumber == null) {
+        if (setCode != null) {
           final next = (i + 1 < tokens.length) ? tokens[i + 1] : null;
           final fromNext = _normalizeCollectorNumber(next ?? '');
-          if (fromNext != null) {
-            collectorNumber = fromNext;
-          }
+          collectorNumber = _pickBetterCollectorNumber(collectorNumber, fromNext);
         }
 
-        if (collectorNumber == null && token.contains('/')) {
+        if (token.contains('/')) {
           final part = token.split('/').first;
           final normalized = _normalizeCollectorNumber(part);
-          if (normalized != null) {
-            collectorNumber = normalized;
-          }
+          collectorNumber = _pickBetterCollectorNumber(collectorNumber, normalized);
         }
 
-        collectorNumber ??= _normalizeCollectorNumber(token);
+        collectorNumber = _pickBetterCollectorNumber(
+          collectorNumber,
+          _normalizeCollectorNumber(token),
+        );
       }
 
-      if (setCode != null && collectorNumber != null) {
-        break;
-      }
     }
 
     if (bestName.isEmpty &&
@@ -1040,18 +1038,291 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     final fallbackQuery = bestName.isEmpty ? lines.first : bestName;
-    final query =
-        (collectorNumber != null &&
-                collectorNumber.isNotEmpty &&
-                setCode != null &&
-                setCode.isNotEmpty)
-            ? collectorNumber
-            : fallbackQuery;
+    final useCollectorQuery = collectorNumber != null &&
+        collectorNumber.isNotEmpty &&
+        setCode != null &&
+        setCode.isNotEmpty &&
+        !_isWeakCollectorNumber(collectorNumber);
+    final query = useCollectorQuery ? collectorNumber : fallbackQuery;
     return _OcrSearchSeed(
       query: query,
+      cardName: bestName.isEmpty ? null : bestName,
       setCode: setCode,
       collectorNumber: collectorNumber,
     );
+  }
+
+  Future<_OcrSearchSeed> _refineOcrSeed(_OcrSearchSeed seed) async {
+    final query = seed.query.trim();
+    final setCode = seed.setCode?.trim().toLowerCase();
+    if (query.isEmpty || setCode == null || setCode.isEmpty) {
+      return seed;
+    }
+    final strictCount = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+      CollectionFilter(sets: {setCode}),
+      searchQuery: query,
+    );
+    if (strictCount > 0) {
+      return seed;
+    }
+    final onlineSeed = await _tryOnlineCardFallback(seed);
+    if (onlineSeed != null) {
+      return onlineSeed;
+    }
+    final fallbackName = seed.cardName?.trim();
+    if (fallbackName != null && fallbackName.isNotEmpty) {
+      final nameInSetCount =
+          await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+        CollectionFilter(sets: {setCode}),
+        searchQuery: fallbackName,
+      );
+      if (nameInSetCount > 0) {
+        return _OcrSearchSeed(
+          query: fallbackName,
+          cardName: fallbackName,
+          setCode: setCode,
+          collectorNumber: seed.collectorNumber,
+        );
+      }
+      return _OcrSearchSeed(
+        query: fallbackName,
+        cardName: fallbackName,
+        setCode: null,
+        collectorNumber: seed.collectorNumber,
+      );
+    }
+    return _OcrSearchSeed(
+      query: query,
+      cardName: seed.cardName,
+      setCode: null,
+      collectorNumber: seed.collectorNumber,
+    );
+  }
+
+  Future<_OcrSearchSeed?> _tryOnlineCardFallback(_OcrSearchSeed seed) async {
+    final setCode = seed.setCode?.trim().toLowerCase();
+    final collector = seed.collectorNumber?.trim().toLowerCase();
+    if (setCode == null ||
+        setCode.isEmpty ||
+        collector == null ||
+        collector.isEmpty ||
+        _isWeakCollectorNumber(collector)) {
+      return null;
+    }
+    try {
+      final uri = Uri.parse(
+        'https://api.scryfall.com/cards/$setCode/${Uri.encodeComponent(collector)}',
+      );
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return null;
+      }
+      await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+      final fetchedName = (payload['name'] as String?)?.trim();
+      final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
+      final fetchedCollector =
+          (payload['collector_number'] as String?)?.trim().toLowerCase();
+      return _OcrSearchSeed(
+        query: (fetchedName != null && fetchedName.isNotEmpty)
+            ? fetchedName
+            : seed.query,
+        cardName: fetchedName ?? seed.cardName,
+        setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : setCode,
+        collectorNumber: fetchedCollector?.isNotEmpty == true
+            ? fetchedCollector
+            : collector,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _extractLikelyCardName(List<String> lines) {
+    const oracleLikeWords = {
+      'deals',
+      'damage',
+      'demage',
+      'target',
+      'creature',
+      'player',
+      'draw',
+      'discard',
+      'counter',
+      'mana',
+      'until',
+      'end',
+      'turn',
+      'you',
+      'your',
+    };
+    var best = '';
+    var bestScore = -1;
+    for (var i = 0; i < lines.length && i < 8; i++) {
+      final normalized =
+          _trimToNameSegment(_normalizePotentialCardName(lines[i]));
+      if (normalized.length < 3) {
+        continue;
+      }
+      final words = normalized.split(' ').where((w) => w.isNotEmpty).length;
+      if (words > 7) {
+        continue;
+      }
+      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(normalized);
+      if (!hasLetters) {
+        continue;
+      }
+      final lower = normalized.toLowerCase();
+      final wordsList = lower.split(' ').where((w) => w.isNotEmpty).toList();
+      final oracleHits =
+          wordsList.where((w) => oracleLikeWords.contains(w)).length;
+      final digits = RegExp(r'\d').allMatches(normalized).length;
+      if (digits > normalized.length * 0.25) {
+        continue;
+      }
+      final digitPenalty = digits * 2;
+      final oraclePenalty = oracleHits * 5;
+      final longSentencePenalty = wordsList.length >= 6 ? 4 : 0;
+      final topBonus = (8 - i);
+      final score = (normalized.length.clamp(0, 30)) +
+          topBonus -
+          digitPenalty -
+          oraclePenalty -
+          longSentencePenalty;
+      if (score > bestScore) {
+        bestScore = score;
+        best = normalized;
+      }
+    }
+    return best;
+  }
+
+  String _trimToNameSegment(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+    const cutWords = {
+      'deals',
+      'damage',
+      'demage',
+      'target',
+      'targets',
+      'creature',
+      'player',
+      'draw',
+      'discard',
+      'counter',
+      'mana',
+      'until',
+      'when',
+      'whenever',
+      'if',
+      'then',
+    };
+    final words = value.split(' ').where((w) => w.isNotEmpty).toList();
+    final keep = <String>[];
+    for (final word in words) {
+      final lower = word.toLowerCase();
+      if (cutWords.contains(lower)) {
+        break;
+      }
+      keep.add(word);
+      if (keep.length >= 6) {
+        break;
+      }
+    }
+    final trimmed = keep.join(' ').trim();
+    return trimmed.isEmpty ? value : trimmed;
+  }
+
+  (String?, String?) _extractSetAndCollectorFromText(
+    List<String> lines, {
+    required Set<String> knownSetCodes,
+  }) {
+    final setCollectorRegex = RegExp(r'\b([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)\b');
+    final collectorSlashRegex = RegExp(r'\b([0-9]{1,5}[A-Z]?)\s*/\s*[0-9]{1,5}\b');
+    String? setCode;
+    String? collectorNumber;
+    for (var i = lines.length - 1; i >= 0; i--) {
+      final upper = lines[i].toUpperCase();
+      final direct = setCollectorRegex.firstMatch(upper);
+      if (direct != null) {
+        setCode ??= _detectSetCodeFromToken(
+          direct.group(1) ?? '',
+          knownSetCodes: knownSetCodes,
+        );
+        collectorNumber ??= _normalizeCollectorNumber(direct.group(2) ?? '');
+      }
+      final slash = collectorSlashRegex.firstMatch(upper);
+      if (slash != null) {
+        collectorNumber ??= _normalizeCollectorNumber(slash.group(1) ?? '');
+      }
+      if (collectorNumber != null && setCode == null) {
+        setCode = _findNearestSetCode(
+          lines,
+          anchorIndex: i,
+          knownSetCodes: knownSetCodes,
+        );
+      }
+      if (setCode != null && collectorNumber != null) {
+        break;
+      }
+    }
+    return (setCode, collectorNumber);
+  }
+
+  String? _findNearestSetCode(
+    List<String> lines, {
+    required int anchorIndex,
+    required Set<String> knownSetCodes,
+  }) {
+    for (var delta = 0; delta <= 2; delta++) {
+      final candidates = <int>{anchorIndex - delta, anchorIndex + delta};
+      for (final idx in candidates) {
+        if (idx < 0 || idx >= lines.length) {
+          continue;
+        }
+        final detected = _detectSetCodeInLine(
+          lines[idx],
+          knownSetCodes: knownSetCodes,
+        );
+        if (detected != null) {
+          return detected;
+        }
+      }
+    }
+    return null;
+  }
+
+  String? _detectSetCodeInLine(
+    String line, {
+    required Set<String> knownSetCodes,
+  }) {
+    const rarityTokens = {'c', 'u', 'r', 'm', 'l'};
+    final tokens = line
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]'))
+        .where((t) => t.isNotEmpty)
+        .toList(growable: false);
+    for (final token in tokens.reversed) {
+      if (rarityTokens.contains(token)) {
+        continue;
+      }
+      if (RegExp(r'^\d+$').hasMatch(token)) {
+        continue;
+      }
+      final set = _detectSetCodeFromToken(
+        token,
+        knownSetCodes: knownSetCodes,
+      );
+      if (set != null) {
+        return set;
+      }
+    }
+    return null;
   }
 
   String? _detectSetCodeFromToken(
@@ -1102,11 +1373,45 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (value.isEmpty) {
       return null;
     }
-    final match = RegExp(r'^(\d{1,4}[a-z]?)$').firstMatch(value);
+    final match = RegExp(r'^(\d{1,5}[a-z]?)$').firstMatch(value);
     if (match == null) {
       return null;
     }
     return match.group(1);
+  }
+
+  String? _pickBetterCollectorNumber(String? current, String? candidate) {
+    if (candidate == null || candidate.isEmpty) {
+      return current;
+    }
+    if (current == null || current.isEmpty) {
+      return candidate;
+    }
+    final currentScore = _collectorConfidenceScore(current);
+    final candidateScore = _collectorConfidenceScore(candidate);
+    if (candidateScore > currentScore) {
+      return candidate;
+    }
+    return current;
+  }
+
+  int _collectorConfidenceScore(String value) {
+    final normalized = value.toLowerCase();
+    final digitCount = RegExp(r'\d').allMatches(normalized).length;
+    final hasSuffixLetter = RegExp(r'\d+[a-z]$').hasMatch(normalized);
+    final isSingleDigit = RegExp(r'^\d$').hasMatch(normalized);
+    var score = digitCount * 3;
+    if (hasSuffixLetter) {
+      score += 2;
+    }
+    if (isSingleDigit) {
+      score -= 4;
+    }
+    return score;
+  }
+
+  bool _isWeakCollectorNumber(String value) {
+    return RegExp(r'^\d$').hasMatch(value.trim());
   }
 
   Future<void> _openScannedCardSearch({
@@ -2858,11 +3163,13 @@ class _TitleLockup extends StatelessWidget {
 class _OcrSearchSeed {
   const _OcrSearchSeed({
     required this.query,
+    this.cardName,
     this.setCode,
     this.collectorNumber,
   });
 
   final String query;
+  final String? cardName;
   final String? setCode;
   final String? collectorNumber;
 }
@@ -2875,8 +3182,9 @@ class _CardScannerPage extends StatefulWidget {
 }
 
 class _CardScannerPageState extends State<_CardScannerPage> {
-  static const double _cardAspectRatio = 63 / 88;
+  static const double _cardAspectRatio = 64 / 89;
   static const int _requiredStableHits = 3;
+  static const int _requiredFieldHits = 2;
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
@@ -2887,6 +3195,13 @@ class _CardScannerPageState extends State<_CardScannerPage> {
   DateTime _lastProcessedAt = DateTime.fromMillisecondsSinceEpoch(0);
   String _lastCandidateKey = '';
   int _stableHits = 0;
+  String _bestStableRawText = '';
+  String _lastNameCandidate = '';
+  String _lastSetCandidate = '';
+  int _nameHits = 0;
+  int _setHits = 0;
+  String _lockedName = '';
+  String _lockedSet = '';
   String _status = 'Allinea la carta nel riquadro.';
 
   @override
@@ -2965,8 +3280,9 @@ class _CardScannerPageState extends State<_CardScannerPage> {
     try {
       final recognized = await _textRecognizer.processImage(input);
       final rawText = recognized.text.trim();
-      final snippet = _buildStableSnippet(rawText);
-      if (snippet.isEmpty) {
+      _updateFieldStates(rawText);
+      final stableKey = _buildStabilityKey(rawText);
+      if (stableKey.isEmpty) {
         if (mounted) {
           setState(() {
             _status = 'Cerco testo carta...';
@@ -2974,30 +3290,51 @@ class _CardScannerPageState extends State<_CardScannerPage> {
         }
         _stableHits = 0;
         _lastCandidateKey = '';
+        _bestStableRawText = '';
+        _nameHits = 0;
+        _setHits = 0;
         return;
       }
-      final key = snippet.toLowerCase();
+      final key = stableKey.toLowerCase();
       if (key == _lastCandidateKey) {
         _stableHits += 1;
+        if (rawText.length > _bestStableRawText.length) {
+          _bestStableRawText = rawText;
+        }
       } else {
         _lastCandidateKey = key;
         _stableHits = 1;
+        _bestStableRawText = rawText;
       }
       if (mounted) {
         setState(() {
-          _status = 'Rilevato: $snippet';
+          if (_lockedName.isEmpty && _lockedSet.isEmpty) {
+            _status = 'Cerco nome e set...';
+          } else if (_lockedName.isNotEmpty && _lockedSet.isEmpty) {
+            _status = 'Nome OK. Avvicina il bordo basso (set + numero).';
+          } else if (_lockedName.isEmpty && _lockedSet.isNotEmpty) {
+            _status = 'Set OK. Avvicina il bordo alto (nome).';
+          } else {
+            _status = 'Rilevato: $stableKey';
+          }
         });
       }
-      if (_stableHits < _requiredStableHits || rawText.isEmpty) {
+      if (_stableHits < _requiredStableHits ||
+          rawText.isEmpty ||
+          _lockedName.isEmpty ||
+          _lockedSet.isEmpty) {
         return;
       }
       _handled = true;
       await controller.stopImageStream();
       if (mounted) {
-        Navigator.of(context).pop(rawText);
+        Navigator.of(context).pop(
+          _bestStableRawText.isNotEmpty ? _bestStableRawText : rawText,
+        );
       }
     } catch (_) {
       _stableHits = 0;
+      _bestStableRawText = '';
       if (mounted) {
         setState(() {
           _status = 'OCR instabile, riprovo...';
@@ -3008,7 +3345,7 @@ class _CardScannerPageState extends State<_CardScannerPage> {
     }
   }
 
-  String _buildStableSnippet(String text) {
+  String _buildStabilityKey(String text) {
     final lines = text
         .split('\n')
         .map((line) => line.trim())
@@ -3017,12 +3354,147 @@ class _CardScannerPageState extends State<_CardScannerPage> {
     if (lines.isEmpty) {
       return '';
     }
-    final useful = lines.where((line) => RegExp(r'[A-Za-z]').hasMatch(line));
-    final snippet = useful.take(3).join(' | ').trim();
-    if (snippet.isEmpty) {
+    final name = lines
+        .take(6)
+        .map((line) => line.replaceAll(RegExp(r'[^A-Za-z0-9\s]'), ' ').trim())
+        .firstWhere(
+          (line) => line.length >= 3 && RegExp(r'[A-Za-z]').hasMatch(line),
+          orElse: () => '',
+        );
+    final collector = (lines.reversed
+        .map((line) => line.toLowerCase())
+        .map((line) => RegExp(r'(\d{1,5}[a-z]?)').firstMatch(line)?.group(1))
+        .firstWhere((value) => value != null && value.isNotEmpty, orElse: () => '')) ??
+        '';
+    final parts = <String>[
+      if (name.isNotEmpty) name,
+      if (collector.isNotEmpty) collector,
+    ];
+    final snippet = parts.join(' | ').trim();
+    if (snippet.length < 3) {
       return '';
     }
     return snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet;
+  }
+
+  void _updateFieldStates(String rawText) {
+    final lines = rawText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return;
+    }
+    final nameCandidate = _extractNameForField(lines.take(3).toList());
+    final bottomStart = lines.length > 5 ? lines.length - 5 : 0;
+    final setCandidate = _extractSetForField(lines.sublist(bottomStart));
+
+    if (nameCandidate.isNotEmpty) {
+      if (nameCandidate.toLowerCase() == _lastNameCandidate.toLowerCase()) {
+        _nameHits += 1;
+      } else {
+        _lastNameCandidate = nameCandidate;
+        _nameHits = 1;
+      }
+      if (_nameHits >= _requiredFieldHits) {
+        _lockedName = nameCandidate;
+      }
+    }
+
+    if (setCandidate.isNotEmpty) {
+      if (setCandidate.toLowerCase() == _lastSetCandidate.toLowerCase()) {
+        _setHits += 1;
+      } else {
+        _lastSetCandidate = setCandidate;
+        _setHits = 1;
+      }
+      if (_setHits >= _requiredFieldHits) {
+        _lockedSet = setCandidate;
+      }
+    }
+  }
+
+  String _extractNameForField(List<String> lines) {
+    for (final rawLine in lines) {
+      final cleaned = rawLine
+          .replaceAll(RegExp(r"[^A-Za-z0-9'\-\s]"), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (cleaned.length < 3) {
+        continue;
+      }
+      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(cleaned);
+      final hasManyDigits = RegExp(r'\d').allMatches(cleaned).length >
+          (cleaned.length * 0.25);
+      if (!hasLetters || hasManyDigits) {
+        continue;
+      }
+      final words = cleaned.split(' ').where((w) => w.isNotEmpty).length;
+      if (words > 7) {
+        continue;
+      }
+      return cleaned;
+    }
+    return '';
+  }
+
+  String _extractSetForField(List<String> lines) {
+    final directRegex = RegExp(r'\b([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)\b');
+    final collectorRegex = RegExp(r'\b([0-9]{1,5}[A-Z]?)\s*/\s*[0-9]{1,5}\b');
+    for (var i = lines.length - 1; i >= 0; i--) {
+      final upper = lines[i].toUpperCase();
+      final match = directRegex.firstMatch(upper);
+      if (match == null) {
+        final collectorMatch = collectorRegex.firstMatch(upper);
+        if (collectorMatch == null) {
+          continue;
+        }
+        final collector = (collectorMatch.group(1) ?? '').trim();
+        final nearSet = _guessSetTokenAroundIndex(lines, i);
+        if (collector.isNotEmpty && nearSet.isNotEmpty) {
+          return '$nearSet $collector';
+        }
+        continue;
+      }
+      final setCode = (match.group(1) ?? '').trim();
+      final collector = (match.group(2) ?? '').trim();
+      if (setCode.isEmpty || collector.isEmpty) {
+        continue;
+      }
+      return '$setCode $collector';
+    }
+    return '';
+  }
+
+  String _guessSetTokenAroundIndex(List<String> lines, int anchorIndex) {
+    const rarityTokens = {'C', 'U', 'R', 'M', 'L'};
+    for (var delta = 0; delta <= 2; delta++) {
+      final indices = <int>{anchorIndex - delta, anchorIndex + delta};
+      for (final idx in indices) {
+        if (idx < 0 || idx >= lines.length) {
+          continue;
+        }
+        final tokens = lines[idx]
+            .toUpperCase()
+            .split(RegExp(r'[^A-Z0-9]'))
+            .where((t) => t.isNotEmpty)
+            .toList(growable: false);
+        for (final token in tokens.reversed) {
+          if (token.length < 2 || token.length > 5) {
+            continue;
+          }
+          if (rarityTokens.contains(token)) {
+            continue;
+          }
+          if (RegExp(r'^\d+$').hasMatch(token)) {
+            continue;
+          }
+          return token;
+        }
+      }
+    }
+    return '';
   }
 
   InputImage? _toInputImage(
@@ -3068,12 +3540,12 @@ class _CardScannerPageState extends State<_CardScannerPage> {
           IgnorePointer(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final maxWidth = constraints.maxWidth * 0.74;
-                final maxHeight = constraints.maxHeight * 0.66;
-                var guideWidth = maxWidth;
+                final availableWidth = (constraints.maxWidth - 36).clamp(120.0, constraints.maxWidth);
+                final availableHeight = (constraints.maxHeight - 160).clamp(180.0, constraints.maxHeight);
+                var guideWidth = availableWidth;
                 var guideHeight = guideWidth / _cardAspectRatio;
-                if (guideHeight > maxHeight) {
-                  guideHeight = maxHeight;
+                if (guideHeight > availableHeight) {
+                  guideHeight = availableHeight;
                   guideWidth = guideHeight * _cardAspectRatio;
                 }
                 final guideRect = Rect.fromCenter(
@@ -3091,6 +3563,30 @@ class _CardScannerPageState extends State<_CardScannerPage> {
                   ),
                 );
               },
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            top: 12 + MediaQuery.of(context).padding.top,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _ScanFieldStatusBox(
+                    label: 'Nome',
+                    value: _lockedName.isEmpty ? 'In attesa' : _lockedName,
+                    locked: _lockedName.isNotEmpty,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ScanFieldStatusBox(
+                    label: 'Set',
+                    value: _lockedSet.isEmpty ? 'In attesa' : _lockedSet,
+                    locked: _lockedSet.isNotEmpty,
+                  ),
+                ),
+              ],
             ),
           ),
           Positioned(
@@ -3203,12 +3699,135 @@ class _CardGuideOverlayPainter extends CustomPainter {
       Offset(right, bottom - accentLen),
       accentPaint,
     );
+
+    final zoneStroke = Paint()
+      ..color = const Color(0x99E9C46A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4;
+    final zoneFill = Paint()
+      ..color = const Color(0x22E9C46A)
+      ..style = PaintingStyle.fill;
+
+    final nameZone = Rect.fromLTWH(
+      guideRect.left + 14,
+      guideRect.top + 14,
+      guideRect.width - 28,
+      guideRect.height * 0.16,
+    );
+    final setZone = Rect.fromLTWH(
+      guideRect.left + 14,
+      guideRect.bottom - (guideRect.height * 0.15) - 14,
+      guideRect.width - 28,
+      guideRect.height * 0.15,
+    );
+
+    final nameRRect = RRect.fromRectAndRadius(nameZone, const Radius.circular(8));
+    final setRRect = RRect.fromRectAndRadius(setZone, const Radius.circular(8));
+    canvas.drawRRect(nameRRect, zoneFill);
+    canvas.drawRRect(setRRect, zoneFill);
+    canvas.drawRRect(nameRRect, zoneStroke);
+    canvas.drawRRect(setRRect, zoneStroke);
+
+    final nameTp = TextPainter(
+      text: const TextSpan(
+        text: 'NAME',
+        style: TextStyle(
+          color: Color(0xFFE9C46A),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    nameTp.paint(
+      canvas,
+      Offset(
+        nameZone.left + 8,
+        nameZone.center.dy - (nameTp.height / 2),
+      ),
+    );
+
+    final setTp = TextPainter(
+      text: const TextSpan(
+        text: 'SET + #',
+        style: TextStyle(
+          color: Color(0xFFE9C46A),
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    setTp.paint(
+      canvas,
+      Offset(
+        setZone.left + 8,
+        setZone.center.dy - (setTp.height / 2),
+      ),
+    );
   }
 
   @override
   bool shouldRepaint(covariant _CardGuideOverlayPainter oldDelegate) {
     return oldDelegate.guideRect != guideRect ||
         oldDelegate.borderRadius != borderRadius;
+  }
+}
+
+class _ScanFieldStatusBox extends StatelessWidget {
+  const _ScanFieldStatusBox({
+    required this.label,
+    required this.value,
+    required this.locked,
+  });
+
+  final String label;
+  final String value;
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor =
+        locked ? const Color(0xFF4CAF50) : const Color(0x99E9C46A);
+    final fillColor =
+        locked ? const Color(0x334CAF50) : const Color(0x221C1713);
+    final valueColor =
+        locked ? const Color(0xFFC8FACC) : const Color(0xFFEFE7D8);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: fillColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor, width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: borderColor,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: valueColor,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
