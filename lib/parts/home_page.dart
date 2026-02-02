@@ -913,37 +913,115 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _onScanCardPressed() async {
-    final recognizedText = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => const _CardScannerPage(),
-      ),
-    );
-    if (!mounted || recognizedText == null) {
-      return;
-    }
-    final setCodes = await _fetchKnownSetCodes();
-    if (!mounted) {
-      return;
-    }
-    final ocrSeed = _buildOcrSearchSeed(
-      recognizedText,
-      knownSetCodes: setCodes,
-    );
-    if (ocrSeed == null) {
-      showAppSnackBar(
-        context,
-        'No card text recognized. Try better light and focus.',
+    var keepScanning = true;
+    while (mounted && keepScanning) {
+      if (!mounted) {
+        return;
+      }
+      final navigator = Navigator.of(context);
+      final recognizedText = await navigator.push<String>(
+        MaterialPageRoute(
+          builder: (_) => const _CardScannerPage(),
+        ),
       );
-      return;
+      if (!mounted || recognizedText == null) {
+        return;
+      }
+      final setCodes = await _fetchKnownSetCodes();
+      if (!mounted) {
+        return;
+      }
+      final ocrSeed = _buildOcrSearchSeed(
+        recognizedText,
+        knownSetCodes: setCodes,
+      );
+      if (ocrSeed == null) {
+        showAppSnackBar(
+          context,
+          'No card text recognized. Try better light and focus.',
+        );
+        return;
+      }
+      final refinedSeed = await _refineOcrSeed(ocrSeed);
+      if (!mounted) {
+        return;
+      }
+      final resolvedSeed = await _resolveSeedWithPrintingPicker(refinedSeed);
+      if (!mounted) {
+        return;
+      }
+      final added = await _openScannedCardSearch(
+        query: resolvedSeed.query,
+        initialSetCode: resolvedSeed.setCode,
+        initialCollectorNumber: resolvedSeed.collectorNumber,
+      );
+      if (!mounted || !added) {
+        return;
+      }
+      keepScanning = await _askScanAnotherCard();
     }
-    final refinedSeed = await _refineOcrSeed(ocrSeed);
+  }
+
+  Future<_OcrSearchSeed> _resolveSeedWithPrintingPicker(_OcrSearchSeed seed) async {
+    final cardName = seed.cardName?.trim();
+    if (cardName == null || cardName.isEmpty) {
+      return seed;
+    }
+    final localBeforeSync =
+        await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+      CollectionFilter(name: cardName),
+      languages: const ['en'],
+      limit: 250,
+    );
+    final localBeforeSyncKeys = localBeforeSync
+        .where((card) => _normalizeCardNameForMatch(card.name) == _normalizeCardNameForMatch(cardName))
+        .map(_printingKeyForCard)
+        .toSet();
+    await _syncOnlinePrintsByName(cardName);
     if (!mounted) {
-      return;
+      return seed;
     }
-    await _openScannedCardSearch(
-      query: refinedSeed.query,
-      initialSetCode: refinedSeed.setCode,
-      initialCollectorNumber: refinedSeed.collectorNumber,
+    var picked = await _pickCardPrintingForName(
+      context,
+      cardName,
+      preferredSetCode: seed.setCode,
+      preferredCollectorNumber: seed.collectorNumber,
+      localPrintingKeys: localBeforeSyncKeys,
+    );
+    final preferredSet = seed.setCode?.trim().toLowerCase();
+    final missingPreferredSet =
+        picked == null && preferredSet != null && preferredSet.isNotEmpty;
+    if (missingPreferredSet) {
+      final onlineByNameAndSet = await _tryOnlineCardFallbackByNameAndSet(
+        cardName,
+        preferredSet,
+        preferredCollectorNumber: seed.collectorNumber,
+      );
+      if (onlineByNameAndSet != null && mounted) {
+        picked = await _pickCardPrintingForName(
+          context,
+          cardName,
+          preferredSetCode: onlineByNameAndSet.setCode,
+          preferredCollectorNumber: onlineByNameAndSet.collectorNumber,
+          localPrintingKeys: localBeforeSyncKeys,
+        );
+      }
+    }
+    if (picked == null) {
+      return _OcrSearchSeed(
+        query: cardName,
+        cardName: cardName,
+        setCode: seed.setCode,
+        collectorNumber: seed.collectorNumber,
+      );
+    }
+    return _OcrSearchSeed(
+      query: picked.name,
+      cardName: picked.name,
+      setCode: picked.setCode.trim().isEmpty ? null : picked.setCode.trim().toLowerCase(),
+      collectorNumber: picked.collectorNumber.trim().isEmpty
+          ? null
+          : picked.collectorNumber.trim().toLowerCase(),
     );
   }
 
@@ -959,7 +1037,31 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String rawText, {
     required Set<String> knownSetCodes,
   }) {
-    final text = rawText.trim();
+    var text = rawText.trim();
+    String? forcedName;
+    String? forcedSet;
+    if (text.startsWith('__SCAN_PAYLOAD__')) {
+      final payloadText = text.substring('__SCAN_PAYLOAD__'.length).trim();
+      try {
+        final payload = jsonDecode(payloadText);
+        if (payload is Map<String, dynamic>) {
+          final raw = (payload['raw'] as String?)?.trim();
+          final lockedName = (payload['lockedName'] as String?)?.trim();
+          final lockedSet = (payload['lockedSet'] as String?)?.trim();
+          if (raw != null && raw.isNotEmpty) {
+            text = raw;
+          }
+          if (lockedName != null && lockedName.isNotEmpty) {
+            forcedName = lockedName;
+          }
+          if (lockedSet != null && lockedSet.isNotEmpty) {
+            forcedSet = lockedSet;
+          }
+        }
+      } catch (_) {
+        // Fallback to plain raw text if payload parsing fails.
+      }
+    }
     if (text.isEmpty) {
       return null;
     }
@@ -976,16 +1078,26 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final topLines = lines.take(3).toList();
     final bottomStart = lines.length > 5 ? lines.length - 5 : 0;
     final bottomLines = lines.sublist(bottomStart);
-    final bestName = _extractLikelyCardName(topLines);
+    final bestName = (forcedName != null && forcedName.isNotEmpty)
+        ? forcedName
+        : _extractLikelyCardName(topLines);
 
     String? setCode;
     String? collectorNumber;
+    if (forcedSet != null && forcedSet.isNotEmpty) {
+      final forced = _extractSetAndCollectorFromLockedSet(
+        forcedSet,
+        knownSetCodes: knownSetCodes,
+      );
+      setCode = forced.$1;
+      collectorNumber = forced.$2;
+    }
     final setAndCollector = _extractSetAndCollectorFromText(
       bottomLines,
       knownSetCodes: knownSetCodes,
     );
-    setCode = setAndCollector.$1;
-    collectorNumber = setAndCollector.$2;
+    setCode = setAndCollector.$1 ?? setCode;
+    collectorNumber = _pickBetterCollectorNumber(collectorNumber, setAndCollector.$2);
 
     for (final rawLine in bottomLines.reversed) {
       if (setCode != null && collectorNumber != null) {
@@ -1055,21 +1167,64 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<_OcrSearchSeed> _refineOcrSeed(_OcrSearchSeed seed) async {
     final query = seed.query.trim();
     final setCode = seed.setCode?.trim().toLowerCase();
-    if (query.isEmpty || setCode == null || setCode.isEmpty) {
+    final fallbackName = seed.cardName?.trim();
+    if (query.isEmpty) {
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+        if (onlineByName != null) {
+          return onlineByName;
+        }
+      }
       return seed;
+    }
+    if (setCode == null || setCode.isEmpty) {
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+        if (onlineByName != null) {
+          return onlineByName;
+        }
+      }
+      return seed;
+    }
+    if (fallbackName != null && fallbackName.isNotEmpty) {
+      final onlineByNameAndSet = await _tryOnlineCardFallbackByNameAndSet(
+        fallbackName,
+        setCode,
+        preferredCollectorNumber: seed.collectorNumber,
+      );
+      if (onlineByNameAndSet != null) {
+        return onlineByNameAndSet;
+      }
     }
     final strictCount = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
       CollectionFilter(sets: {setCode}),
       searchQuery: query,
     );
     if (strictCount > 0) {
-      return seed;
+      // Guard against false positives when collector OCR is wrong but exists in same set.
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final nameInSetCount =
+            await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+          CollectionFilter(sets: {setCode}),
+          searchQuery: fallbackName,
+        );
+        if (nameInSetCount > 0) {
+          return seed;
+        }
+      } else {
+        return seed;
+      }
     }
     final onlineSeed = await _tryOnlineCardFallback(seed);
     if (onlineSeed != null) {
       return onlineSeed;
     }
-    final fallbackName = seed.cardName?.trim();
+    if (fallbackName != null && fallbackName.isNotEmpty) {
+      final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+      if (onlineByName != null) {
+        return onlineByName;
+      }
+    }
     if (fallbackName != null && fallbackName.isNotEmpty) {
       final nameInSetCount =
           await ScryfallDatabase.instance.countCardsForFilterWithSearch(
@@ -1099,6 +1254,179 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
+  Future<_OcrSearchSeed?> _tryOnlineCardFallbackByName(String cardName) async {
+    final name = cardName.trim();
+    if (name.isEmpty) {
+      return null;
+    }
+    try {
+      final uri = Uri.parse(
+        'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return null;
+      }
+      await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+      final fetchedName = (payload['name'] as String?)?.trim();
+      final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
+      final fetchedCollector =
+          (payload['collector_number'] as String?)?.trim().toLowerCase();
+      return _OcrSearchSeed(
+        query: (fetchedName != null && fetchedName.isNotEmpty) ? fetchedName : name,
+        cardName: fetchedName ?? name,
+        setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : null,
+        collectorNumber:
+            fetchedCollector?.isNotEmpty == true ? fetchedCollector : null,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _syncOnlinePrintsByName(String cardName) async {
+    final name = cardName.trim();
+    if (name.isEmpty) {
+      return;
+    }
+    try {
+      final namedUri = Uri.parse(
+        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(name)}',
+      );
+      final namedResponse =
+          await http.get(namedUri).timeout(const Duration(seconds: 3));
+      String? oracleId;
+      if (namedResponse.statusCode == 200) {
+        final namedPayload = jsonDecode(namedResponse.body);
+        if (namedPayload is Map<String, dynamic>) {
+          await ScryfallDatabase.instance.upsertCardFromScryfall(namedPayload);
+          oracleId = (namedPayload['oracle_id'] as String?)?.trim().toLowerCase();
+        }
+      }
+      Uri searchUri;
+      if (oracleId != null && oracleId.isNotEmpty) {
+        searchUri = Uri.parse(
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('oracleid:$oracleId lang:en unique:prints')}&order=released&dir=desc',
+        );
+      } else {
+        searchUri = Uri.parse(
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('!"$name" lang:en unique:prints')}&order=released&dir=desc',
+        );
+      }
+      await _importScryfallSearchPages(searchUri);
+    } catch (_) {
+      // Best effort: if network is slow/unavailable, keep local flow.
+    }
+  }
+
+  Future<void> _importScryfallSearchPages(Uri firstPageUri) async {
+    var nextUri = firstPageUri;
+    var page = 0;
+    var imported = 0;
+    while (page < 6 && imported < 900) {
+      final response = await http.get(nextUri).timeout(const Duration(seconds: 3));
+      if (response.statusCode != 200) {
+        return;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return;
+      }
+      final data = payload['data'];
+      if (data is List) {
+        for (final item in data) {
+          if (item is! Map<String, dynamic>) {
+            continue;
+          }
+          await ScryfallDatabase.instance.upsertCardFromScryfall(item);
+          imported += 1;
+          if (imported >= 900) {
+            break;
+          }
+        }
+      }
+      final hasMore = payload['has_more'] == true;
+      final nextPage = payload['next_page'];
+      if (!hasMore || nextPage is! String || nextPage.isEmpty) {
+        return;
+      }
+      nextUri = Uri.parse(nextPage);
+      page += 1;
+    }
+  }
+
+  Future<_OcrSearchSeed?> _tryOnlineCardFallbackByNameAndSet(
+    String cardName,
+    String setCode, {
+    String? preferredCollectorNumber,
+  }) async {
+    final name = cardName.trim();
+    final set = setCode.trim().toLowerCase();
+    if (name.isEmpty || set.isEmpty) {
+      return null;
+    }
+    try {
+      final query = '!"$name" set:$set lang:en unique:prints';
+      final uri = Uri.parse(
+        'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent(query)}',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return null;
+      }
+      final data = payload['data'];
+      if (data is! List || data.isEmpty) {
+        return null;
+      }
+      CardSearchResult? bestLocal;
+      final preferredCollector =
+          _normalizeCollectorForComparison(preferredCollectorNumber ?? '');
+      for (final item in data) {
+        if (item is! Map<String, dynamic>) {
+          continue;
+        }
+        await ScryfallDatabase.instance.upsertCardFromScryfall(item);
+      }
+      final localCandidates =
+          await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+        CollectionFilter(name: name, sets: {set}),
+        languages: const ['en'],
+        limit: 100,
+      );
+      if (localCandidates.isNotEmpty) {
+        if (preferredCollector.isNotEmpty) {
+          for (final card in localCandidates) {
+            if (_normalizeCollectorForComparison(card.collectorNumber) ==
+                preferredCollector) {
+              bestLocal = card;
+              break;
+            }
+          }
+        }
+        bestLocal ??= localCandidates.first;
+      }
+      final selected = bestLocal;
+      return _OcrSearchSeed(
+        query: selected?.name ?? name,
+        cardName: selected?.name ?? name,
+        setCode: set,
+        collectorNumber: selected != null
+            ? _normalizeCollectorForComparison(selected.collectorNumber)
+            : _normalizeCollectorForComparison(preferredCollectorNumber ?? ''),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<_OcrSearchSeed?> _tryOnlineCardFallback(_OcrSearchSeed seed) async {
     final setCode = seed.setCode?.trim().toLowerCase();
     final collector = seed.collectorNumber?.trim().toLowerCase();
@@ -1113,7 +1441,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/$setCode/${Uri.encodeComponent(collector)}',
       );
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 4));
       if (response.statusCode != 200) {
         return null;
       }
@@ -1274,6 +1602,34 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return (setCode, collectorNumber);
   }
 
+  (String?, String?) _extractSetAndCollectorFromLockedSet(
+    String value, {
+    required Set<String> knownSetCodes,
+  }) {
+    final upper = value.trim().toUpperCase();
+    if (upper.isEmpty) {
+      return (null, null);
+    }
+    final direct = RegExp(r'^([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)$')
+        .firstMatch(upper);
+    if (direct != null) {
+      final rawSet = (direct.group(1) ?? '').trim().toLowerCase();
+      final setCode = _detectSetCodeFromToken(
+            rawSet,
+            knownSetCodes: knownSetCodes,
+          ) ??
+          (RegExp(r'^[a-z]{2,5}$').hasMatch(rawSet) ? rawSet : null);
+      final collector = _normalizeCollectorNumber(direct.group(2) ?? '');
+      return (setCode, collector);
+    }
+    final collectorOnly = RegExp(r'^#?([0-9]{1,5}[A-Z]?)$').firstMatch(upper);
+    if (collectorOnly != null) {
+      final collector = _normalizeCollectorNumber(collectorOnly.group(1) ?? '');
+      return (null, collector);
+    }
+    return (null, null);
+  }
+
   String? _findNearestSetCode(
     List<String> lines, {
     required int anchorIndex,
@@ -1377,7 +1733,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (match == null) {
       return null;
     }
-    return match.group(1);
+    final normalized = _normalizeCollectorForComparison(match.group(1) ?? '');
+    return normalized.isEmpty ? null : normalized;
   }
 
   String? _pickBetterCollectorNumber(String? current, String? candidate) {
@@ -1414,7 +1771,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return RegExp(r'^\d$').hasMatch(value.trim());
   }
 
-  Future<void> _openScannedCardSearch({
+  Future<bool> _openScannedCardSearch({
     required String query,
     String? initialSetCode,
     String? initialCollectorNumber,
@@ -1431,7 +1788,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         context,
         AppLocalizations.of(context)!.allCardsCollectionNotFound,
       );
-      return;
+      return false;
     }
     final selection = await showModalBottomSheet<_CardSearchSelection>(
       context: context,
@@ -1444,7 +1801,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       ),
     );
     if (!mounted || selection == null) {
-      return;
+      return false;
     }
 
     if (selection.isBulk) {
@@ -1459,13 +1816,35 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
     }
     if (!mounted) {
-      return;
+      return false;
     }
     showAppSnackBar(
       context,
       AppLocalizations.of(context)!.addedCards(selection.count),
     );
     await _loadCollections();
+    return true;
+  }
+
+  Future<bool> _askScanAnotherCard() async {
+    final again = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Carta aggiunta'),
+        content: const Text('Vuoi scansionare un\'altra carta?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Si'),
+          ),
+        ],
+      ),
+    );
+    return again ?? false;
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
@@ -3174,6 +3553,307 @@ class _OcrSearchSeed {
   final String? collectorNumber;
 }
 
+Future<CardSearchResult?> _pickCardPrintingForName(
+  BuildContext context,
+  String cardName,
+  {String? preferredSetCode,
+  String? preferredCollectorNumber,
+  Set<String> localPrintingKeys = const {}}
+) async {
+  final normalizedTarget = _normalizeCardNameForMatch(cardName);
+  if (normalizedTarget.isEmpty) {
+    return null;
+  }
+  var results = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+    CollectionFilter(name: cardName),
+    languages: const ['en'],
+    limit: 250,
+  );
+  if (results.isEmpty) {
+    results = await ScryfallDatabase.instance.searchCardsByName(
+      cardName,
+      limit: 120,
+      languages: const ['en'],
+    );
+  }
+  if (results.isEmpty) {
+    return null;
+  }
+  final exact = results
+      .where((card) => _normalizeCardNameForMatch(card.name) == normalizedTarget)
+      .toList(growable: false);
+  final candidates = exact.isNotEmpty ? exact : results;
+  final byPrinting = <String, CardSearchResult>{};
+  for (final card in candidates) {
+    final key = '${card.name.toLowerCase()}|${card.setCode.toLowerCase()}|${card.collectorNumber.toLowerCase()}';
+    byPrinting.putIfAbsent(key, () => card);
+  }
+  final unique = byPrinting.values.toList(growable: false);
+  if (unique.isEmpty) {
+    return null;
+  }
+  final localKeys = localPrintingKeys;
+  final localCandidates = localKeys.isEmpty
+      ? unique
+      : unique
+          .where((card) => localKeys.contains(_printingKeyForCard(card)))
+          .toList(growable: false);
+  final onlineCandidates = localKeys.isEmpty
+      ? <CardSearchResult>[]
+      : unique
+          .where((card) => !localKeys.contains(_printingKeyForCard(card)))
+          .toList(growable: false);
+  if (unique.length == 1) {
+    return unique.first;
+  }
+  final preferredSet = preferredSetCode?.trim().toLowerCase();
+  var effectivePreferredSet = preferredSet;
+  if (effectivePreferredSet != null &&
+      effectivePreferredSet.isNotEmpty &&
+      !unique.any(
+        (card) => card.setCode.trim().toLowerCase() == effectivePreferredSet,
+      )) {
+    effectivePreferredSet = _approximateSetCodeForCandidates(
+      effectivePreferredSet,
+      unique.map((card) => card.setCode.trim().toLowerCase()),
+    );
+  }
+  // Do not auto-pick when multiple printings exist:
+  // always show chooser so user can select Local vs Online printing.
+  if (!context.mounted) {
+    return null;
+  }
+  return showModalBottomSheet<CardSearchResult>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _PickPrintingSheet(
+      cardName: unique.first.name,
+      candidates: unique,
+      localCandidates: localCandidates,
+      onlineCandidates: onlineCandidates,
+    ),
+  );
+}
+
+String _normalizeCollectorForComparison(String value) {
+  final raw = value.trim().toLowerCase();
+  if (raw.isEmpty) {
+    return '';
+  }
+  final match = RegExp(r'^0*(\d+)([a-z]?)$').firstMatch(raw);
+  if (match == null) {
+    return raw;
+  }
+  final number = match.group(1) ?? '';
+  final suffix = match.group(2) ?? '';
+  return '$number$suffix';
+}
+
+String? _approximateSetCodeForCandidates(
+  String preferredSet,
+  Iterable<String> candidateSetCodes,
+) {
+  final normalizedPreferred = preferredSet
+      .trim()
+      .toLowerCase()
+      .replaceAll('0', 'o')
+      .replaceAll('1', 'i')
+      .replaceAll('5', 's')
+      .replaceAll('8', 'b');
+  if (normalizedPreferred.isEmpty) {
+    return null;
+  }
+  String? best;
+  var bestDistance = 999;
+  for (final rawCandidate in candidateSetCodes) {
+    final candidate = rawCandidate.trim().toLowerCase();
+    if (candidate.isEmpty) {
+      continue;
+    }
+    final distance = _levenshteinDistance(normalizedPreferred, candidate);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+  if (best == null) {
+    return null;
+  }
+  return bestDistance <= 2 ? best : null;
+}
+
+int _levenshteinDistance(String a, String b) {
+  if (a == b) {
+    return 0;
+  }
+  if (a.isEmpty) {
+    return b.length;
+  }
+  if (b.isEmpty) {
+    return a.length;
+  }
+  final prev = List<int>.generate(b.length + 1, (i) => i);
+  final curr = List<int>.filled(b.length + 1, 0);
+  for (var i = 1; i <= a.length; i++) {
+    curr[0] = i;
+    for (var j = 1; j <= b.length; j++) {
+      final cost = a.codeUnitAt(i - 1) == b.codeUnitAt(j - 1) ? 0 : 1;
+      final deletion = prev[j] + 1;
+      final insertion = curr[j - 1] + 1;
+      final substitution = prev[j - 1] + cost;
+      var best = deletion < insertion ? deletion : insertion;
+      if (substitution < best) {
+        best = substitution;
+      }
+      curr[j] = best;
+    }
+    for (var j = 0; j <= b.length; j++) {
+      prev[j] = curr[j];
+    }
+  }
+  return prev[b.length];
+}
+
+String _normalizeCardNameForMatch(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r"[^a-z0-9'\- ]"), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
+
+String _printingKeyForCard(CardSearchResult card) {
+  return '${_normalizeCardNameForMatch(card.name)}|${card.setCode.trim().toLowerCase()}|${_normalizeCollectorForComparison(card.collectorNumber)}';
+}
+
+class _PickPrintingSheet extends StatelessWidget {
+  const _PickPrintingSheet({
+    required this.cardName,
+    required this.candidates,
+    this.localCandidates = const [],
+    this.onlineCandidates = const [],
+  });
+
+  final String cardName;
+  final List<CardSearchResult> candidates;
+  final List<CardSearchResult> localCandidates;
+  final List<CardSearchResult> onlineCandidates;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxHeight = MediaQuery.of(context).size.height * 0.82;
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Choose printing',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              cardName,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: const Color(0xFFBFAE95),
+                  ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: (candidates.length * 74.0).clamp(220.0, maxHeight),
+              child: ListView(
+                children: [
+                  if (localCandidates.isNotEmpty) ...[
+                    _buildSectionHeader(context, 'Local'),
+                    for (final card in localCandidates)
+                      _buildPrintingTile(context, card),
+                  ],
+                  if (onlineCandidates.isNotEmpty) ...[
+                    if (localCandidates.isNotEmpty)
+                      const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 8),
+                        child: Divider(height: 1),
+                      ),
+                    _buildSectionHeader(context, 'Online'),
+                    for (final card in onlineCandidates)
+                      _buildPrintingTile(context, card),
+                  ],
+                  if (localCandidates.isEmpty && onlineCandidates.isEmpty)
+                    for (final card in candidates) _buildPrintingTile(context, card),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: const Color(0xFFE9C46A),
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+      ),
+    );
+  }
+
+  Widget _buildPrintingTile(BuildContext context, CardSearchResult card) {
+    return ListTile(
+      leading: _buildCardPreview(card),
+      title: Text(
+        card.setName.trim().isEmpty ? card.setCode.toUpperCase() : card.setName,
+      ),
+      subtitle: Text('#${card.collectorNumber}'),
+      trailing: _buildSetIcon(card.setCode, size: 32),
+      onTap: () => Navigator.of(context).pop(card),
+    );
+  }
+
+  Widget _buildCardPreview(CardSearchResult card) {
+    final uri = card.imageUri?.trim();
+    if (uri == null || uri.isEmpty) {
+      return _buildSetIcon(card.setCode, size: 22);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: 42,
+        height: 58,
+        child: Image.network(
+          uri,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Container(
+            color: const Color(0x221C1713),
+            alignment: Alignment.center,
+            child: _buildSetIcon(card.setCode, size: 22),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _CardScannerPage extends StatefulWidget {
   const _CardScannerPage();
 
@@ -3181,13 +3861,17 @@ class _CardScannerPage extends StatefulWidget {
   State<_CardScannerPage> createState() => _CardScannerPageState();
 }
 
-class _CardScannerPageState extends State<_CardScannerPage> {
-  static const double _cardAspectRatio = 64 / 89;
+class _CardScannerPageState extends State<_CardScannerPage>
+    with SingleTickerProviderStateMixin {
+  static const double _cardAspectRatio = 64 / 96;
   static const int _requiredStableHits = 3;
-  static const int _requiredFieldHits = 2;
+  static const int _requiredNameFieldHits = 2;
+  static const int _requiredSetFieldHits = 3;
+  static const int _setVoteWindow = 18;
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
+  late final AnimationController _pulseController;
   CameraController? _cameraController;
   bool _initializing = true;
   bool _handled = false;
@@ -3202,12 +3886,36 @@ class _CardScannerPageState extends State<_CardScannerPage> {
   int _setHits = 0;
   String _lockedName = '';
   String _lockedSet = '';
+  String _namePreview = '';
+  final List<String> _setVoteHistory = <String>[];
+  final Map<String, int> _setVoteCounts = <String, int>{};
+  Set<String> _knownSetCodes = const {};
+  bool _torchEnabled = false;
+  bool _torchAvailable = true;
   String _status = 'Allinea la carta nel riquadro.';
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    unawaited(_loadKnownSetCodesForScanner());
     unawaited(_initializeCamera());
+  }
+
+  Future<void> _loadKnownSetCodesForScanner() async {
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _knownSetCodes = sets
+          .map((set) => set.code.trim().toLowerCase())
+          .where((code) => code.isNotEmpty)
+          .toSet();
+    });
   }
 
   Future<void> _initializeCamera() async {
@@ -3235,6 +3943,15 @@ class _CardScannerPageState extends State<_CardScannerPage> {
         _cameraController = controller;
         _initializing = false;
       });
+      try {
+        await controller.setFlashMode(FlashMode.off);
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _torchAvailable = false;
+          });
+        }
+      }
     } catch (_) {
       if (!mounted) {
         return;
@@ -3255,8 +3972,34 @@ class _CardScannerPageState extends State<_CardScannerPage> {
       }
       controller.dispose();
     }
+    _pulseController.dispose();
     _textRecognizer.close();
     super.dispose();
+  }
+
+  Future<void> _toggleTorch() async {
+    final controller = _cameraController;
+    if (controller == null || !_torchAvailable) {
+      return;
+    }
+    try {
+      final next = _torchEnabled ? FlashMode.off : FlashMode.torch;
+      await controller.setFlashMode(next);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _torchEnabled = !_torchEnabled;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _torchAvailable = false;
+      });
+      showAppSnackBar(context, 'Flash non disponibile su questo device.');
+    }
   }
 
   Future<void> _processCameraFrame(CameraImage image) async {
@@ -3293,6 +4036,7 @@ class _CardScannerPageState extends State<_CardScannerPage> {
         _bestStableRawText = '';
         _nameHits = 0;
         _setHits = 0;
+        _clearSetVotes();
         return;
       }
       final key = stableKey.toLowerCase();
@@ -3308,33 +4052,34 @@ class _CardScannerPageState extends State<_CardScannerPage> {
       }
       if (mounted) {
         setState(() {
-          if (_lockedName.isEmpty && _lockedSet.isEmpty) {
-            _status = 'Cerco nome e set...';
-          } else if (_lockedName.isNotEmpty && _lockedSet.isEmpty) {
-            _status = 'Nome OK. Avvicina il bordo basso (set + numero).';
-          } else if (_lockedName.isEmpty && _lockedSet.isNotEmpty) {
-            _status = 'Set OK. Avvicina il bordo alto (nome).';
+          if (_lockedName.isEmpty) {
+            _status = 'Cerco nome carta...';
           } else {
-            _status = 'Rilevato: $stableKey';
+            _status = 'Nome riconosciuto. Apro la ricerca...';
           }
         });
       }
       if (_stableHits < _requiredStableHits ||
           rawText.isEmpty ||
-          _lockedName.isEmpty ||
-          _lockedSet.isEmpty) {
+          _lockedName.isEmpty) {
         return;
       }
       _handled = true;
       await controller.stopImageStream();
       if (mounted) {
+        final payload = jsonEncode({
+          'raw': _bestStableRawText.isNotEmpty ? _bestStableRawText : rawText,
+          'lockedName': _lockedName,
+          'lockedSet': _lockedSet,
+        });
         Navigator.of(context).pop(
-          _bestStableRawText.isNotEmpty ? _bestStableRawText : rawText,
+          '__SCAN_PAYLOAD__$payload',
         );
       }
     } catch (_) {
       _stableHits = 0;
       _bestStableRawText = '';
+      _clearSetVotes();
       if (mounted) {
         setState(() {
           _status = 'OCR instabile, riprovo...';
@@ -3387,32 +4132,97 @@ class _CardScannerPageState extends State<_CardScannerPage> {
       return;
     }
     final nameCandidate = _extractNameForField(lines.take(3).toList());
-    final bottomStart = lines.length > 5 ? lines.length - 5 : 0;
-    final setCandidate = _extractSetForField(lines.sublist(bottomStart));
+    final bottomStart = lines.length > 8 ? lines.length - 8 : 0;
+    var setCandidate = _extractSetForField(lines.sublist(bottomStart));
+    if (setCandidate.isEmpty) {
+      setCandidate = _extractSetForField(lines);
+    }
+    final votedSetCandidate = _registerSetVote(setCandidate);
+    _namePreview = nameCandidate;
 
-    if (nameCandidate.isNotEmpty) {
+      if (nameCandidate.isNotEmpty) {
       if (nameCandidate.toLowerCase() == _lastNameCandidate.toLowerCase()) {
         _nameHits += 1;
       } else {
         _lastNameCandidate = nameCandidate;
         _nameHits = 1;
       }
-      if (_nameHits >= _requiredFieldHits) {
+      if (_nameHits >= _requiredNameFieldHits) {
         _lockedName = nameCandidate;
+        if (_pulseController.isAnimating) {
+          _pulseController.stop();
+        }
       }
     }
 
-    if (setCandidate.isNotEmpty) {
-      if (setCandidate.toLowerCase() == _lastSetCandidate.toLowerCase()) {
+    if (votedSetCandidate.isNotEmpty) {
+      final hasResolvedSet = RegExp(r'^[A-Z]{2,5}\s+[0-9]{1,5}[A-Z]?$')
+          .hasMatch(votedSetCandidate.trim().toUpperCase());
+      if (!hasResolvedSet) {
+        _setHits = 0;
+        return;
+      }
+      if (votedSetCandidate.toLowerCase() == _lastSetCandidate.toLowerCase()) {
         _setHits += 1;
       } else {
-        _lastSetCandidate = setCandidate;
+        _lastSetCandidate = votedSetCandidate;
         _setHits = 1;
       }
-      if (_setHits >= _requiredFieldHits) {
-        _lockedSet = setCandidate;
+      if (_setHits >= _requiredSetFieldHits) {
+        _lockedSet = votedSetCandidate;
       }
     }
+  }
+
+  String _registerSetVote(String candidate) {
+    final normalized = _normalizeSetCandidateForVote(candidate);
+    if (normalized.isEmpty) {
+      return '';
+    }
+    _setVoteHistory.add(normalized);
+    _setVoteCounts.update(normalized, (value) => value + 1, ifAbsent: () => 1);
+    if (_setVoteHistory.length > _setVoteWindow) {
+      final removed = _setVoteHistory.removeAt(0);
+      final next = (_setVoteCounts[removed] ?? 0) - 1;
+      if (next <= 0) {
+        _setVoteCounts.remove(removed);
+      } else {
+        _setVoteCounts[removed] = next;
+      }
+    }
+    return _bestSetVoteCandidate() ?? normalized;
+  }
+
+  String? _bestSetVoteCandidate() {
+    String? best;
+    var bestCount = 0;
+    for (final entry in _setVoteCounts.entries) {
+      if (entry.value > bestCount) {
+        bestCount = entry.value;
+        best = entry.key;
+      }
+    }
+    return best;
+  }
+
+  String _normalizeSetCandidateForVote(String value) {
+    final match = RegExp(r'^([A-Z]{2,5})\s+([0-9]{1,5}[A-Z]?)$')
+        .firstMatch(value.trim().toUpperCase());
+    if (match == null) {
+      return '';
+    }
+    final setCode = (match.group(1) ?? '').trim();
+    final collectorRaw = (match.group(2) ?? '').trim();
+    if (setCode.isEmpty || collectorRaw.isEmpty) {
+      return '';
+    }
+    final normalizedCollector = _normalizeCollectorForComparison(collectorRaw);
+    return '$setCode ${normalizedCollector.toUpperCase()}';
+  }
+
+  void _clearSetVotes() {
+    _setVoteHistory.clear();
+    _setVoteCounts.clear();
   }
 
   String _extractNameForField(List<String> lines) {
@@ -3442,18 +4252,38 @@ class _CardScannerPageState extends State<_CardScannerPage> {
   String _extractSetForField(List<String> lines) {
     final directRegex = RegExp(r'\b([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)\b');
     final collectorRegex = RegExp(r'\b([0-9]{1,5}[A-Z]?)\s*/\s*[0-9]{1,5}\b');
+    final collectorOnlyRegex = RegExp(r'^\s*([0-9]{1,5}[A-Z]?)\s*$');
     for (var i = lines.length - 1; i >= 0; i--) {
       final upper = lines[i].toUpperCase();
       final match = directRegex.firstMatch(upper);
       if (match == null) {
         final collectorMatch = collectorRegex.firstMatch(upper);
-        if (collectorMatch == null) {
-          continue;
+        if (collectorMatch != null) {
+          final collector = (collectorMatch.group(1) ?? '').trim();
+          final nearSet = _guessSetTokenAroundIndex(lines, i);
+          if (collector.isNotEmpty && nearSet.isNotEmpty) {
+            return '$nearSet $collector';
+          }
+          if (collector.isNotEmpty) {
+            return '#$collector';
+          }
         }
-        final collector = (collectorMatch.group(1) ?? '').trim();
-        final nearSet = _guessSetTokenAroundIndex(lines, i);
-        if (collector.isNotEmpty && nearSet.isNotEmpty) {
-          return '$nearSet $collector';
+        final clean = upper
+            .replaceAll('O', '0')
+            .replaceAll('I', '1')
+            .replaceAll('L', '1')
+            .replaceAll(RegExp(r'[^A-Z0-9 ]'), ' ')
+            .trim();
+        final singleCollector = collectorOnlyRegex.firstMatch(clean);
+        if (singleCollector != null) {
+          final collector = (singleCollector.group(1) ?? '').trim();
+          if (collector.isNotEmpty) {
+            final nearSet = _guessSetTokenAroundIndex(lines, i);
+            if (nearSet.isNotEmpty) {
+              return '$nearSet $collector';
+            }
+            return '#$collector';
+          }
         }
         continue;
       }
@@ -3462,14 +4292,17 @@ class _CardScannerPageState extends State<_CardScannerPage> {
       if (setCode.isEmpty || collector.isEmpty) {
         continue;
       }
-      return '$setCode $collector';
+      if (!RegExp(r'[A-Z]').hasMatch(setCode)) {
+        continue;
+      }
+      return '${setCode.toUpperCase()} $collector';
     }
     return '';
   }
 
   String _guessSetTokenAroundIndex(List<String> lines, int anchorIndex) {
     const rarityTokens = {'C', 'U', 'R', 'M', 'L'};
-    for (var delta = 0; delta <= 2; delta++) {
+    for (var delta = 0; delta <= 4; delta++) {
       final indices = <int>{anchorIndex - delta, anchorIndex + delta};
       for (final idx in indices) {
         if (idx < 0 || idx >= lines.length) {
@@ -3477,6 +4310,8 @@ class _CardScannerPageState extends State<_CardScannerPage> {
         }
         final tokens = lines[idx]
             .toUpperCase()
+            .replaceAll('0', 'O')
+            .replaceAll('1', 'I')
             .split(RegExp(r'[^A-Z0-9]'))
             .where((t) => t.isNotEmpty)
             .toList(growable: false);
@@ -3490,11 +4325,36 @@ class _CardScannerPageState extends State<_CardScannerPage> {
           if (RegExp(r'^\d+$').hasMatch(token)) {
             continue;
           }
-          return token;
+          final resolved = _resolveKnownSetCode(token);
+          if (resolved != null) {
+            return resolved.toUpperCase();
+          }
+          if (RegExp(r'^[A-Z]{2,5}$').hasMatch(token)) {
+            return token;
+          }
         }
       }
     }
     return '';
+  }
+
+  String? _resolveKnownSetCode(String token) {
+    final raw = token.trim().toLowerCase();
+    if (raw.isEmpty) {
+      return null;
+    }
+    if (_knownSetCodes.contains(raw)) {
+      return raw;
+    }
+    final normalized = raw
+        .replaceAll('0', 'o')
+        .replaceAll('1', 'i')
+        .replaceAll('5', 's')
+        .replaceAll('8', 'b');
+    if (_knownSetCodes.contains(normalized)) {
+      return normalized;
+    }
+    return null;
   }
 
   InputImage? _toInputImage(
@@ -3529,6 +4389,16 @@ class _CardScannerPageState extends State<_CardScannerPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Live card scan'),
+        actions: [
+          IconButton(
+            tooltip: 'Torch',
+            onPressed: (_initializing || !_torchAvailable) ? null : _toggleTorch,
+            icon: Icon(
+              _torchEnabled ? Icons.flash_on : Icons.flash_off,
+              color: _torchEnabled ? const Color(0xFFE9C46A) : null,
+            ),
+          ),
+        ],
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -3540,26 +4410,41 @@ class _CardScannerPageState extends State<_CardScannerPage> {
           IgnorePointer(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final availableWidth = (constraints.maxWidth - 36).clamp(120.0, constraints.maxWidth);
-                final availableHeight = (constraints.maxHeight - 160).clamp(180.0, constraints.maxHeight);
+                final availableWidth = (constraints.maxWidth - 48)
+                    .clamp(110.0, constraints.maxWidth);
+                final mediaPadding = MediaQuery.of(context).padding;
+                final topReserved = mediaPadding.top + 8;
+                final bottomReserved = mediaPadding.bottom + 236;
+                final frameAreaHeight =
+                    (constraints.maxHeight - topReserved - bottomReserved)
+                        .clamp(80.0, constraints.maxHeight);
+                final availableHeight = frameAreaHeight;
                 var guideWidth = availableWidth;
                 var guideHeight = guideWidth / _cardAspectRatio;
                 if (guideHeight > availableHeight) {
                   guideHeight = availableHeight;
                   guideWidth = guideHeight * _cardAspectRatio;
                 }
+                final centerY = topReserved + (frameAreaHeight / 2) + 10;
                 final guideRect = Rect.fromCenter(
                   center: Offset(
                     constraints.maxWidth / 2,
-                    constraints.maxHeight / 2,
+                    centerY,
                   ),
                   width: guideWidth,
                   height: guideHeight,
                 );
-                return CustomPaint(
-                  painter: _CardGuideOverlayPainter(
-                    guideRect: guideRect,
-                    borderRadius: 20,
+                return AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, _) => CustomPaint(
+                    painter: _CardGuideOverlayPainter(
+                      guideRect: guideRect,
+                      borderRadius: 20,
+                      pulse: _lockedName.isNotEmpty
+                          ? 1
+                          : (0.45 + (_pulseController.value * 0.55)),
+                      locked: _lockedName.isNotEmpty,
+                    ),
                   ),
                 );
               },
@@ -3568,49 +4453,36 @@ class _CardScannerPageState extends State<_CardScannerPage> {
           Positioned(
             left: 16,
             right: 16,
-            top: 12 + MediaQuery.of(context).padding.top,
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ScanFieldStatusBox(
+            bottom: 12,
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ScanFieldStatusBox(
                     label: 'Nome',
-                    value: _lockedName.isEmpty ? 'In attesa' : _lockedName,
+                    value: _lockedName.isEmpty
+                        ? (_namePreview.isEmpty ? 'In attesa' : _namePreview)
+                        : _lockedName,
                     locked: _lockedName.isNotEmpty,
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _ScanFieldStatusBox(
-                    label: 'Set',
-                    value: _lockedSet.isEmpty ? 'In attesa' : _lockedSet,
-                    locked: _lockedSet.isNotEmpty,
+                  const SizedBox(height: 10),
+                  Text(
+                    _status,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFEFE7D8),
+                        ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _status,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFEFE7D8),
-                      ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Live OCR attivo',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFE9C46A),
-                      ),
-                ),
-              ],
+                  const SizedBox(height: 10),
+                  Text(
+                    'Live OCR attivo',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFE9C46A),
+                        ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -3623,10 +4495,14 @@ class _CardGuideOverlayPainter extends CustomPainter {
   const _CardGuideOverlayPainter({
     required this.guideRect,
     required this.borderRadius,
+    required this.pulse,
+    required this.locked,
   });
 
   final Rect guideRect;
   final double borderRadius;
+  final double pulse;
+  final bool locked;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -3642,31 +4518,36 @@ class _CardGuideOverlayPainter extends CustomPainter {
       ..fillType = PathFillType.evenOdd;
     canvas.drawPath(
       overlayPath,
-      Paint()..color = Colors.black.withValues(alpha: 0.46),
+      Paint()
+        ..color = Colors.black.withValues(
+          alpha: locked ? 0.42 : (0.40 + (0.12 * (1 - pulse))),
+        ),
     );
 
+    final frameColor = locked ? const Color(0xFF4CAF50) : const Color(0xFFE9C46A);
+    final accentColor = locked ? const Color(0xFFC8FACC) : const Color(0xFFF5E3A4);
     final glowPaint = Paint()
-      ..color = const Color(0x80E9C46A)
+      ..color = frameColor.withValues(alpha: locked ? 0.72 : (0.36 + (0.38 * pulse)))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
     canvas.drawRRect(guideRRect, glowPaint);
 
     final outerStroke = Paint()
-      ..color = const Color(0xFFE9C46A)
+      ..color = frameColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2;
     canvas.drawRRect(guideRRect, outerStroke);
 
     final innerRRect = guideRRect.deflate(6);
     final innerStroke = Paint()
-      ..color = const Color(0x66F5E3A4)
+      ..color = accentColor.withValues(alpha: locked ? 0.55 : (0.32 + (0.30 * pulse)))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawRRect(innerRRect, innerStroke);
 
     final accentPaint = Paint()
-      ..color = const Color(0xFFF5E3A4)
+      ..color = accentColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
@@ -3714,19 +4595,9 @@ class _CardGuideOverlayPainter extends CustomPainter {
       guideRect.width - 28,
       guideRect.height * 0.16,
     );
-    final setZone = Rect.fromLTWH(
-      guideRect.left + 14,
-      guideRect.bottom - (guideRect.height * 0.15) - 14,
-      guideRect.width - 28,
-      guideRect.height * 0.15,
-    );
-
     final nameRRect = RRect.fromRectAndRadius(nameZone, const Radius.circular(8));
-    final setRRect = RRect.fromRectAndRadius(setZone, const Radius.circular(8));
     canvas.drawRRect(nameRRect, zoneFill);
-    canvas.drawRRect(setRRect, zoneFill);
     canvas.drawRRect(nameRRect, zoneStroke);
-    canvas.drawRRect(setRRect, zoneStroke);
 
     final nameTp = TextPainter(
       text: const TextSpan(
@@ -3748,31 +4619,14 @@ class _CardGuideOverlayPainter extends CustomPainter {
       ),
     );
 
-    final setTp = TextPainter(
-      text: const TextSpan(
-        text: 'SET + #',
-        style: TextStyle(
-          color: Color(0xFFE9C46A),
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    setTp.paint(
-      canvas,
-      Offset(
-        setZone.left + 8,
-        setZone.center.dy - (setTp.height / 2),
-      ),
-    );
   }
 
   @override
   bool shouldRepaint(covariant _CardGuideOverlayPainter oldDelegate) {
     return oldDelegate.guideRect != guideRect ||
-        oldDelegate.borderRadius != borderRadius;
+        oldDelegate.borderRadius != borderRadius ||
+        oldDelegate.pulse != pulse ||
+        oldDelegate.locked != locked;
   }
 }
 

@@ -1256,12 +1256,51 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (!context.mounted) {
       return;
     }
+    final resolvedSeed = await _resolveSeedWithPrintingPickerForScan(
+      context,
+      refinedSeed,
+    );
+    if (!context.mounted) {
+      return;
+    }
     await _addCardByName(
       context,
       ownedCollectionId,
-      initialQuery: refinedSeed.query,
-      initialSetCode: refinedSeed.setCode,
-      initialCollectorNumber: refinedSeed.collectorNumber,
+      initialQuery: resolvedSeed.query,
+      initialSetCode: resolvedSeed.setCode,
+      initialCollectorNumber: resolvedSeed.collectorNumber,
+    );
+  }
+
+  Future<_OcrSearchSeed> _resolveSeedWithPrintingPickerForScan(
+    BuildContext context,
+    _OcrSearchSeed seed,
+  ) async {
+    final cardName = seed.cardName?.trim();
+    if (cardName == null || cardName.isEmpty) {
+      return seed;
+    }
+    final picked = await _pickCardPrintingForName(
+      context,
+      cardName,
+      preferredSetCode: seed.setCode,
+      preferredCollectorNumber: seed.collectorNumber,
+    );
+    if (picked == null) {
+      return _OcrSearchSeed(
+        query: cardName,
+        cardName: cardName,
+        setCode: seed.setCode,
+        collectorNumber: seed.collectorNumber,
+      );
+    }
+    return _OcrSearchSeed(
+      query: picked.name,
+      cardName: picked.name,
+      setCode: picked.setCode.trim().isEmpty ? null : picked.setCode.trim().toLowerCase(),
+      collectorNumber: picked.collectorNumber.trim().isEmpty
+          ? null
+          : picked.collectorNumber.trim().toLowerCase(),
     );
   }
 
@@ -1369,7 +1408,23 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Future<_OcrSearchSeed> _refineOcrSeedForScan(_OcrSearchSeed seed) async {
     final query = seed.query.trim();
     final setCode = seed.setCode?.trim().toLowerCase();
-    if (query.isEmpty || setCode == null || setCode.isEmpty) {
+    final fallbackName = seed.cardName?.trim();
+    if (query.isEmpty) {
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final onlineByName = await _tryOnlineCardFallbackByNameForScan(fallbackName);
+        if (onlineByName != null) {
+          return onlineByName;
+        }
+      }
+      return seed;
+    }
+    if (setCode == null || setCode.isEmpty) {
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final onlineByName = await _tryOnlineCardFallbackByNameForScan(fallbackName);
+        if (onlineByName != null) {
+          return onlineByName;
+        }
+      }
       return seed;
     }
     final strictCount = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
@@ -1377,13 +1432,29 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       searchQuery: query,
     );
     if (strictCount > 0) {
-      return seed;
+      if (fallbackName != null && fallbackName.isNotEmpty) {
+        final nameInSetCount =
+            await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+          CollectionFilter(sets: {setCode}),
+          searchQuery: fallbackName,
+        );
+        if (nameInSetCount > 0) {
+          return seed;
+        }
+      } else {
+        return seed;
+      }
     }
     final onlineSeed = await _tryOnlineCardFallbackForScan(seed);
     if (onlineSeed != null) {
       return onlineSeed;
     }
-    final fallbackName = seed.cardName?.trim();
+    if (fallbackName != null && fallbackName.isNotEmpty) {
+      final onlineByName = await _tryOnlineCardFallbackByNameForScan(fallbackName);
+      if (onlineByName != null) {
+        return onlineByName;
+      }
+    }
     if (fallbackName != null && fallbackName.isNotEmpty) {
       final nameInSetCount =
           await ScryfallDatabase.instance.countCardsForFilterWithSearch(
@@ -1411,6 +1482,40 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       setCode: null,
       collectorNumber: seed.collectorNumber,
     );
+  }
+
+  Future<_OcrSearchSeed?> _tryOnlineCardFallbackByNameForScan(String cardName) async {
+    final name = cardName.trim();
+    if (name.isEmpty) {
+      return null;
+    }
+    try {
+      final uri = Uri.parse(
+        'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}',
+      );
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return null;
+      }
+      await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+      final fetchedName = (payload['name'] as String?)?.trim();
+      final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
+      final fetchedCollector =
+          (payload['collector_number'] as String?)?.trim().toLowerCase();
+      return _OcrSearchSeed(
+        query: (fetchedName != null && fetchedName.isNotEmpty) ? fetchedName : name,
+        cardName: fetchedName ?? name,
+        setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : null,
+        collectorNumber:
+            fetchedCollector?.isNotEmpty == true ? fetchedCollector : null,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<_OcrSearchSeed?> _tryOnlineCardFallbackForScan(_OcrSearchSeed seed) async {
