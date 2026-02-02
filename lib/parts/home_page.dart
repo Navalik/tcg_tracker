@@ -913,48 +913,34 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _onScanCardPressed() async {
-    final scanResult = await Navigator.of(context).push<_CardScanResult>(
+    final recognizedText = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => const _CardScannerPage(),
       ),
     );
-    if (!mounted || scanResult == null) {
+    if (!mounted || recognizedText == null) {
       return;
     }
-
-    if (scanResult.kind == _CardScanKind.ocr) {
-      final setCodes = await _fetchKnownSetCodes();
-      if (!mounted) {
-        return;
-      }
-      final ocrSeed = _buildOcrSearchSeed(
-        scanResult.value,
-        knownSetCodes: setCodes,
-      );
-      if (ocrSeed == null) {
-        showAppSnackBar(
-          context,
-          'No card text recognized. Try better light and focus.',
-        );
-        return;
-      }
-      await _openScannedCardSearch(
-        query: ocrSeed.query,
-        initialSetCode: ocrSeed.setCode,
-        initialCollectorNumber: ocrSeed.collectorNumber,
-      );
+    final setCodes = await _fetchKnownSetCodes();
+    if (!mounted) {
       return;
     }
-
-    final query = _extractScanQuery(scanResult.value);
-    if (query.isEmpty) {
+    final ocrSeed = _buildOcrSearchSeed(
+      recognizedText,
+      knownSetCodes: setCodes,
+    );
+    if (ocrSeed == null) {
       showAppSnackBar(
         context,
-        'Unable to read a valid card value.',
+        'No card text recognized. Try better light and focus.',
       );
       return;
     }
-    await _openScannedCardSearch(query: query);
+    await _openScannedCardSearch(
+      query: ocrSeed.query,
+      initialSetCode: ocrSeed.setCode,
+      initialCollectorNumber: ocrSeed.collectorNumber,
+    );
   }
 
   Future<Set<String>> _fetchKnownSetCodes() async {
@@ -988,7 +974,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final hasDigits = RegExp(r'\d').hasMatch(line);
       final hasLetters = RegExp(r'[A-Za-z]').hasMatch(line);
       if (hasLetters && !hasDigits && line.length >= 3) {
-        bestName = line;
+        bestName = _normalizePotentialCardName(line);
         break;
       }
     }
@@ -997,6 +983,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         (line) => RegExp(r'[A-Za-z]').hasMatch(line),
         orElse: () => '',
       );
+      bestName = _normalizePotentialCardName(bestName);
     }
 
     String? setCode;
@@ -1013,8 +1000,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
       for (var i = 0; i < tokens.length; i++) {
         final token = tokens[i];
-        if (setCode == null && knownSetCodes.contains(token.toLowerCase())) {
-          setCode = token.toLowerCase();
+        if (setCode == null) {
+          final detectedSet = _detectSetCodeFromToken(
+            token,
+            knownSetCodes: knownSetCodes,
+          );
+          if (detectedSet != null) {
+            setCode = detectedSet;
+          }
+        }
+        if (setCode != null && collectorNumber == null) {
           final next = (i + 1 < tokens.length) ? tokens[i + 1] : null;
           final fromNext = _normalizeCollectorNumber(next ?? '');
           if (fromNext != null) {
@@ -1059,8 +1054,51 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
+  String? _detectSetCodeFromToken(
+    String token, {
+    required Set<String> knownSetCodes,
+  }) {
+    final raw = token.trim().toLowerCase();
+    if (raw.isEmpty) {
+      return null;
+    }
+    final candidates = <String>{
+      raw,
+      _normalizeSetCodeCandidate(raw),
+    };
+    for (final candidate in candidates) {
+      if (candidate.isNotEmpty && knownSetCodes.contains(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  String _normalizeSetCodeCandidate(String value) {
+    return value
+        .replaceAll('0', 'o')
+        .replaceAll('1', 'i')
+        .replaceAll('5', 's')
+        .replaceAll('8', 'b');
+  }
+
+  String _normalizePotentialCardName(String input) {
+    return input
+        .replaceAll(RegExp(r"[^A-Za-z0-9'\-\s,]"), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   String? _normalizeCollectorNumber(String input) {
-    final value = input.trim().toLowerCase();
+    final value = input
+        .trim()
+        .toLowerCase()
+        .replaceAll('#', '')
+        .replaceAll('o', '0')
+        .replaceAll('i', '1')
+        .replaceAll('l', '1')
+        .replaceAll('s', '5')
+        .replaceAll(RegExp(r'[^a-z0-9/]'), '');
     if (value.isEmpty) {
       return null;
     }
@@ -1123,32 +1161,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       AppLocalizations.of(context)!.addedCards(selection.count),
     );
     await _loadCollections();
-  }
-
-  String _extractScanQuery(String rawValue) {
-    final trimmed = rawValue.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    final uri = Uri.tryParse(trimmed);
-    if (uri != null) {
-      final query = uri.queryParameters['q']?.trim();
-      if (query != null && query.isNotEmpty) {
-        return query;
-      }
-      if (uri.host.toLowerCase().contains('scryfall.com')) {
-        final segments = uri.pathSegments.where((segment) => segment.isNotEmpty);
-        if (segments.isNotEmpty) {
-          final last = Uri.decodeComponent(segments.last)
-              .replaceAll('-', ' ')
-              .trim();
-          if (last.isNotEmpty) {
-            return last;
-          }
-        }
-      }
-    }
-    return trimmed;
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
@@ -2843,18 +2855,6 @@ class _TitleLockup extends StatelessWidget {
   }
 }
 
-enum _CardScanKind { barcode, ocr }
-
-class _CardScanResult {
-  const _CardScanResult({
-    required this.kind,
-    required this.value,
-  });
-
-  final _CardScanKind kind;
-  final String value;
-}
-
 class _OcrSearchSeed {
   const _OcrSearchSeed({
     required this.query,
@@ -2875,126 +2875,222 @@ class _CardScannerPage extends StatefulWidget {
 }
 
 class _CardScannerPageState extends State<_CardScannerPage> {
-  final MobileScannerController _controller = MobileScannerController();
-  final ImagePicker _imagePicker = ImagePicker();
+  static const double _cardAspectRatio = 63 / 88;
+  static const int _requiredStableHits = 3;
   final TextRecognizer _textRecognizer = TextRecognizer(
     script: TextRecognitionScript.latin,
   );
+  CameraController? _cameraController;
+  bool _initializing = true;
   bool _handled = false;
-  bool _processingOcr = false;
-  String _status = 'Scan barcode/QR or use OCR photo.';
+  bool _processingFrame = false;
+  DateTime _lastProcessedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  String _lastCandidateKey = '';
+  int _stableHits = 0;
+  String _status = 'Allinea la carta nel riquadro.';
 
   @override
-  void dispose() {
-    _controller.dispose();
-    _textRecognizer.close();
-    super.dispose();
+  void initState() {
+    super.initState();
+    unawaited(_initializeCamera());
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    if (_handled || !mounted || _processingOcr) {
-      return;
-    }
-    for (final barcode in capture.barcodes) {
-      final raw = barcode.rawValue?.trim();
-      if (raw == null || raw.isEmpty) {
-        continue;
-      }
-      _handled = true;
-      Navigator.of(context).pop(
-        _CardScanResult(kind: _CardScanKind.barcode, value: raw),
-      );
-      return;
-    }
-  }
-
-  Future<void> _scanOcrFromCamera() async {
-    if (_processingOcr || _handled) {
-      return;
-    }
-    setState(() {
-      _processingOcr = true;
-      _status = 'Capturing photo...';
-    });
+  Future<void> _initializeCamera() async {
     try {
-      final image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
-        preferredCameraDevice: CameraDevice.rear,
+      final cameras = await availableCameras();
+      final selected = cameras.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
       );
-      if (image == null) {
-        if (mounted) {
-          setState(() {
-            _status = 'Scan canceled.';
-          });
-        }
-        return;
-      }
+      final controller = CameraController(
+        selected,
+        ResolutionPreset.medium,
+        enableAudio: false,
+        imageFormatGroup: Platform.isIOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.nv21,
+      );
+      await controller.initialize();
+      await controller.startImageStream(_processCameraFrame);
       if (!mounted) {
+        await controller.dispose();
         return;
       }
       setState(() {
-        _status = 'Reading card text...';
+        _cameraController = controller;
+        _initializing = false;
       });
-      final recognized = await _textRecognizer.processImage(
-        InputImage.fromFilePath(image.path),
-      );
-      final recognizedText = recognized.text.trim();
-      if (!mounted) {
-        return;
-      }
-      if (recognizedText.isEmpty) {
-        setState(() {
-          _status = 'No text found. Try better light and focus.';
-        });
-        return;
-      }
-      _handled = true;
-      Navigator.of(context).pop(
-        _CardScanResult(kind: _CardScanKind.ocr, value: recognizedText),
-      );
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _status = 'OCR failed. Try again.';
+        _initializing = false;
+        _status = 'Camera non disponibile. Controlla i permessi.';
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _processingOcr = false;
-        });
-      }
     }
   }
 
   @override
+  void dispose() {
+    final controller = _cameraController;
+    if (controller != null) {
+      if (controller.value.isStreamingImages) {
+        unawaited(controller.stopImageStream());
+      }
+      controller.dispose();
+    }
+    _textRecognizer.close();
+    super.dispose();
+  }
+
+  Future<void> _processCameraFrame(CameraImage image) async {
+    if (_handled || _processingFrame || !mounted) {
+      return;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastProcessedAt).inMilliseconds < 380) {
+      return;
+    }
+    _lastProcessedAt = now;
+    final controller = _cameraController;
+    if (controller == null) {
+      return;
+    }
+    final input = _toInputImage(image, controller);
+    if (input == null) {
+      return;
+    }
+    _processingFrame = true;
+    try {
+      final recognized = await _textRecognizer.processImage(input);
+      final rawText = recognized.text.trim();
+      final snippet = _buildStableSnippet(rawText);
+      if (snippet.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _status = 'Cerco testo carta...';
+          });
+        }
+        _stableHits = 0;
+        _lastCandidateKey = '';
+        return;
+      }
+      final key = snippet.toLowerCase();
+      if (key == _lastCandidateKey) {
+        _stableHits += 1;
+      } else {
+        _lastCandidateKey = key;
+        _stableHits = 1;
+      }
+      if (mounted) {
+        setState(() {
+          _status = 'Rilevato: $snippet';
+        });
+      }
+      if (_stableHits < _requiredStableHits || rawText.isEmpty) {
+        return;
+      }
+      _handled = true;
+      await controller.stopImageStream();
+      if (mounted) {
+        Navigator.of(context).pop(rawText);
+      }
+    } catch (_) {
+      _stableHits = 0;
+      if (mounted) {
+        setState(() {
+          _status = 'OCR instabile, riprovo...';
+        });
+      }
+    } finally {
+      _processingFrame = false;
+    }
+  }
+
+  String _buildStableSnippet(String text) {
+    final lines = text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return '';
+    }
+    final useful = lines.where((line) => RegExp(r'[A-Za-z]').hasMatch(line));
+    final snippet = useful.take(3).join(' | ').trim();
+    if (snippet.isEmpty) {
+      return '';
+    }
+    return snippet.length > 80 ? '${snippet.substring(0, 80)}...' : snippet;
+  }
+
+  InputImage? _toInputImage(
+    CameraImage image,
+    CameraController controller,
+  ) {
+    final format = InputImageFormatValue.fromRawValue(image.format.raw);
+    if (format == null) {
+      return null;
+    }
+    final bytes = Uint8List.fromList(
+      image.planes.expand((plane) => plane.bytes).toList(growable: false),
+    );
+    final rotation = InputImageRotationValue.fromRawValue(
+          controller.description.sensorOrientation,
+        ) ??
+        InputImageRotation.rotation0deg;
+    return InputImage.fromBytes(
+      bytes: bytes,
+      metadata: InputImageMetadata(
+        size: Size(image.width.toDouble(), image.height.toDouble()),
+        rotation: rotation,
+        format: format,
+        bytesPerRow: image.planes.first.bytesPerRow,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = _cameraController;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan card'),
+        title: const Text('Live card scan'),
       ),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
+          if (_initializing || controller == null)
+            const Center(child: CircularProgressIndicator())
+          else
+            CameraPreview(controller),
           IgnorePointer(
-            child: Center(
-              child: Container(
-                width: 260,
-                height: 180,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: const Color(0xFFE9C46A),
-                    width: 2,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final maxWidth = constraints.maxWidth * 0.74;
+                final maxHeight = constraints.maxHeight * 0.66;
+                var guideWidth = maxWidth;
+                var guideHeight = guideWidth / _cardAspectRatio;
+                if (guideHeight > maxHeight) {
+                  guideHeight = maxHeight;
+                  guideWidth = guideHeight * _cardAspectRatio;
+                }
+                final guideRect = Rect.fromCenter(
+                  center: Offset(
+                    constraints.maxWidth / 2,
+                    constraints.maxHeight / 2,
                   ),
-                ),
-              ),
+                  width: guideWidth,
+                  height: guideHeight,
+                );
+                return CustomPaint(
+                  painter: _CardGuideOverlayPainter(
+                    guideRect: guideRect,
+                    borderRadius: 20,
+                  ),
+                );
+              },
             ),
           ),
           Positioned(
@@ -3012,16 +3108,11 @@ class _CardScannerPageState extends State<_CardScannerPage> {
                       ),
                 ),
                 const SizedBox(height: 10),
-                FilledButton.icon(
-                  onPressed: _processingOcr ? null : _scanOcrFromCamera,
-                  icon: _processingOcr
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.document_scanner_outlined),
-                  label: const Text('Recognize card (OCR)'),
+                Text(
+                  'Live OCR attivo',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFE9C46A),
+                      ),
                 ),
               ],
             ),
@@ -3029,6 +3120,95 @@ class _CardScannerPageState extends State<_CardScannerPage> {
         ],
       ),
     );
+  }
+}
+
+class _CardGuideOverlayPainter extends CustomPainter {
+  const _CardGuideOverlayPainter({
+    required this.guideRect,
+    required this.borderRadius,
+  });
+
+  final Rect guideRect;
+  final double borderRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final fullRect = Offset.zero & size;
+    final guideRRect = RRect.fromRectAndRadius(
+      guideRect,
+      Radius.circular(borderRadius),
+    );
+
+    final overlayPath = Path()
+      ..addRect(fullRect)
+      ..addRRect(guideRRect)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(
+      overlayPath,
+      Paint()..color = Colors.black.withValues(alpha: 0.46),
+    );
+
+    final glowPaint = Paint()
+      ..color = const Color(0x80E9C46A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawRRect(guideRRect, glowPaint);
+
+    final outerStroke = Paint()
+      ..color = const Color(0xFFE9C46A)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2;
+    canvas.drawRRect(guideRRect, outerStroke);
+
+    final innerRRect = guideRRect.deflate(6);
+    final innerStroke = Paint()
+      ..color = const Color(0x66F5E3A4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawRRect(innerRRect, innerStroke);
+
+    final accentPaint = Paint()
+      ..color = const Color(0xFFF5E3A4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    const accentLen = 22.0;
+    final left = guideRect.left + 12;
+    final right = guideRect.right - 12;
+    final top = guideRect.top + 12;
+    final bottom = guideRect.bottom - 12;
+    canvas.drawLine(Offset(left, top), Offset(left + accentLen, top), accentPaint);
+    canvas.drawLine(Offset(left, top), Offset(left, top + accentLen), accentPaint);
+    canvas.drawLine(Offset(right, top), Offset(right - accentLen, top), accentPaint);
+    canvas.drawLine(Offset(right, top), Offset(right, top + accentLen), accentPaint);
+    canvas.drawLine(
+      Offset(left, bottom),
+      Offset(left + accentLen, bottom),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(left, bottom),
+      Offset(left, bottom - accentLen),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(right, bottom),
+      Offset(right - accentLen, bottom),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(right, bottom),
+      Offset(right, bottom - accentLen),
+      accentPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CardGuideOverlayPainter oldDelegate) {
+    return oldDelegate.guideRect != guideRect ||
+        oldDelegate.borderRadius != borderRadius;
   }
 }
 

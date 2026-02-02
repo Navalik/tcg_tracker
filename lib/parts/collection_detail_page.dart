@@ -6,6 +6,11 @@ enum _CardSortMode {
   type,
 }
 
+enum _AddCardEntryMode {
+  byName,
+  byScan,
+}
+
 class CollectionDetailPage extends StatefulWidget {
   const CollectionDetailPage({
     super.key,
@@ -1107,13 +1112,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _addCard(BuildContext context) async {
-    if (widget.isSetCollection) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.useListToSetOwnedQuantities,
-      );
-      return;
-    }
     final ownedCollectionId = _ownedCollectionId;
     if (ownedCollectionId == null) {
       showAppSnackBar(
@@ -1122,11 +1120,33 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       );
       return;
     }
+    final mode = await _showAddCardEntryModePicker(context);
+    if (!context.mounted || mode == null) {
+      return;
+    }
+    if (mode == _AddCardEntryMode.byScan) {
+      await _addCardByScan(context, ownedCollectionId);
+      return;
+    }
+    await _addCardByName(context, ownedCollectionId);
+  }
+
+  Future<void> _addCardByName(
+    BuildContext context,
+    int ownedCollectionId, {
+    String? initialQuery,
+    String? initialSetCode,
+    String? initialCollectorNumber,
+  }) async {
     final selection = await showModalBottomSheet<_CardSearchSelection>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const _CardSearchSheet(),
+      builder: (context) => _CardSearchSheet(
+        initialQuery: initialQuery,
+        initialSetCode: initialSetCode,
+        initialCollectorNumber: initialCollectorNumber,
+      ),
     );
 
     if (selection == null) {
@@ -1155,6 +1175,244 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return;
     }
     await _loadCards();
+  }
+
+  Future<_AddCardEntryMode?> _showAddCardEntryModePicker(
+    BuildContext context,
+  ) async {
+    return showModalBottomSheet<_AddCardEntryMode>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l10n.addCard,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.search),
+                title: const Text('By name'),
+                subtitle: const Text('Search and add manually'),
+                onTap: () =>
+                    Navigator.of(context).pop(_AddCardEntryMode.byName),
+              ),
+              ListTile(
+                leading: const Icon(Icons.document_scanner_outlined),
+                title: const Text('By scan'),
+                subtitle: const Text('Live OCR card recognition'),
+                onTap: () =>
+                    Navigator.of(context).pop(_AddCardEntryMode.byScan),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _addCardByScan(BuildContext context, int ownedCollectionId) async {
+    final recognizedText = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const _CardScannerPage(),
+      ),
+    );
+    if (!context.mounted || recognizedText == null) {
+      return;
+    }
+    final setCodes = await _fetchKnownSetCodesForScan();
+    if (!context.mounted) {
+      return;
+    }
+    final ocrSeed = _buildOcrSearchSeedForScan(
+      recognizedText,
+      knownSetCodes: setCodes,
+    );
+    if (ocrSeed == null) {
+      showAppSnackBar(
+        context,
+        'No card text recognized. Try better light and focus.',
+      );
+      return;
+    }
+    await _addCardByName(
+      context,
+      ownedCollectionId,
+      initialQuery: ocrSeed.query,
+      initialSetCode: ocrSeed.setCode,
+      initialCollectorNumber: ocrSeed.collectorNumber,
+    );
+  }
+
+  Future<Set<String>> _fetchKnownSetCodesForScan() async {
+    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    return sets
+        .map((set) => set.code.trim().toLowerCase())
+        .where((code) => code.isNotEmpty)
+        .toSet();
+  }
+
+  _OcrSearchSeed? _buildOcrSearchSeedForScan(
+    String rawText, {
+    required Set<String> knownSetCodes,
+  }) {
+    final text = rawText.trim();
+    if (text.isEmpty) {
+      return null;
+    }
+    final lines = text
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return null;
+    }
+
+    var bestName = '';
+    for (final line in lines.take(5)) {
+      final hasDigits = RegExp(r'\d').hasMatch(line);
+      final hasLetters = RegExp(r'[A-Za-z]').hasMatch(line);
+      if (hasLetters && !hasDigits && line.length >= 3) {
+        bestName = _normalizePotentialCardNameForScan(line);
+        break;
+      }
+    }
+    if (bestName.isEmpty) {
+      bestName = lines.firstWhere(
+        (line) => RegExp(r'[A-Za-z]').hasMatch(line),
+        orElse: () => '',
+      );
+      bestName = _normalizePotentialCardNameForScan(bestName);
+    }
+
+    String? setCode;
+    String? collectorNumber;
+    for (final rawLine in lines.reversed) {
+      final upperLine = rawLine.toUpperCase();
+      final tokens = upperLine
+          .split(RegExp(r'[^A-Z0-9/]'))
+          .where((token) => token.isNotEmpty)
+          .toList();
+      if (tokens.isEmpty) {
+        continue;
+      }
+      for (var i = 0; i < tokens.length; i++) {
+        final token = tokens[i];
+        if (setCode == null) {
+          final detectedSet = _detectSetCodeFromTokenForScan(
+            token,
+            knownSetCodes: knownSetCodes,
+          );
+          if (detectedSet != null) {
+            setCode = detectedSet;
+          }
+        }
+        if (setCode != null && collectorNumber == null) {
+          final next = (i + 1 < tokens.length) ? tokens[i + 1] : null;
+          final fromNext = _normalizeCollectorNumberForScan(next ?? '');
+          if (fromNext != null) {
+            collectorNumber = fromNext;
+          }
+        }
+        if (collectorNumber == null && token.contains('/')) {
+          final part = token.split('/').first;
+          final normalized = _normalizeCollectorNumberForScan(part);
+          if (normalized != null) {
+            collectorNumber = normalized;
+          }
+        }
+        collectorNumber ??= _normalizeCollectorNumberForScan(token);
+      }
+      if (setCode != null && collectorNumber != null) {
+        break;
+      }
+    }
+
+    if (bestName.isEmpty && setCode == null && collectorNumber == null) {
+      return null;
+    }
+    final fallbackQuery = bestName.isEmpty ? lines.first : bestName;
+    final query =
+        (collectorNumber != null &&
+                collectorNumber.isNotEmpty &&
+                setCode != null &&
+                setCode.isNotEmpty)
+            ? collectorNumber
+            : fallbackQuery;
+    return _OcrSearchSeed(
+      query: query,
+      setCode: setCode,
+      collectorNumber: collectorNumber,
+    );
+  }
+
+  String? _detectSetCodeFromTokenForScan(
+    String token, {
+    required Set<String> knownSetCodes,
+  }) {
+    final raw = token.trim().toLowerCase();
+    if (raw.isEmpty) {
+      return null;
+    }
+    final candidates = <String>{
+      raw,
+      raw
+          .replaceAll('0', 'o')
+          .replaceAll('1', 'i')
+          .replaceAll('5', 's')
+          .replaceAll('8', 'b'),
+    };
+    for (final candidate in candidates) {
+      if (candidate.isNotEmpty && knownSetCodes.contains(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  }
+
+  String _normalizePotentialCardNameForScan(String input) {
+    return input
+        .replaceAll(RegExp(r"[^A-Za-z0-9'\-\s,]"), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
+  String? _normalizeCollectorNumberForScan(String input) {
+    final value = input
+        .trim()
+        .toLowerCase()
+        .replaceAll('#', '')
+        .replaceAll('o', '0')
+        .replaceAll('i', '1')
+        .replaceAll('l', '1')
+        .replaceAll('s', '5')
+        .replaceAll(RegExp(r'[^a-z0-9/]'), '');
+    if (value.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'^(\d{1,4}[a-z]?)$').firstMatch(value);
+    if (match == null) {
+      return null;
+    }
+    return match.group(1);
   }
 
   Future<void> _showCardDetails(CollectionCardEntry entry) async {
@@ -2122,13 +2380,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             ),
         ],
       ),
-      floatingActionButton: widget.isSetCollection
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: () => _addCard(context),
-              icon: const Icon(Icons.add),
-              label: Text(AppLocalizations.of(context)!.addCard),
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _addCard(context),
+        icon: const Icon(Icons.add),
+        label: Text(AppLocalizations.of(context)!.addCard),
+      ),
     );
   }
 }
