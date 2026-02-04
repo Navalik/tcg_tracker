@@ -946,14 +946,32 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted) {
         return;
       }
-      final resolvedSeed = await _resolveSeedWithPrintingPicker(refinedSeed);
+      final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
       if (!mounted) {
         return;
       }
+      if (resolved.pickedCard != null) {
+        final action = await _showScannedCardPreview(resolved.pickedCard!);
+        if (!mounted) {
+          return;
+        }
+        if (action == _ScanPreviewAction.retry) {
+          continue;
+        }
+        if (action != _ScanPreviewAction.add) {
+          return;
+        }
+        final added = await _addCardToAllCards(resolved.pickedCard!.id);
+        if (!mounted || !added) {
+          return;
+        }
+        keepScanning = await _askScanAnotherCard();
+        continue;
+      }
       final added = await _openScannedCardSearch(
-        query: resolvedSeed.query,
-        initialSetCode: resolvedSeed.setCode,
-        initialCollectorNumber: resolvedSeed.collectorNumber,
+        query: resolved.seed.query,
+        initialSetCode: resolved.seed.setCode,
+        initialCollectorNumber: resolved.seed.collectorNumber,
       );
       if (!mounted || !added) {
         return;
@@ -962,10 +980,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  Future<_OcrSearchSeed> _resolveSeedWithPrintingPicker(_OcrSearchSeed seed) async {
+  Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(_OcrSearchSeed seed) async {
     final cardName = seed.cardName?.trim();
     if (cardName == null || cardName.isEmpty) {
-      return seed;
+      return _ResolvedScanSelection(seed: seed);
     }
     final localBeforeSync =
         await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
@@ -973,13 +991,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       languages: const ['en'],
       limit: 250,
     );
+    final normalizedName = _normalizeCardNameForMatch(cardName);
     final localBeforeSyncKeys = localBeforeSync
-        .where((card) => _normalizeCardNameForMatch(card.name) == _normalizeCardNameForMatch(cardName))
+        .where((card) => _normalizeCardNameForMatch(card.name) == normalizedName)
         .map(_printingKeyForCard)
         .toSet();
-    await _syncOnlinePrintsByName(cardName);
+    // Keep scan flow snappy: avoid long blocking sync for cards with many printings.
+    if (localBeforeSyncKeys.length < 4) {
+      await _syncOnlinePrintsByName(cardName, timeBudget: const Duration(seconds: 2));
+    }
     if (!mounted) {
-      return seed;
+      return _ResolvedScanSelection(seed: seed);
     }
     var picked = await _pickCardPrintingForName(
       context,
@@ -1008,21 +1030,147 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     if (picked == null) {
-      return _OcrSearchSeed(
-        query: cardName,
-        cardName: cardName,
-        setCode: seed.setCode,
-        collectorNumber: seed.collectorNumber,
+      return _ResolvedScanSelection(
+        seed: _OcrSearchSeed(
+          query: cardName,
+          cardName: cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+        ),
       );
     }
-    return _OcrSearchSeed(
-      query: picked.name,
-      cardName: picked.name,
-      setCode: picked.setCode.trim().isEmpty ? null : picked.setCode.trim().toLowerCase(),
-      collectorNumber: picked.collectorNumber.trim().isEmpty
-          ? null
-          : picked.collectorNumber.trim().toLowerCase(),
+    return _ResolvedScanSelection(
+      seed: _OcrSearchSeed(
+        query: picked.name,
+        cardName: picked.name,
+        setCode: picked.setCode.trim().isEmpty ? null : picked.setCode.trim().toLowerCase(),
+        collectorNumber: picked.collectorNumber.trim().isEmpty
+            ? null
+            : picked.collectorNumber.trim().toLowerCase(),
+      ),
+      pickedCard: picked,
     );
+  }
+
+  Future<_ScanPreviewAction?> _showScannedCardPreview(CardSearchResult card) {
+    return showModalBottomSheet<_ScanPreviewAction>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final maxHeight = MediaQuery.of(context).size.height * 0.88;
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  card.name,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '${card.setName.trim().isEmpty ? card.setCode.toUpperCase() : card.setName}  •  #${card.collectorNumber}',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: maxHeight * 0.62),
+                  child: AspectRatio(
+                    aspectRatio: 63.5 / 88.9,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: card.imageUri != null && card.imageUri!.trim().isNotEmpty
+                          ? Image.network(
+                              card.imageUri!.trim(),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => Container(
+                                color: const Color(0x221C1713),
+                                alignment: Alignment.center,
+                                child: _buildSetIcon(card.setCode, size: 54),
+                              ),
+                            )
+                          : Container(
+                              color: const Color(0x221C1713),
+                              alignment: Alignment.center,
+                              child: _buildSetIcon(card.setCode, size: 54),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () =>
+                            Navigator.of(context).pop(_ScanPreviewAction.retry),
+                        icon: const Icon(Icons.replay),
+                        label: const Text('Riprova'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: () =>
+                            Navigator.of(context).pop(_ScanPreviewAction.add),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Aggiungi'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _addCardToAllCards(String cardId) async {
+    CollectionInfo? allCards;
+    for (final collection in _collections) {
+      if (collection.name == _allCardsCollectionName) {
+        allCards = collection;
+        break;
+      }
+    }
+    if (allCards == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      );
+      return false;
+    }
+    await ScryfallDatabase.instance.addCardToCollection(allCards.id, cardId);
+    if (!mounted) {
+      return false;
+    }
+    showAppSnackBar(
+      context,
+      AppLocalizations.of(context)!.addedCards(1),
+    );
+    await _loadCollections();
+    return true;
   }
 
   Future<Set<String>> _fetchKnownSetCodes() async {
@@ -1288,17 +1436,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  Future<void> _syncOnlinePrintsByName(String cardName) async {
+  Future<void> _syncOnlinePrintsByName(
+    String cardName, {
+    Duration timeBudget = const Duration(seconds: 2),
+  }) async {
     final name = cardName.trim();
     if (name.isEmpty) {
       return;
     }
+    final deadline = DateTime.now().add(timeBudget);
     try {
       final namedUri = Uri.parse(
         'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(name)}',
       );
       final namedResponse =
-          await http.get(namedUri).timeout(const Duration(seconds: 3));
+          await http.get(namedUri).timeout(const Duration(seconds: 2));
       String? oracleId;
       if (namedResponse.statusCode == 200) {
         final namedPayload = jsonDecode(namedResponse.body);
@@ -1317,18 +1469,31 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('!"$name" lang:en unique:prints')}&order=released&dir=desc',
         );
       }
-      await _importScryfallSearchPages(searchUri);
+      await _importScryfallSearchPages(
+        searchUri,
+        deadline: deadline,
+        maxPages: 2,
+        maxImported: 120,
+      );
     } catch (_) {
       // Best effort: if network is slow/unavailable, keep local flow.
     }
   }
 
-  Future<void> _importScryfallSearchPages(Uri firstPageUri) async {
+  Future<void> _importScryfallSearchPages(
+    Uri firstPageUri, {
+    required DateTime deadline,
+    int maxPages = 2,
+    int maxImported = 120,
+  }) async {
     var nextUri = firstPageUri;
     var page = 0;
     var imported = 0;
-    while (page < 6 && imported < 900) {
-      final response = await http.get(nextUri).timeout(const Duration(seconds: 3));
+    while (page < maxPages && imported < maxImported) {
+      if (DateTime.now().isAfter(deadline)) {
+        return;
+      }
+      final response = await http.get(nextUri).timeout(const Duration(seconds: 2));
       if (response.statusCode != 200) {
         return;
       }
@@ -1339,12 +1504,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final data = payload['data'];
       if (data is List) {
         for (final item in data) {
+          if (DateTime.now().isAfter(deadline)) {
+            return;
+          }
           if (item is! Map<String, dynamic>) {
             continue;
           }
           await ScryfallDatabase.instance.upsertCardFromScryfall(item);
           imported += 1;
-          if (imported >= 900) {
+          if (imported >= maxImported) {
             break;
           }
         }
@@ -3553,6 +3721,18 @@ class _OcrSearchSeed {
   final String? collectorNumber;
 }
 
+class _ResolvedScanSelection {
+  const _ResolvedScanSelection({
+    required this.seed,
+    this.pickedCard,
+  });
+
+  final _OcrSearchSeed seed;
+  final CardSearchResult? pickedCard;
+}
+
+enum _ScanPreviewAction { add, retry }
+
 Future<CardSearchResult?> _pickCardPrintingForName(
   BuildContext context,
   String cardName,
@@ -3603,9 +3783,6 @@ Future<CardSearchResult?> _pickCardPrintingForName(
       : unique
           .where((card) => !localKeys.contains(_printingKeyForCard(card)))
           .toList(growable: false);
-  if (unique.length == 1) {
-    return unique.first;
-  }
   final preferredSet = preferredSetCode?.trim().toLowerCase();
   var effectivePreferredSet = preferredSet;
   if (effectivePreferredSet != null &&
