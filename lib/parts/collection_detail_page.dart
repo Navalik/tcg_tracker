@@ -1138,7 +1138,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     String? initialSetCode,
     String? initialCollectorNumber,
   }) async {
-    final selection = await showModalBottomSheet<_CardSearchSelection>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -1146,31 +1146,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         initialQuery: initialQuery,
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
+        selectionEnabled: false,
+        ownershipCollectionId: ownedCollectionId,
       ),
     );
-
-    if (selection == null) {
-      return;
-    }
-
-    if (selection.isBulk) {
-      await ScryfallDatabase.instance.addCardsToCollection(
-        ownedCollectionId,
-        selection.cardIds,
-      );
-      if (!context.mounted) {
-        return;
-      }
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.addedCards(selection.count),
-      );
-    } else {
-      await ScryfallDatabase.instance.addCardToCollection(
-        ownedCollectionId,
-        selection.cardIds.first,
-      );
-    }
     if (!mounted) {
       return;
     }
@@ -2795,10 +2774,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'collection_add_fab',
         onPressed: () => _addCard(context),
-        icon: const Icon(Icons.add),
-        label: Text(AppLocalizations.of(context)!.addCard),
+        child: const Icon(Icons.add),
       ),
     );
   }

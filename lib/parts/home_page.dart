@@ -903,13 +903,41 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!context.mounted) {
       return;
     }
-    if (selection == _HomeAddAction.addCards) {
+    if (selection == _HomeAddAction.addByScan) {
+      await _onScanCardPressed();
+    } else if (selection == _HomeAddAction.addCards) {
       await _openAddCardsForAllCards(context);
     } else if (selection == _HomeAddAction.addCardsToCollection) {
       await _openAddCardsForCollection(context);
     } else if (selection == _HomeAddAction.addCollection) {
       await _showCreateCollectionOptions(context);
     }
+  }
+
+  Future<void> _onSearchCardPressed() async {
+    CollectionInfo? allCards;
+    for (final collection in _collections) {
+      if (collection.name == _allCardsCollectionName) {
+        allCards = collection;
+        break;
+      }
+    }
+    if (allCards == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      );
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _CardSearchSheet(
+        selectionEnabled: false,
+        ownershipCollectionId: allCards!.id,
+      ),
+    );
   }
 
   Future<void> _onScanCardPressed() async {
@@ -2782,8 +2810,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               FloatingActionButton(
-                heroTag: 'home_scan_fab',
-                onPressed: _onScanCardPressed,
+                heroTag: 'home_search_fab',
+                onPressed: _onSearchCardPressed,
                 child: const Icon(Icons.search),
               ),
               FloatingActionButton(
@@ -2953,6 +2981,12 @@ class _HomeAddSheet extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
+          ListTile(
+            leading: const Icon(Icons.document_scanner_outlined),
+            title: const Text('Aggiungi tramite scan'),
+            subtitle: const Text('Scansiona una carta con OCR live'),
+            onTap: () => Navigator.of(context).pop(_HomeAddAction.addByScan),
+          ),
           ListTile(
             leading: const Icon(Icons.add_circle_outline),
             title: Text(l10n.addCards),
@@ -4864,7 +4898,7 @@ class _ScanFieldStatusBox extends StatelessWidget {
 
 enum _CollectionAction { rename, editFilters, delete }
 
-enum _HomeAddAction { addCards, addCardsToCollection, addCollection }
+enum _HomeAddAction { addByScan, addCards, addCardsToCollection, addCollection }
 
 enum _CollectionCreateAction { custom, setBased }
 

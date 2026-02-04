@@ -23,18 +23,22 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialQuery,
     this.initialSetCode,
     this.initialCollectorNumber,
+    this.selectionEnabled = true,
+    this.ownershipCollectionId,
   });
 
   final String? initialQuery;
   final String? initialSetCode;
   final String? initialCollectorNumber;
+  final bool selectionEnabled;
+  final int? ownershipCollectionId;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
 }
 
 class _CardSearchSheetState extends State<_CardSearchSheet>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const int _pageSize = 100;
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -49,6 +53,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   late final AnimationController _previewController;
   late final Animation<double> _previewOpacity;
   late final Animation<double> _previewScale;
+  late final AnimationController _searchLoadingController;
   bool _searching = false;
   String _artistQuery = '';
   String? _pendingQuery;
@@ -63,6 +68,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _countLoading = false;
   int? _filterTotalCount;
   Map<String, String>? _availableSetCodesCache;
+  Map<String, int> _ownedQuantitiesByCardId = const {};
+  bool _galleryView = false;
+  bool _artworkSearchEnabled = false;
+  bool _ownedOnlyFilter = false;
+  bool _onlineArtworkLoading = false;
+  bool _addingFromPreview = false;
 
   @override
   void initState() {
@@ -78,6 +89,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _previewScale = Tween<double>(begin: 0.95, end: 1.0).animate(
       CurvedAnimation(parent: _previewController, curve: Curves.easeOutBack),
     );
+    _searchLoadingController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
     _focusNode.requestFocus();
     _controller.addListener(_onQueryChanged);
     final initialSetCode = widget.initialSetCode?.trim().toLowerCase();
@@ -102,6 +117,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   void dispose() {
     _debounce?.cancel();
     _hidePreview(immediate: true);
+    _searchLoadingController.dispose();
     _previewController.dispose();
     _controller.dispose();
     _focusNode.dispose();
@@ -126,6 +142,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         setState(() {
           _results = [];
           _loading = false;
+          _onlineArtworkLoading = false;
         });
       }
       return;
@@ -145,7 +162,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     setState(() {
       _loading = true;
       _loadingMore = false;
+      _onlineArtworkLoading = false;
       _results = [];
+      _ownedQuantitiesByCardId = const {};
     });
 
     final currentQuery = _query;
@@ -220,8 +239,56 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       });
     }
     List<CardSearchResult> page;
+    var hasMorePages = true;
     final hasAdvancedFilters = _hasActiveAdvancedFilters();
-    if (hasAdvancedFilters) {
+    if (!widget.selectionEnabled &&
+        _artworkSearchEnabled &&
+        query.isNotEmpty &&
+        !hasAdvancedFilters) {
+      final localResults = await ScryfallDatabase.instance.searchCardsByName(
+        query,
+        languages: _effectiveLanguages(),
+        limit: 400,
+        offset: 0,
+      );
+      final trimmedLocalQuery = query.trim();
+      var filteredLocal = localResults;
+      if (trimmedLocalQuery.isNotEmpty) {
+        filteredLocal = _applyPrefixWordFilter(localResults, trimmedLocalQuery);
+      }
+
+      final ownershipCollectionId = widget.ownershipCollectionId;
+      Map<String, int> localOwnedQuantities = const {};
+      if (ownershipCollectionId != null && filteredLocal.isNotEmpty) {
+        localOwnedQuantities = await ScryfallDatabase.instance.fetchCollectionQuantities(
+          ownershipCollectionId,
+          filteredLocal.map((card) => card.id).toList(growable: false),
+        );
+        if (_ownedOnlyFilter) {
+          filteredLocal = filteredLocal
+              .where((card) => (localOwnedQuantities[card.id] ?? 0) > 0)
+              .toList(growable: false);
+        }
+      }
+      if (!mounted || query != _query) {
+        return;
+      }
+      setState(() {
+        _results = filteredLocal;
+        _ownedQuantitiesByCardId = localOwnedQuantities;
+        _loading = false;
+        _loadingMore = false;
+        _onlineArtworkLoading = true;
+        _hasMore = false;
+      });
+
+      final onlineResults = await _fetchOnlinePrintings(query);
+      if (!mounted || query != _query) {
+        return;
+      }
+      page = _mergeUniquePrintings(localResults, onlineResults);
+      hasMorePages = false;
+    } else if (hasAdvancedFilters) {
       final filter = _buildAdvancedFilter();
       page = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
         filter,
@@ -247,20 +314,281 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         offset: _offset,
       );
     }
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isNotEmpty) {
+      page = _applyPrefixWordFilter(page, trimmedQuery);
+    }
+    final rawPageCount = page.length;
+    Map<String, int> ownedQuantities = const {};
+    final ownershipCollectionId = widget.ownershipCollectionId;
+    if (ownershipCollectionId != null && page.isNotEmpty) {
+      ownedQuantities = await ScryfallDatabase.instance.fetchCollectionQuantities(
+        ownershipCollectionId,
+        page.map((card) => card.id).toList(growable: false),
+      );
+      if (_ownedOnlyFilter) {
+        page = page
+            .where((card) => (ownedQuantities[card.id] ?? 0) > 0)
+            .toList(growable: false);
+      }
+    }
     if (!mounted) {
       return;
     }
     setState(() {
       if (replace) {
         _results = page;
+        _ownedQuantitiesByCardId = ownedQuantities;
       } else {
         _results = [..._results, ...page];
+        _ownedQuantitiesByCardId = {
+          ..._ownedQuantitiesByCardId,
+          ...ownedQuantities,
+        };
       }
       _loading = false;
       _loadingMore = false;
-      _offset += page.length;
-      _hasMore = page.length == _pageSize;
+      _onlineArtworkLoading = false;
+      _offset += rawPageCount;
+      _hasMore = hasMorePages && rawPageCount == _pageSize;
     });
+  }
+
+  Future<List<CardSearchResult>> _fetchOnlinePrintings(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      return const [];
+    }
+    try {
+      final collected = <CardSearchResult>[];
+      final namedUri = Uri.parse(
+        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(trimmed)}',
+      );
+      final namedResponse =
+          await http.get(namedUri).timeout(const Duration(seconds: 4));
+      String? oracleId;
+      var resolvedName = '';
+      if (namedResponse.statusCode == 200) {
+        final namedPayload = jsonDecode(namedResponse.body);
+        if (namedPayload is Map<String, dynamic>) {
+          oracleId = (namedPayload['oracle_id'] as String?)?.trim();
+          resolvedName =
+              ((namedPayload['name'] as String?) ?? '').trim().replaceAll('"', '\\"');
+        }
+      }
+
+      final rawEscaped = trimmed.replaceAll('"', '\\"');
+      final prefixTokens = _tokenizeSearch(trimmed);
+      final prefixQuery = prefixTokens
+          .map((token) => 'name:$token*')
+          .join(' ');
+      if (resolvedName.isNotEmpty &&
+          oracleId != null &&
+          oracleId.isNotEmpty) {
+        final strict = await _fetchScryfallSearchResults(
+          '!"$resolvedName" oracleid:$oracleId include:extras',
+          maxPages: 20,
+        );
+        collected.addAll(strict);
+      }
+
+      final queryCandidates = <String>[];
+      if (prefixQuery.isNotEmpty) {
+        queryCandidates.add(prefixQuery);
+      }
+      queryCandidates.add(rawEscaped);
+      if (resolvedName.isNotEmpty &&
+          oracleId != null &&
+          oracleId.isNotEmpty) {
+        queryCandidates
+            .add('!"$resolvedName" oracleid:$oracleId include:extras');
+      }
+      if (resolvedName.isNotEmpty) {
+        queryCandidates.add('!"$resolvedName"');
+      }
+      if (oracleId != null && oracleId.isNotEmpty) {
+        queryCandidates.add('oracleid:$oracleId');
+      }
+
+      for (final q in queryCandidates) {
+        final pageResults = await _fetchScryfallSearchResults(q, maxPages: 12);
+        collected.addAll(pageResults);
+      }
+
+      return collected;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<CardSearchResult>> _fetchScryfallSearchResults(
+    String query, {
+    int maxPages = 4,
+  }) async {
+    Uri buildSearchUri(String q) {
+      return Uri.https('api.scryfall.com', '/cards/search', {
+        'q': q,
+        'order': 'released',
+        'dir': 'desc',
+        'unique': 'prints',
+        'include_extras': 'true',
+        'include_multilingual': 'false',
+        'include_variations': 'true',
+      });
+    }
+
+    var nextUri = buildSearchUri(query);
+    final results = <CardSearchResult>[];
+    var page = 0;
+    while (page < maxPages) {
+      final response = await http.get(nextUri).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) {
+        break;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        break;
+      }
+      final data = payload['data'];
+      if (data is List) {
+        for (final item in data) {
+          final parsed = _cardFromScryfallJson(item);
+          if (parsed != null) {
+            results.add(parsed);
+          }
+        }
+      }
+      if (payload['has_more'] != true) {
+        break;
+      }
+      final nextPage = payload['next_page'];
+      if (nextPage is! String || nextPage.isEmpty) {
+        break;
+      }
+      nextUri = Uri.parse(nextPage);
+      page += 1;
+    }
+    return results;
+  }
+
+  CardSearchResult? _cardFromScryfallJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) {
+      return null;
+    }
+    final lang = (raw['lang'] as String?)?.trim().toLowerCase();
+    if (lang != null && lang.isNotEmpty && lang != 'en') {
+      return null;
+    }
+    final id = (raw['id'] as String?)?.trim() ?? '';
+    final name = (raw['name'] as String?)?.trim() ?? '';
+    final setCode = (raw['set'] as String?)?.trim().toLowerCase() ?? '';
+    final collector = (raw['collector_number'] as String?)?.trim() ?? '';
+    if (id.isEmpty || name.isEmpty || setCode.isEmpty || collector.isEmpty) {
+      return null;
+    }
+    final setName = (raw['set_name'] as String?)?.trim() ?? '';
+    final rarity = (raw['rarity'] as String?)?.trim().toLowerCase() ?? '';
+    final typeLine = (raw['type_line'] as String?)?.trim() ?? '';
+    final colors = _codesToCsv(raw['colors']);
+    final colorIdentity = _codesToCsv(raw['color_identity']);
+    return CardSearchResult(
+      id: id,
+      name: name,
+      setCode: setCode,
+      setName: setName,
+      collectorNumber: collector,
+      rarity: rarity,
+      typeLine: typeLine,
+      colors: colors,
+      colorIdentity: colorIdentity,
+      imageUri: _extractScryfallImageUri(raw),
+    );
+  }
+
+  String _codesToCsv(Object? rawCodes) {
+    if (rawCodes is! List) {
+      return '';
+    }
+    final codes = rawCodes
+        .whereType<String>()
+        .map((code) => code.trim().toUpperCase())
+        .where((code) => code.isNotEmpty)
+        .toList(growable: false);
+    return codes.join(',');
+  }
+
+  String? _extractScryfallImageUri(Map<String, dynamic> raw) {
+    final imageUris = raw['image_uris'];
+    if (imageUris is Map<String, dynamic>) {
+      final normal = (imageUris['normal'] as String?)?.trim();
+      if (normal != null && normal.isNotEmpty) {
+        return normal;
+      }
+      final large = (imageUris['large'] as String?)?.trim();
+      if (large != null && large.isNotEmpty) {
+        return large;
+      }
+      final small = (imageUris['small'] as String?)?.trim();
+      if (small != null && small.isNotEmpty) {
+        return small;
+      }
+    }
+    final faces = raw['card_faces'];
+    if (faces is List && faces.isNotEmpty) {
+      for (final face in faces) {
+        if (face is! Map<String, dynamic>) {
+          continue;
+        }
+        final nested = face['image_uris'];
+        if (nested is! Map<String, dynamic>) {
+          continue;
+        }
+        final normal = (nested['normal'] as String?)?.trim();
+        if (normal != null && normal.isNotEmpty) {
+          return normal;
+        }
+      }
+    }
+    return null;
+  }
+
+  List<CardSearchResult> _mergeUniquePrintings(
+    List<CardSearchResult> local,
+    List<CardSearchResult> online,
+  ) {
+    final merged = <String, CardSearchResult>{};
+    for (final card in [...local, ...online]) {
+      final key = card.id.trim().toLowerCase();
+      merged.putIfAbsent(key, () => card);
+    }
+    final values = merged.values.toList(growable: false);
+    values.sort((a, b) {
+      final byName = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      if (byName != 0) {
+        return byName;
+      }
+      final bySet = a.setCode.toLowerCase().compareTo(b.setCode.toLowerCase());
+      if (bySet != 0) {
+        return bySet;
+      }
+      return _collectorSortKey(a.collectorNumber)
+          .compareTo(_collectorSortKey(b.collectorNumber));
+    });
+    return values;
+  }
+
+  String _collectorSortKey(String raw) {
+    final value = raw.trim().toLowerCase();
+    final match = RegExp(r'^0*(\d+)([a-z]?)$').firstMatch(value);
+    if (match == null) {
+      return value;
+    }
+    final number = int.tryParse(match.group(1) ?? '');
+    final suffix = match.group(2) ?? '';
+    if (number == null) {
+      return value;
+    }
+    return '${number.toString().padLeft(6, '0')}$suffix';
   }
 
   CollectionFilter _buildAdvancedFilter() {
@@ -306,6 +634,48 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       return _results;
     }
     return _results;
+  }
+
+  List<CardSearchResult> _applyPrefixWordFilter(
+    List<CardSearchResult> input,
+    String query,
+  ) {
+    final queryTokens = _tokenizeSearch(query);
+    if (queryTokens.isEmpty) {
+      return input;
+    }
+    return input
+        .where((card) => _matchesPrefixWordQuery(card, queryTokens))
+        .toList(growable: false);
+  }
+
+  bool _matchesPrefixWordQuery(
+    CardSearchResult card,
+    List<String> queryTokens,
+  ) {
+    final nameTokens = _tokenizeSearch(card.name);
+    final collector = card.collectorNumber.trim().toLowerCase();
+    for (final token in queryTokens) {
+      final matchesName = nameTokens.any((word) => word.startsWith(token));
+      final matchesCollector = collector.startsWith(token);
+      if (!matchesName && !matchesCollector) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<String> _tokenizeSearch(String value) {
+    final normalized = value
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalized.isEmpty) {
+      return const [];
+    }
+    return normalized.split(' ');
   }
 
   String _resultRarity(CardSearchResult card) {
@@ -846,6 +1216,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _bulkAddByFilters() async {
+    if (!widget.selectionEnabled) {
+      return;
+    }
     if (!_hasActiveAdvancedFilters()) {
       showAppSnackBar(
         context,
@@ -935,6 +1308,151 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return result == true;
   }
 
+  Widget _buildSearchLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: CircularProgressIndicator(
+              strokeWidth: 3,
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Theme.of(context).colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          AnimatedBuilder(
+            animation: _searchLoadingController,
+            builder: (context, _) {
+              final t = _searchLoadingController.value * 3;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (index) {
+                  final delta = (t - index).abs();
+                  final opacity = (1 - delta).clamp(0.25, 1.0);
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: Opacity(
+                      opacity: opacity,
+                      child: const Icon(
+                        Icons.circle,
+                        size: 8,
+                        color: Color(0xFFE9C46A),
+                      ),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _isMissingCard(CardSearchResult card) {
+    if (widget.ownershipCollectionId == null) {
+      return false;
+    }
+    final quantity = _ownedQuantitiesByCardId[card.id] ?? 0;
+    return quantity <= 0;
+  }
+
+  void _onResultTap(CardSearchResult card) {
+    if (widget.selectionEnabled) {
+      Navigator.of(context).pop(_CardSearchSelection.single(card));
+      return;
+    }
+    _showPreview(card);
+  }
+
+  Widget _buildGalleryCard(CardSearchResult card, AppLocalizations l10n) {
+    final isMissing = _isMissingCard(card);
+    final imageUrl = card.imageUri?.trim() ?? '';
+    return InkWell(
+      onTap: () => _onResultTap(card),
+      onLongPress: () => _showPreview(card),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1713),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF322A22)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: (imageUrl.isNotEmpty)
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Container(
+                          color: const Color(0x221C1713),
+                          alignment: Alignment.center,
+                          child: _buildSetIcon(card.setCode, size: 30),
+                        ),
+                      )
+                    : Container(
+                        color: const Color(0x221C1713),
+                        alignment: Alignment.center,
+                        child: _buildSetIcon(card.setCode, size: 30),
+                      ),
+              ),
+              Positioned(
+                left: 8,
+                right: 8,
+                bottom: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xCC14110F),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    card.subtitleLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: const Color(0xFFE6D2B6),
+                        ),
+                  ),
+                ),
+              ),
+              if (!widget.selectionEnabled && isMissing)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xCC7A2222),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: const Color(0x99D96C6C)),
+                    ),
+                    child: Text(
+                      l10n.missingLabel,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: const Color(0xFFFFB3B3),
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
@@ -942,7 +1460,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final sheetHeight = mediaQuery.size.height * 0.78;
     final visibleResults = _filteredResults();
     final filtersActive = _hasActiveAdvancedFilters();
-    final showSummary = filtersActive && !_showResults;
+    final canSelectCards = widget.selectionEnabled;
+    final showSummary = canSelectCards && filtersActive && !_showResults;
     return Padding(
       padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
       child: Container(
@@ -977,6 +1496,19 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                       ),
+                      if (!canSelectCards)
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _galleryView = !_galleryView;
+                            });
+                          },
+                          icon: Icon(
+                            _galleryView
+                                ? Icons.view_agenda_outlined
+                                : Icons.grid_view_rounded,
+                          ),
+                        ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close),
@@ -992,9 +1524,74 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     decoration: InputDecoration(
                       hintText: l10n.typeCardNameHint,
                       prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _onlineArtworkLoading
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : null,
                     ),
                   ),
                 ),
+                if (!canSelectCards)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        FilterChip(
+                          selected: _artworkSearchEnabled,
+                          onSelected: (value) async {
+                            setState(() {
+                              _artworkSearchEnabled = value;
+                            });
+                            if (_query.trim().isNotEmpty) {
+                              await _runSearch();
+                            }
+                          },
+                          avatar: const Icon(Icons.style_outlined, size: 18),
+                          label: const Text('Artwork (online)'),
+                        ),
+                        if (widget.ownershipCollectionId != null)
+                          FilterChip(
+                            selected: _ownedOnlyFilter,
+                            onSelected: (value) async {
+                              setState(() {
+                                _ownedOnlyFilter = value;
+                              });
+                              await _runSearch();
+                            },
+                            avatar: const Icon(Icons.inventory_2_outlined, size: 18),
+                            label: const Text('Owned'),
+                          ),
+                      ],
+                    ),
+                  ),
+                if (_onlineArtworkLoading)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+                    child: Row(
+                      children: [
+                        const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Searching online printings...',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFFBFAE95),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (!showSummary &&
                     (_query.isNotEmpty || (filtersActive && _query.isEmpty)) &&
                     filtersActive &&
@@ -1012,7 +1609,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     ),
                   ),
                 const SizedBox(height: 12),
-                if (!_loading && filtersActive)
+                if (!_loading && filtersActive && canSelectCards)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: OutlinedButton.icon(
@@ -1023,10 +1620,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                   ),
                 Expanded(
                   child: _loading
-                      ? const Padding(
-                          padding: EdgeInsets.all(24),
-                          child: CircularProgressIndicator(),
-                        )
+                      ? _buildSearchLoadingState()
                       : visibleResults.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(24),
@@ -1149,101 +1743,165 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                     ),
                                   ),
                                 )
-                              : ListView.separated(
-                              shrinkWrap: true,
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
-                              itemCount: visibleResults.length +
-                                  ((_loadingMore ||
-                                              (!_loading &&
-                                                  _hasMore &&
-                                                  visibleResults.isNotEmpty))
-                                          ? 1
-                                          : 0),
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                if (index >= visibleResults.length) {
-                                  if (_loadingMore) {
-                                    return const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 12,
+                              : _galleryView
+                                  ? GridView.builder(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        0,
+                                        16,
+                                        90,
                                       ),
-                                      child: Center(
-                                        child: SizedBox(
-                                          width: 28,
-                                          height: 28,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        ),
+                                      gridDelegate:
+                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 3,
+                                        crossAxisSpacing: 10,
+                                        mainAxisSpacing: 10,
+                                        childAspectRatio: 63.5 / 88.9,
                                       ),
-                                    );
-                                  }
-                                  return Center(
-                                    child: TextButton.icon(
-                                      onPressed: _loading || !_hasMore
-                                          ? null
-                                          : () => _loadNextPage(
-                                                _query,
+                                      itemCount: visibleResults.length,
+                                      itemBuilder: (context, index) {
+                                        final card = visibleResults[index];
+                                        return _buildGalleryCard(card, l10n);
+                                      },
+                                    )
+                                  : ListView.separated(
+                                      shrinkWrap: true,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        20,
+                                        0,
+                                        20,
+                                        80,
+                                      ),
+                                      itemCount: visibleResults.length +
+                                          ((_loadingMore ||
+                                                      (!_loading &&
+                                                          _hasMore &&
+                                                          visibleResults.isNotEmpty))
+                                                  ? 1
+                                                  : 0),
+                                      separatorBuilder: (_, _) =>
+                                          const SizedBox(height: 10),
+                                      itemBuilder: (context, index) {
+                                        if (index >= visibleResults.length) {
+                                          if (_loadingMore) {
+                                            return const Padding(
+                                              padding: EdgeInsets.symmetric(
+                                                vertical: 12,
                                               ),
-                                      icon: const Icon(Icons.expand_more),
-                                      label:
-                                          Text(AppLocalizations.of(context)!.loadMore),
-                                    ),
-                                  );
-                                }
-                                final card = visibleResults[index];
-                                return InkWell(
-                                  onTap: () => Navigator.of(context)
-                                      .pop(_CardSearchSelection.single(card)),
-                                  onLongPress: () => _showPreview(card),
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(14),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1C1713),
-                                      borderRadius: BorderRadius.circular(14),
-                                      border: Border.all(
-                                        color: const Color(0xFF322A22),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        _buildSetIcon(card.setCode, size: 24),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                card.name,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleMedium,
+                                              child: Center(
+                                                child: SizedBox(
+                                                  width: 28,
+                                                  height: 28,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                ),
                                               ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                card.subtitleLabel,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: const Color(
-                                                          0xFFBFAE95),
+                                            );
+                                          }
+                                          return Center(
+                                            child: TextButton.icon(
+                                              onPressed: _loading || !_hasMore
+                                                  ? null
+                                                  : () => _loadNextPage(
+                                                        _query,
+                                                      ),
+                                              icon: const Icon(Icons.expand_more),
+                                              label: Text(
+                                                AppLocalizations.of(context)!.loadMore,
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                        final card = visibleResults[index];
+                                        final isMissing = _isMissingCard(card);
+                                        return InkWell(
+                                          onTap: () => _onResultTap(card),
+                                          onLongPress: () => _showPreview(card),
+                                          borderRadius: BorderRadius.circular(14),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(14),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF1C1713),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: const Color(0xFF322A22),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                _buildSetIcon(card.setCode, size: 24),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        card.name,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .titleMedium,
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        card.subtitleLabel,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                0xFFBFAE95,
+                                                              ),
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                if (canSelectCards)
+                                                  const Icon(
+                                                    Icons.add,
+                                                    color: Color(0xFFE9C46A),
+                                                  )
+                                                else if (isMissing)
+                                                  Container(
+                                                    padding:
+                                                        const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
                                                     ),
-                                              ),
-                                            ],
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0x33D96C6C),
+                                                      borderRadius:
+                                                          BorderRadius.circular(999),
+                                                      border: Border.all(
+                                                        color: const Color(0x66D96C6C),
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      l10n.missingLabel,
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .labelSmall
+                                                          ?.copyWith(
+                                                            color:
+                                                                const Color(0xFFFFA6A6),
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                          ),
+                                                    ),
+                                                  )
+                                                else
+                                                  const Icon(
+                                                    Icons.visibility_outlined,
+                                                    color: Color(0xFFBFAE95),
+                                                  ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                        const Icon(Icons.add,
-                                            color: Color(0xFFE9C46A)),
-                                      ],
+                                        );
+                                      },
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
                 ),
                     ],
                   ),
@@ -1278,6 +1936,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (imageUrl.isEmpty) {
       return;
     }
+    FocusScope.of(context).unfocus();
     _hidePreview(immediate: true);
 
     final overlay = Overlay.of(context, rootOverlay: true);
@@ -1286,65 +1945,99 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _previewEntry = OverlayEntry(
       builder: (context) {
         final size = MediaQuery.of(context).size;
-        final maxWidth = size.width * 0.7;
-        final maxHeight = size.height * 0.7;
+        final maxWidth = size.width * 0.82;
+        final maxHeight = size.height * 0.82;
 
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => _hidePreview(immediate: false),
-          child: Material(
-            color: Colors.black.withValues(alpha: 0.72),
-            child: Center(
-              child: FadeTransition(
-                opacity: _previewOpacity,
-                child: ScaleTransition(
-                  scale: _previewScale,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: maxWidth.clamp(220, 420),
-                      maxHeight: maxHeight.clamp(320, 640),
+        return Material(
+          color: Colors.black.withValues(alpha: 0.72),
+          child: Center(
+            child: FadeTransition(
+              opacity: _previewOpacity,
+              child: ScaleTransition(
+                scale: _previewScale,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: maxWidth.clamp(240, 460),
+                    maxHeight: maxHeight.clamp(360, 760),
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F0C0A),
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          blurRadius: 24,
+                          offset: const Offset(0, 12),
+                        ),
+                      ],
+                      border: Border.all(
+                        color: const Color(0xFF3A2F24),
+                      ),
                     ),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F0C0A),
-                        borderRadius: BorderRadius.circular(18),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 24,
-                            offset: const Offset(0, 12),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Stack(
+                        children: [
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.contain,
+                                  filterQuality: FilterQuality.high,
+                                  loadingBuilder: (context, child, progress) {
+                                    if (progress == null) {
+                                      return child;
+                                    }
+                                    return const SizedBox(
+                                      height: 420,
+                                      child: Center(
+                                        child: CircularProgressIndicator(),
+                                      ),
+                                    );
+                                  },
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return const SizedBox(
+                                      height: 420,
+                                      child: Center(
+                                        child: Icon(Icons.broken_image, size: 48),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              if (widget.ownershipCollectionId != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: FilledButton.icon(
+                                      onPressed: _addingFromPreview
+                                          ? null
+                                          : () => _addCardFromPreview(card),
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('Add to collection'),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Material(
+                              color: const Color(0xB314110F),
+                              shape: const CircleBorder(),
+                              child: IconButton(
+                                tooltip: 'Close preview',
+                                onPressed: () => _hidePreview(immediate: false),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ),
                           ),
                         ],
-                        border: Border.all(
-                          color: const Color(0xFF3A2F24),
-                        ),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) {
-                              return child;
-                            }
-                            return const SizedBox(
-                              height: 360,
-                              child: Center(
-                                child: CircularProgressIndicator(),
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            return const SizedBox(
-                              height: 360,
-                              child: Center(
-                                child: Icon(Icons.broken_image, size: 48),
-                              ),
-                            );
-                          },
-                        ),
                       ),
                     ),
                   ),
@@ -1369,6 +2062,40 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     _previewEntry?.remove();
     _previewEntry = null;
+  }
+
+  Future<void> _addCardFromPreview(CardSearchResult card) async {
+    final collectionId = widget.ownershipCollectionId;
+    if (collectionId == null || _addingFromPreview) {
+      return;
+    }
+    setState(() {
+      _addingFromPreview = true;
+    });
+    try {
+      await ScryfallDatabase.instance.addCardToCollection(collectionId, card.id);
+      if (!mounted) {
+        return;
+      }
+      final current = _ownedQuantitiesByCardId[card.id] ?? 0;
+      setState(() {
+        _ownedQuantitiesByCardId = {
+          ..._ownedQuantitiesByCardId,
+          card.id: current + 1,
+        };
+      });
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.addedCards(1),
+      );
+      await _hidePreview(immediate: false);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _addingFromPreview = false;
+        });
+      }
+    }
   }
 }
 
