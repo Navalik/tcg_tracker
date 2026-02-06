@@ -936,6 +936,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       builder: (_) => _CardSearchSheet(
         selectionEnabled: false,
         ownershipCollectionId: allCards!.id,
+        showFilterButton: false,
       ),
     );
   }

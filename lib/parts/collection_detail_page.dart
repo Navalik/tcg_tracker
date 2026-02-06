@@ -1030,7 +1030,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
   }
 
-  Widget _buildSetHeader() {
+  Widget _buildSearchHeader({required bool showOwnedMissing}) {
     final ownedCount =
         _ownedCount ?? _cards.where((entry) => entry.quantity > 0).length;
     final missingCount =
@@ -1061,35 +1061,36 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             },
           ),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 10,
-            children: [
-              FilterChip(
-                label: Text(
-                  AppLocalizations.of(context)!.ownedCount(ownedCount),
+          if (showOwnedMissing)
+            Wrap(
+              spacing: 10,
+              children: [
+                FilterChip(
+                  label: Text(
+                    AppLocalizations.of(context)!.ownedCount(ownedCount),
+                  ),
+                  selected: _showOwned,
+                  onSelected: (value) {
+                    setState(() {
+                      _showOwned = value;
+                    });
+                    _loadCards();
+                  },
                 ),
-                selected: _showOwned,
-                onSelected: (value) {
-                  setState(() {
-                    _showOwned = value;
-                  });
-                  _loadCards();
-                },
-              ),
-              FilterChip(
-                label: Text(
-                  AppLocalizations.of(context)!.missingCount(missingCount),
+                FilterChip(
+                  label: Text(
+                    AppLocalizations.of(context)!.missingCount(missingCount),
+                  ),
+                  selected: _showMissing,
+                  onSelected: (value) {
+                    setState(() {
+                      _showMissing = value;
+                    });
+                    _loadCards();
+                  },
                 ),
-                selected: _showMissing,
-                onSelected: (value) {
-                  setState(() {
-                    _showMissing = value;
-                  });
-                  _loadCards();
-                },
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -1148,6 +1149,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         initialCollectorNumber: initialCollectorNumber,
         selectionEnabled: false,
         ownershipCollectionId: ownedCollectionId,
+        showFilterButton: false,
       ),
     );
     if (!mounted) {
@@ -2190,10 +2192,14 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               ? l10n.selectedCardsCount(_selectedCardIds.length)
               : (widget.isAllCards ? '' : widget.name),
         ),
-        bottom: _isFilterCollection
+        bottom: (_isFilterCollection || widget.isAllCards)
             ? PreferredSize(
-                preferredSize: const Size.fromHeight(108),
-                child: _buildSetHeader(),
+                preferredSize: Size.fromHeight(
+                  _isFilterCollection ? 108 : 68,
+                ),
+                child: _buildSearchHeader(
+                  showOwnedMissing: _isFilterCollection,
+                ),
               )
             : null,
         actions: [
@@ -2377,94 +2383,106 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   padding: const EdgeInsets.all(16),
                                   decoration:
                                       _cardTintDecoration(context, entry),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.end,
-                                    children: [
-                                      _buildSetIcon(entry.setCode, size: 30),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              entry.name,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleMedium,
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Builder(
-                                              builder: (context) {
-                                                final setLabel =
-                                                    _setLabelForEntry(entry);
-                                                final progress =
-                                                    _collectorProgressLabel(
-                                                        entry);
-                                                final hasRarity = entry.rarity
-                                                    .trim()
-                                                    .isNotEmpty;
-                                                final leftLabel = setLabel
-                                                        .isNotEmpty
-                                                    ? setLabel
-                                                    : progress;
-                                                return Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        leftLabel,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              color: const Color(
-                                                                  0xFFBFAE95),
-                                                            ),
-                                                        overflow:
-                                                            TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
-                                                    if (progress.isNotEmpty &&
-                                                        setLabel
-                                                            .isNotEmpty) ...[
-                                                      Text(
-                                                        progress,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              color: const Color(
-                                                                  0xFFBFAE95),
-                                                            ),
-                                                      ),
-                                                    ],
-                                                    if (hasRarity) ...[
-                                                      const SizedBox(width: 6),
-                                                      _raritySquare(
-                                                          entry.rarity),
-                                                    ],
-                                                  ],
-                                                );
-                                              },
-                                            ),
-                                          ],
+                                  child: IntrinsicHeight(
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        Align(
+                                          alignment: Alignment.center,
+                                          child: _buildSetIcon(
+                                            entry.setCode,
+                                            size: 60,
+                                          ),
                                         ),
-                                      ),
-                                      if (_isFilterCollection ||
-                                          widget.isAllCards) ...[
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          tooltip: l10n.addOne,
-                                          icon: const Icon(
-                                              Icons.add_circle_outline),
-                                          color: const Color(0xFFE9C46A),
-                                          onPressed: _selectionMode
-                                              ? null
-                                              : () => _quickAddCard(entry),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                entry.name,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .titleMedium,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Builder(
+                                                builder: (context) {
+                                                  final setLabel =
+                                                      _setLabelForEntry(entry);
+                                                  final progress =
+                                                      _collectorProgressLabel(
+                                                          entry);
+                                                  final hasRarity = entry.rarity
+                                                      .trim()
+                                                      .isNotEmpty;
+                                                  final leftLabel = setLabel
+                                                          .isNotEmpty
+                                                      ? setLabel
+                                                      : progress;
+                                                  return Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          leftLabel,
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    const Color(
+                                                                        0xFFBFAE95),
+                                                              ),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                      if (progress.isNotEmpty &&
+                                                          setLabel
+                                                              .isNotEmpty) ...[
+                                                        Text(
+                                                          progress,
+                                                          style: Theme.of(context)
+                                                              .textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                                color:
+                                                                    const Color(
+                                                                        0xFFBFAE95),
+                                                              ),
+                                                        ),
+                                                      ],
+                                                      if (hasRarity) ...[
+                                                        const SizedBox(width: 6),
+                                                        _raritySquare(
+                                                            entry.rarity),
+                                                      ],
+                                                    ],
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
                                         ),
+                                        if (_isFilterCollection ||
+                                            widget.isAllCards) ...[
+                                          const SizedBox(width: 8),
+                                          IconButton(
+                                            tooltip: l10n.addOne,
+                                            icon: const Icon(
+                                                Icons.add_circle_outline),
+                                            color: const Color(0xFFE9C46A),
+                                            onPressed: _selectionMode
+                                                ? null
+                                                : () => _quickAddCard(entry),
+                                          ),
+                                        ],
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2574,6 +2592,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                 : Image.network(
                                                     entry.imageUri!,
                                                     fit: BoxFit.cover,
+                                                    alignment: Alignment.topCenter,
                                                   ),
                                             if ((_isFilterCollection ||
                                                     widget.isAllCards) &&

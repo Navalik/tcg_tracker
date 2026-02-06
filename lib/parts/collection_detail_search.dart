@@ -25,6 +25,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialCollectorNumber,
     this.selectionEnabled = true,
     this.ownershipCollectionId,
+    this.showFilterButton = true,
   });
 
   final String? initialQuery;
@@ -32,6 +33,7 @@ class _CardSearchSheet extends StatefulWidget {
   final String? initialCollectorNumber;
   final bool selectionEnabled;
   final int? ownershipCollectionId;
+  final bool showFilterButton;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
@@ -1905,24 +1907,25 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                 ),
                     ],
                   ),
-                  Positioned(
-                    left: 20,
-                    bottom: 16 + mediaQuery.padding.bottom,
-                    child: FloatingActionButton(
-                      heroTag: 'search_filters_fab',
-                      onPressed: _showAdvancedFilters,
-                      tooltip: l10n.filters,
-                      backgroundColor: filtersActive
-                          ? const Color(0xFFE9C46A)
-                          : null,
-                      foregroundColor: filtersActive
-                          ? const Color(0xFF1C1510)
-                          : null,
-                      child: Icon(
-                        filtersActive ? Icons.filter_list_alt : Icons.filter_list,
+                  if (widget.showFilterButton)
+                    Positioned(
+                      left: 20,
+                      bottom: 16 + mediaQuery.padding.bottom,
+                      child: FloatingActionButton(
+                        heroTag: 'search_filters_fab',
+                        onPressed: _showAdvancedFilters,
+                        tooltip: l10n.filters,
+                        backgroundColor: filtersActive
+                            ? const Color(0xFFE9C46A)
+                            : null,
+                        foregroundColor: filtersActive
+                            ? const Color(0xFF1C1510)
+                            : null,
+                        child: Icon(
+                          filtersActive ? Icons.filter_list_alt : Icons.filter_list,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),
