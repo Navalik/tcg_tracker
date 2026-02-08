@@ -1,6 +1,6 @@
 {
-    "name": "tcg_tracker",
-    "short_name": "tcg_tracker",
+    "name": "BinderVault – TCG Collection",
+    "short_name": "BinderVault",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

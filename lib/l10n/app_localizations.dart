@@ -97,7 +97,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'TCG Tracker'**
+  /// **'BinderVault'**
   String get appTitle;
 
   /// No description provided for @allCards.

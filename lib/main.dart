@@ -67,7 +67,7 @@ class TCGTracker extends StatelessWidget {
 
     return MaterialApp(
       onGenerateTitle: (context) =>
-          AppLocalizations.of(context)?.appTitle ?? 'TCG Tracker',
+          AppLocalizations.of(context)?.appTitle ?? 'BinderVault',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: colorScheme,

@@ -1,4 +1,4 @@
-# tcg_tracker
+# BinderVault – TCG Collection
 
 A new Flutter project.
 

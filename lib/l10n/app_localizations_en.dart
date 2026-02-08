@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'TCG Tracker';
+  String get appTitle => 'BinderVault';
 
   @override
   String get allCards => 'All cards';
