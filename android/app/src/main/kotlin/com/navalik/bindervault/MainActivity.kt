@@ -1,4 +1,4 @@
-package com.example.tcg_tracker
+package com.navalik.bindervault
 
 import io.flutter.embedding.android.FlutterActivity
 
