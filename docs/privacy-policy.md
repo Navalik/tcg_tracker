@@ -1,3 +1,7 @@
+---
+permalink: /privacy-policy/
+---
+
 # Privacy Policy — BinderVault
 
 Last updated: 2026-02-08
