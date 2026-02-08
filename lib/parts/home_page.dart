@@ -164,68 +164,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Widget _buildProBanner(BuildContext context) {
-    final isPro = _isProUnlocked;
-    final l10n = AppLocalizations.of(context)!;
-    final subtitle = isPro
-        ? l10n.proActiveUnlimitedCollections
-        : l10n.basePlanCollectionLimit(_freeCollectionLimit);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF3A2F24)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Icon(
-              isPro ? Icons.verified : Icons.workspace_premium,
-              color: const Color(0xFFE9C46A),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isPro ? l10n.proEnabled : l10n.upgradeToPro,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    subtitle,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFBFAE95),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProPage(),
-                  ),
-                );
-              },
-              child: Text(isPro ? l10n.manage : l10n.upgrade),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _loadCollections() async {
     final collections = await ScryfallDatabase.instance.fetchCollections();
@@ -1114,7 +1052,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${card.setName.trim().isEmpty ? card.setCode.toUpperCase() : card.setName}  •  #${card.collectorNumber}',
+                  card.subtitleLabel,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFFBFAE95),
@@ -2792,7 +2730,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
                     children: [
-                      _buildProBanner(context),
                       ..._buildCollectionSections(context),
                     ],
                   ),
@@ -4036,7 +3973,7 @@ class _PickPrintingSheet extends StatelessWidget {
       title: Text(
         card.setName.trim().isEmpty ? card.setCode.toUpperCase() : card.setName,
       ),
-      subtitle: Text('#${card.collectorNumber}'),
+      subtitle: Text(card.collectorProgressLabel),
       trailing: _buildSetIcon(card.setCode, size: 32),
       onTap: () => Navigator.of(context).pop(card),
     );

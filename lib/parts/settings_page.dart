@@ -10,7 +10,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   String? _bulkType;
-  String _appVersion = '0.3.0';
+  String _appVersion = '0.4.0';
 
   @override
   void initState() {
