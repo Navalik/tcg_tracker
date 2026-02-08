@@ -33,8 +33,7 @@ BinderVault is not directed to children under 13 and does not knowingly collect 
 We may update this policy. Changes will be posted on this page with an updated date.
 
 ## Contact
-For privacy questions, contact: **Navalik78@gmail.com**  
-(Replace with your real support email.)
+For privacy questions, contact: **Navalik78@gmail.com**
 
 ---
 
@@ -69,5 +68,4 @@ BinderVault non è destinata a minori di 13 anni e non raccoglie consapevolmente
 Possiamo aggiornare questa informativa. Le modifiche verranno pubblicate su questa pagina con data aggiornata.
 
 ## Contatti
-Per domande sulla privacy: **Navalik78@gmail.com**  
-(Sostituisci con la tua email reale.)
+Per domande sulla privacy: **Navalik78@gmail.com**
