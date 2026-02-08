@@ -1075,6 +1075,7 @@ class ScryfallDatabase {
         cards.name AS name,
         COALESCE(cards.set_code, '') AS set_code,
         cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
         cards.type_line AS type_line,
@@ -1104,6 +1105,7 @@ class ScryfallDatabase {
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
             setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
             typeLine: row.readNullable<String>('type_line') ?? '',
@@ -1278,6 +1280,85 @@ class ScryfallDatabase {
       for (final row in rows)
         row.read<String>('card_id'): row.read<int>('quantity')
     };
+  }
+
+  Future<CollectionCardEntry?> fetchCardEntryById(
+    String cardId, {
+    int? collectionId,
+  }) async {
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT
+        cards.id AS card_id,
+        COALESCE(collection_cards.quantity, 0) AS quantity,
+        COALESCE(collection_cards.foil, 0) AS foil,
+        COALESCE(collection_cards.alt_art, 0) AS alt_art,
+        cards.name AS name,
+        COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.mana_cost AS mana_cost,
+        cards.oracle_text AS oracle_text,
+        cards.cmc AS cmc,
+        cards.lang AS lang,
+        cards.released_at AS released_at,
+        cards.artist AS artist,
+        cards.power AS power,
+        cards.toughness AS toughness,
+        cards.loyalty AS loyalty,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces
+      FROM cards
+      LEFT JOIN collection_cards
+        ON collection_cards.card_id = cards.id
+        AND collection_cards.collection_id = ?
+      WHERE cards.id = ?
+      LIMIT 1
+      ''',
+      variables: [
+        Variable.withInt(collectionId ?? -1),
+        Variable.withString(cardId),
+      ],
+    ).get();
+
+    if (rows.isEmpty) {
+      return null;
+    }
+    final row = rows.first;
+    return CollectionCardEntry(
+      cardId: row.read<String>('card_id'),
+      name: row.read<String>('name'),
+      setCode: row.read<String>('set_code'),
+      setName: row.readNullable<String>('set_name') ?? '',
+      setTotal: row.readNullable<int>('set_total'),
+      collectorNumber: row.read<String>('collector_number'),
+      rarity: row.readNullable<String>('rarity') ?? '',
+      typeLine: row.readNullable<String>('type_line') ?? '',
+      manaCost: row.readNullable<String>('mana_cost') ?? '',
+      oracleText: row.readNullable<String>('oracle_text') ?? '',
+      manaValue: row.readNullable<double>('cmc'),
+      lang: row.readNullable<String>('lang') ?? '',
+      releasedAt: row.readNullable<String>('released_at') ?? '',
+      artist: row.readNullable<String>('artist') ?? '',
+      power: row.readNullable<String>('power') ?? '',
+      toughness: row.readNullable<String>('toughness') ?? '',
+      loyalty: row.readNullable<String>('loyalty') ?? '',
+      colors: row.readNullable<String>('colors') ?? '',
+      colorIdentity: row.readNullable<String>('color_identity') ?? '',
+      quantity: row.read<int>('quantity'),
+      foil: row.read<int>('foil') == 1,
+      altArt: row.read<int>('alt_art') == 1,
+      imageUri: _extractImageUrl(
+        row.readNullable<String>('image_uris'),
+        row.readNullable<String>('card_faces'),
+      ),
+    );
   }
 
   Future<Map<String, List<int>>> fetchCollectionIdsForCardIds(
@@ -1509,6 +1590,7 @@ class ScryfallDatabase {
         cards.name AS name,
         cards.set_code AS set_code,
         cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
         cards.type_line AS type_line,
@@ -1540,6 +1622,7 @@ class ScryfallDatabase {
               name: row.read<String>('name'),
               setCode: row.read<String>('set_code'),
               setName: row.readNullable<String>('set_name') ?? '',
+              setTotal: row.readNullable<int>('set_total'),
               collectorNumber: row.read<String>('collector_number'),
               rarity: row.readNullable<String>('rarity') ?? '',
               typeLine: row.readNullable<String>('type_line') ?? '',
@@ -1577,6 +1660,7 @@ class ScryfallDatabase {
         cards.name AS name,
         cards.set_code AS set_code,
         cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
         cards.type_line AS type_line,
@@ -1605,6 +1689,7 @@ class ScryfallDatabase {
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
             setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
             typeLine: row.readNullable<String>('type_line') ?? '',
@@ -1707,6 +1792,7 @@ class ScryfallDatabase {
         cards.name AS name,
         cards.set_code AS set_code,
         cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
         cards.type_line AS type_line,
@@ -1737,6 +1823,7 @@ class ScryfallDatabase {
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
             setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
             typeLine: row.readNullable<String>('type_line') ?? '',
@@ -1797,6 +1884,7 @@ class ScryfallDatabase {
         cards.name AS name,
         cards.set_code AS set_code,
         cards.set_name AS set_name,
+        cards.set_total AS set_total,
         cards.collector_number AS collector_number,
         cards.rarity AS rarity,
         cards.type_line AS type_line,
@@ -1827,6 +1915,7 @@ class ScryfallDatabase {
             name: row.read<String>('name'),
             setCode: row.read<String>('set_code'),
             setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
             collectorNumber: row.read<String>('collector_number'),
             rarity: row.readNullable<String>('rarity') ?? '',
             typeLine: row.readNullable<String>('type_line') ?? '',

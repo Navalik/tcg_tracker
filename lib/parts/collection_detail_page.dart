@@ -679,18 +679,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _collectorProgressLabel(CollectionCardEntry entry) {
-    final number = entry.collectorNumber.trim();
-    if (number.isEmpty) {
-      return '';
-    }
-    if (number.contains('/')) {
-      return number;
-    }
-    final total = _setTotalForEntry(entry);
-    if (total == null || total <= 0) {
-      return number;
-    }
-    return '$number/$total';
+    return entry.collectorNumber.trim();
   }
 
   String _subtitleLabel(CollectionCardEntry entry) {
@@ -2376,113 +2365,103 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           opacity: isMissing ? 0.45 : 1,
                           child: Stack(
                             children: [
-                              ConstrainedBox(
-                                constraints:
-                                    const BoxConstraints(minHeight: 108),
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration:
-                                      _cardTintDecoration(context, entry),
-                                  child: IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Align(
-                                          alignment: Alignment.center,
-                                          child: _buildSetIcon(
-                                            entry.setCode,
-                                            size: 60,
-                                          ),
+                              Container(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: _cardTintDecoration(context, entry),
+                                child: SizedBox(
+                                  height: 80,
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      Center(
+                                        child: _buildSetIcon(
+                                          entry.setCode,
+                                          size: 60,
                                         ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                entry.name,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleMedium,
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Builder(
-                                                builder: (context) {
-                                                  final setLabel =
-                                                      _setLabelForEntry(entry);
-                                                  final progress =
-                                                      _collectorProgressLabel(
-                                                          entry);
-                                                  final hasRarity = entry.rarity
-                                                      .trim()
-                                                      .isNotEmpty;
-                                                  final leftLabel = setLabel
-                                                          .isNotEmpty
-                                                      ? setLabel
-                                                      : progress;
-                                                  return Row(
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          leftLabel,
-                                                          style: Theme.of(context)
-                                                              .textTheme
-                                                              .bodySmall
-                                                              ?.copyWith(
-                                                                color:
-                                                                    const Color(
-                                                                        0xFFBFAE95),
-                                                              ),
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              entry.name,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .titleMedium,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Builder(
+                                              builder: (context) {
+                                                final setLabel =
+                                                    _setLabelForEntry(entry);
+                                                final progress =
+                                                    _collectorProgressLabel(entry);
+                                                final hasRarity = entry.rarity
+                                                    .trim()
+                                                    .isNotEmpty;
+                                                final leftLabel = setLabel.isNotEmpty
+                                                    ? setLabel
+                                                    : progress;
+                                                return Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        leftLabel,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                  0xFFBFAE95),
+                                                            ),
+                                                        overflow:
+                                                            TextOverflow.ellipsis,
                                                       ),
-                                                      if (progress.isNotEmpty &&
-                                                          setLabel
-                                                              .isNotEmpty) ...[
-                                                        Text(
-                                                          progress,
-                                                          style: Theme.of(context)
-                                                              .textTheme
-                                                              .bodySmall
-                                                              ?.copyWith(
-                                                                color:
-                                                                    const Color(
-                                                                        0xFFBFAE95),
-                                                              ),
-                                                        ),
-                                                      ],
-                                                      if (hasRarity) ...[
-                                                        const SizedBox(width: 6),
-                                                        _raritySquare(
-                                                            entry.rarity),
-                                                      ],
+                                                    ),
+                                                    if (progress.isNotEmpty &&
+                                                        setLabel
+                                                            .isNotEmpty) ...[
+                                                      Text(
+                                                        progress,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                  0xFFBFAE95),
+                                                            ),
+                                                      ),
                                                     ],
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
+                                                    if (hasRarity) ...[
+                                                      const SizedBox(width: 6),
+                                                      _raritySquare(entry.rarity),
+                                                    ],
+                                                  ],
+                                                );
+                                              },
+                                            ),
+                                          ],
                                         ),
-                                        if (_isFilterCollection ||
-                                            widget.isAllCards) ...[
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            tooltip: l10n.addOne,
-                                            icon: const Icon(
-                                                Icons.add_circle_outline),
-                                            color: const Color(0xFFE9C46A),
-                                            onPressed: _selectionMode
-                                                ? null
-                                                : () => _quickAddCard(entry),
-                                          ),
-                                        ],
+                                      ),
+                                      if (_isFilterCollection ||
+                                          widget.isAllCards) ...[
+                                        const SizedBox(width: 8),
+                                        IconButton(
+                                          tooltip: l10n.addOne,
+                                          icon: const Icon(
+                                              Icons.add_circle_outline),
+                                          color: const Color(0xFFE9C46A),
+                                          onPressed: _selectionMode
+                                              ? null
+                                              : () => _quickAddCard(entry),
+                                        ),
                                       ],
-                                    ),
+                                    ],
                                   ),
                                 ),
                               ),

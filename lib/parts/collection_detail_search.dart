@@ -493,11 +493,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final typeLine = (raw['type_line'] as String?)?.trim() ?? '';
     final colors = _codesToCsv(raw['colors']);
     final colorIdentity = _codesToCsv(raw['color_identity']);
+    final setTotal = _extractSetTotal(raw);
     return CardSearchResult(
       id: id,
       name: name,
       setCode: setCode,
       setName: setName,
+      setTotal: setTotal,
       collectorNumber: collector,
       rarity: rarity,
       typeLine: typeLine,
@@ -505,6 +507,27 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       colorIdentity: colorIdentity,
       imageUri: _extractScryfallImageUri(raw),
     );
+  }
+
+  int? _extractSetTotal(Map<String, dynamic> card) {
+    final direct = card['printed_total'] ?? card['set_total'];
+    if (direct is num) {
+      return direct.toInt();
+    }
+    if (direct is String) {
+      return int.tryParse(direct.trim());
+    }
+    final setData = card['set'];
+    if (setData is Map<String, dynamic>) {
+      final nested = setData['printed_total'] ?? setData['set_total'];
+      if (nested is num) {
+        return nested.toInt();
+      }
+      if (nested is String) {
+        return int.tryParse(nested.trim());
+      }
+    }
+    return null;
   }
 
   String _codesToCsv(Object? rawCodes) {
@@ -1368,88 +1391,600 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       Navigator.of(context).pop(_CardSearchSelection.single(card));
       return;
     }
-    _showPreview(card);
+    _showCardDetailsForSearch(card);
+  }
+
+  Future<void> _showCardDetailsForSearch(CardSearchResult card) async {
+    final entry = await ScryfallDatabase.instance.fetchCardEntryById(
+      card.id,
+      collectionId: widget.ownershipCollectionId,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (entry == null) {
+      _showPreview(card);
+      return;
+    }
+    await _showEntryDetails(entry);
+  }
+
+  Future<void> _showEntryDetails(CollectionCardEntry entry) {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        final details = _parseCardDetails(l10n, entry);
+        final typeLine = entry.typeLine.trim();
+        final manaCost = entry.manaCost.trim();
+        final oracleText = entry.oracleText.trim();
+        final power = entry.power.trim();
+        final toughness = entry.toughness.trim();
+        final loyalty = entry.loyalty.trim();
+        final stats = _joinStats(power, toughness);
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              entry.name,
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _subtitleLabelForEntry(entry),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFFBFAE95),
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _buildSetIcon(entry.setCode, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        _subtitleLabelForEntry(entry),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFFBFAE95),
+                            ),
+                      ),
+                      const Spacer(),
+                      if (manaCost.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF2A221B),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF3A2F24)),
+                          ),
+                          child: Text(
+                            manaCost,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (typeLine.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      typeLine,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: const Color(0xFFE3D4B8),
+                          ),
+                    ),
+                  ],
+                  if (oracleText.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF201A14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Text(
+                        oracleText,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ],
+                  if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        if (stats.isNotEmpty) _buildBadge(stats),
+                        if (loyalty.isNotEmpty)
+                          _buildBadge(l10n.loyaltyLabel(loyalty)),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  if (entry.imageUri != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        entry.imageUri!,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  if (entry.imageUri != null &&
+                      _subtitleLabelForEntry(entry).isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _subtitleLabelForEntry(entry),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFBFAE95),
+                          ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.details,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDetailGrid(details),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  String _subtitleLabelForEntry(CollectionCardEntry entry) {
+    final setLabel =
+        entry.setName.trim().isNotEmpty ? entry.setName.trim() : entry.setCode.toUpperCase();
+    final progress = entry.collectorNumber.trim();
+    if (setLabel.isEmpty) {
+      return progress;
+    }
+    if (progress.isEmpty) {
+      return setLabel;
+    }
+    return '$setLabel â€¢ $progress';
+  }
+
+  List<_CardDetail> _parseCardDetails(
+    AppLocalizations l10n,
+    CollectionCardEntry entry,
+  ) {
+    final setLabel =
+        entry.setName.isNotEmpty ? entry.setName : entry.setCode.toUpperCase();
+    final details = <_CardDetail>[
+      _CardDetail(l10n.detailSet, setLabel),
+      _CardDetail(l10n.detailCollector, entry.collectorNumber),
+    ];
+    void add(String label, String value) {
+      final text = value.trim();
+      if (text.isEmpty) {
+        return;
+      }
+      details.add(_CardDetail(label, text));
+    }
+
+    add(l10n.detailRarity, entry.rarity);
+    add(l10n.detailSetName, entry.setName);
+    add(l10n.detailLanguage, entry.lang);
+    add(l10n.detailRelease, entry.releasedAt);
+    add(l10n.detailArtist, entry.artist);
+    return details.where((item) => item.value.isNotEmpty).toList();
+  }
+
+  String _joinStats(dynamic power, dynamic toughness) {
+    final p = power?.toString().trim() ?? '';
+    final t = toughness?.toString().trim() ?? '';
+    if (p.isEmpty && t.isEmpty) {
+      return '';
+    }
+    if (p.isEmpty) {
+      return t;
+    }
+    if (t.isEmpty) {
+      return p;
+    }
+    return '$p/$t';
+  }
+
+  Widget _buildDetailGrid(List<_CardDetail> details) {
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: details
+              .map(
+                (item) => SizedBox(
+                  width: width,
+                  child: _DetailRow(
+                    label: item.label,
+                    value: item.value,
+                  ),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
+  }
+
+  Decoration _cardTintDecorationForSearch(CardSearchResult card) {
+    final base = Theme.of(context).colorScheme.surface;
+    final accents = _manaAccentColors(
+      _parseColorSet(card.colors, card.colorIdentity),
+    );
+    if (accents.isEmpty) {
+      return BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      );
+    }
+    final tintStops = accents
+        .map((color) => Color.lerp(base, color, 0.35) ?? base)
+        .toList();
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: tintStops.length == 1 ? [base, tintStops.first] : tintStops,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 18,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    );
+  }
+
+  String _setLabelForSearch(CardSearchResult card) {
+    final name = card.setName.trim();
+    if (name.isNotEmpty) {
+      return name;
+    }
+    final code = card.setCode.trim();
+    return code.isEmpty ? '' : code.toUpperCase();
+  }
+
+  Widget _buildResultTile(CardSearchResult card, AppLocalizations l10n) {
+    final isMissing = _isMissingCard(card);
+    final canSelectCards = widget.selectionEnabled;
+    final setLabel = _setLabelForSearch(card);
+    final collectorNumber = card.collectorNumber.trim();
+    final hasRarity = card.rarity.trim().isNotEmpty;
+    final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
+    return Opacity(
+      opacity: isMissing ? 0.45 : 1,
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: () => _onResultTap(card),
+            onLongPress: () => _showPreview(card),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: _cardTintDecorationForSearch(card),
+              child: SizedBox(
+                height: 80,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(
+                      child: _buildSetIcon(card.setCode, size: 60),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            card.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 4),
+                          Builder(
+                            builder: (context) {
+                              final leftLabel =
+                                  setLabel.isNotEmpty ? setLabel : collectorNumber;
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      leftLabel,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFFBFAE95),
+                                          ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (collectorNumber.isNotEmpty &&
+                                      setLabel.isNotEmpty) ...[
+                                    Text(
+                                      collectorNumber,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFFBFAE95),
+                                          ),
+                                    ),
+                                  ],
+                                  if (hasRarity) ...[
+                                    const SizedBox(width: 6),
+                                    _raritySquare(card.rarity),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (showAdd)
+                      IconButton(
+                        tooltip: l10n.addOne,
+                        icon: const Icon(Icons.add_circle_outline),
+                        color: const Color(0xFFE9C46A),
+                        onPressed: _addingFromPreview
+                            ? null
+                            : () => _addCardFromPreview(card),
+                      )
+                    else if (canSelectCards)
+                      const Icon(
+                        Icons.add_circle_outline,
+                        color: Color(0xFFE9C46A),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (isMissing)
+            Positioned(
+              top: 6,
+              right: 8,
+              child: _buildBadge(l10n.missingLabel),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildGalleryCard(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
+    final canSelectCards = widget.selectionEnabled;
     final imageUrl = card.imageUri?.trim() ?? '';
+    final setLabel = _setLabelForSearch(card);
+    final collectorNumber = card.collectorNumber.trim();
+    final hasRarity = card.rarity.trim().isNotEmpty;
+    final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     return InkWell(
       onTap: () => _onResultTap(card),
       onLongPress: () => _showPreview(card),
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1713),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFF322A22)),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: (imageUrl.isNotEmpty)
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Container(
-                          color: const Color(0x221C1713),
-                          alignment: Alignment.center,
-                          child: _buildSetIcon(card.setCode, size: 30),
-                        ),
-                      )
-                    : Container(
-                        color: const Color(0x221C1713),
-                        alignment: Alignment.center,
-                        child: _buildSetIcon(card.setCode, size: 30),
+      borderRadius: BorderRadius.circular(16),
+      child: Opacity(
+        opacity: isMissing ? 0.45 : 1,
+        child: Stack(
+          children: [
+            Container(
+              decoration: _cardTintDecorationForSearch(card),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(16),
                       ),
-              ),
-              Positioned(
-                left: 8,
-                right: 8,
-                bottom: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xCC14110F),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    card.subtitleLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: const Color(0xFFE6D2B6),
-                        ),
-                  ),
-                ),
-              ),
-              if (!widget.selectionEnabled && isMissing)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          imageUrl.isEmpty
+                              ? Container(
+                                  color: const Color(0xFF201A14),
+                                  child: const Icon(
+                                    Icons.image_not_supported,
+                                    color: Color(0xFFBFAE95),
+                                  ),
+                                )
+                              : Image.network(
+                                  imageUrl,
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.topCenter,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: const Color(0xFF201A14),
+                                    child: const Icon(
+                                      Icons.image_not_supported,
+                                      color: Color(0xFFBFAE95),
+                                    ),
+                                  ),
+                                ),
+                          if (showAdd)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Material(
+                                color: const Color(0xFF1C1713)
+                                    .withValues(alpha: 0.9),
+                                shape: const CircleBorder(),
+                                child: InkWell(
+                                  customBorder: const CircleBorder(),
+                                  onTap: _addingFromPreview
+                                      ? null
+                                      : () => _addCardFromPreview(card),
+                                  child: const Padding(
+                                    padding: EdgeInsets.all(9),
+                                    child: Icon(
+                                      Icons.add,
+                                      size: 22,
+                                      color: Color(0xFFE9C46A),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          else if (canSelectCards)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Material(
+                                color: const Color(0xFF1C1713)
+                                    .withValues(alpha: 0.9),
+                                shape: const CircleBorder(),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(9),
+                                  child: Icon(
+                                    Icons.add,
+                                    size: 22,
+                                    color: Color(0xFFE9C46A),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (!canSelectCards && isMissing)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: _buildBadge(l10n.missingLabel),
+                            ),
+                        ],
+                      ),
                     ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xCC7A2222),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0x99D96C6C)),
-                    ),
-                    child: Text(
-                      l10n.missingLabel,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: const Color(0xFFFFB3B3),
-                            fontWeight: FontWeight.w700,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 44,
+                          child: Text(
+                            card.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _buildSetIcon(card.setCode, size: 22),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    setLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: const Color(0xFFBFAE95),
+                                        ),
+                                  ),
+                                  Builder(
+                                    builder: (context) {
+                                      if (collectorNumber.isEmpty &&
+                                          !hasRarity) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Row(
+                                        children: [
+                                          const Spacer(),
+                                          if (collectorNumber.isNotEmpty)
+                                            Text(
+                                              collectorNumber,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall
+                                                  ?.copyWith(
+                                                    color: const Color(
+                                                        0xFFBFAE95),
+                                                  ),
+                                            ),
+                                          if (hasRarity) ...[
+                                            const SizedBox(width: 6),
+                                            _raritySquare(card.rarity),
+                                          ],
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                ),
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1748,17 +2283,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               : _galleryView
                                   ? GridView.builder(
                                       padding: const EdgeInsets.fromLTRB(
+                                        20,
                                         16,
-                                        0,
-                                        16,
+                                        20,
                                         90,
                                       ),
                                       gridDelegate:
                                           const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        crossAxisSpacing: 10,
-                                        mainAxisSpacing: 10,
-                                        childAspectRatio: 63.5 / 88.9,
+                                        crossAxisCount: 2,
+                                        crossAxisSpacing: 16,
+                                        mainAxisSpacing: 16,
+                                        childAspectRatio: 0.72,
                                       ),
                                       itemCount: visibleResults.length,
                                       itemBuilder: (context, index) {
@@ -1782,7 +2317,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                                   ? 1
                                                   : 0),
                                       separatorBuilder: (_, _) =>
-                                          const SizedBox(height: 10),
+                                          const SizedBox(height: 12),
                                       itemBuilder: (context, index) {
                                         if (index >= visibleResults.length) {
                                           if (_loadingMore) {
@@ -1817,91 +2352,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                         }
                                         final card = visibleResults[index];
                                         final isMissing = _isMissingCard(card);
-                                        return InkWell(
-                                          onTap: () => _onResultTap(card),
-                                          onLongPress: () => _showPreview(card),
-                                          borderRadius: BorderRadius.circular(14),
-                                          child: Container(
-                                            padding: const EdgeInsets.all(14),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF1C1713),
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(
-                                                color: const Color(0xFF322A22),
-                                              ),
-                                            ),
-                                            child: Row(
-                                              children: [
-                                                _buildSetIcon(card.setCode, size: 24),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        card.name,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .titleMedium,
-                                                      ),
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        card.subtitleLabel,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              color: const Color(
-                                                                0xFFBFAE95,
-                                                              ),
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                if (canSelectCards)
-                                                  const Icon(
-                                                    Icons.add,
-                                                    color: Color(0xFFE9C46A),
-                                                  )
-                                                else if (isMissing)
-                                                  Container(
-                                                    padding:
-                                                        const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(0x33D96C6C),
-                                                      borderRadius:
-                                                          BorderRadius.circular(999),
-                                                      border: Border.all(
-                                                        color: const Color(0x66D96C6C),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      l10n.missingLabel,
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .labelSmall
-                                                          ?.copyWith(
-                                                            color:
-                                                                const Color(0xFFFFA6A6),
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                          ),
-                                                    ),
-                                                  )
-                                                else
-                                                  const Icon(
-                                                    Icons.visibility_outlined,
-                                                    color: Color(0xFFBFAE95),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
+                                        return _buildResultTile(card, l10n);
                                       },
                                     ),
                 ),

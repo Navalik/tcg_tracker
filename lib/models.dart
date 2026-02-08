@@ -5,6 +5,7 @@ class CardSearchResult {
     required this.setCode,
     required this.setName,
     required this.collectorNumber,
+    this.setTotal,
     required this.rarity,
     required this.typeLine,
     required this.colors,
@@ -17,17 +18,25 @@ class CardSearchResult {
   final String setCode;
   final String setName;
   final String collectorNumber;
+  final int? setTotal;
   final String rarity;
   final String typeLine;
   final String colors;
   final String colorIdentity;
   final String? imageUri;
 
+  String get collectorProgressLabel {
+    return _formatCollectorProgress(
+      collectorNumber: collectorNumber,
+      setTotal: setTotal,
+    );
+  }
+
   String get subtitleLabel {
-    return _formatSetLabel(
+    return _formatSetLabelWithProgress(
       setName: setName,
       setCode: setCode,
-      collectorNumber: collectorNumber,
+      collectorProgress: collectorProgressLabel,
     );
   }
 
@@ -135,6 +144,32 @@ String _formatSetLabel({
     return collectorNumber.isEmpty ? '' : '#$collectorNumber';
   }
   return collectorNumber.isEmpty ? label : '$label #$collectorNumber';
+}
+
+String _formatCollectorProgress({
+  required String collectorNumber,
+  required int? setTotal,
+}) {
+  final number = collectorNumber.trim();
+  if (number.isEmpty) {
+    return '';
+  }
+  return number;
+}
+
+String _formatSetLabelWithProgress({
+  required String setName,
+  required String setCode,
+  required String collectorProgress,
+}) {
+  final label = setName.trim().isNotEmpty ? setName.trim() : setCode.toUpperCase();
+  if (label.isEmpty) {
+    return collectorProgress;
+  }
+  if (collectorProgress.isEmpty) {
+    return label;
+  }
+  return '$label • $collectorProgress';
 }
 enum CollectionType {
   all,
