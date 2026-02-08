@@ -10,7 +10,7 @@ class PurchaseManager extends ChangeNotifier {
   PurchaseManager._();
 
   static final PurchaseManager instance = PurchaseManager._();
-  static const String _proProductId = 'tcg_tracker_pro';
+  static const String _proProductId = 'bindervault_pro';
 
   bool _isPro = false;
   bool _storeAvailable = false;
