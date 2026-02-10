@@ -738,17 +738,31 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               void Function(T) toggle,
               String Function(T) label,
             ) {
+              const chipText = Color(0xFFE9C46A);
+              const chipSelectedText = Color(0xFF1C1510);
+              const chipBorder = Color(0xFF3A2F24);
+              const chipBackground = Color(0xFF2A221B);
+              const chipSelectedBackground = Color(0xFFE9C46A);
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: items
-                    .map(
-                      (item) => FilterChip(
+                    .map((item) {
+                      final selected = isSelected(item);
+                      return FilterChip(
                         label: Text(label(item)),
-                        selected: isSelected(item),
+                        selected: selected,
+                        showCheckmark: false,
+                        backgroundColor: chipBackground,
+                        selectedColor: chipSelectedBackground,
+                        side: const BorderSide(color: chipBorder),
+                        labelStyle: TextStyle(
+                          color: selected ? chipSelectedText : chipText,
+                          fontWeight: FontWeight.w600,
+                        ),
                         onSelected: (_) => setSheetState(() => toggle(item)),
-                      ),
-                    )
+                      );
+                    })
                     .toList(),
               );
             }
@@ -940,18 +954,45 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     const SizedBox(height: 20),
                     Row(
                       children: [
-                        TextButton(
-                          onPressed: () {
-                            setSheetState(() {
-                              tempRarities.clear();
-                              tempSetCodes.clear();
-                              tempColors.clear();
-                              tempTypes.clear();
-                              minController.clear();
-                              maxController.clear();
-                            });
-                          },
-                          child: Text(l10n.clear),
+                        Material(
+                          color: Colors.transparent,
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFB85A5A),
+                                  Color(0xFF7A2E2E),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                setSheetState(() {
+                                  tempRarities.clear();
+                                  tempSetCodes.clear();
+                                  tempColors.clear();
+                                  tempTypes.clear();
+                                  minController.clear();
+                                  maxController.clear();
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 10,
+                                ),
+                                child: Text(
+                                  l10n.clear,
+                                  style: const TextStyle(
+                                    color: Color(0xFFF6E8D7),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const Spacer(),
                         FilledButton(
@@ -2509,11 +2550,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           }
                           _showCardActions(entry);
                         },
-                        child: Opacity(
-                          opacity: isMissing ? 0.45 : 1,
-                          child: Stack(
-                            children: [
-                              Container(
+                        child: Stack(
+                          children: [
+                              Opacity(
+                                opacity: isMissing ? 0.6 : 1.0,
+                                child: Container(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                 decoration: _cardTintDecoration(context, entry),
@@ -2538,6 +2579,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           children: [
                                             Text(
                                               entry.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: Theme.of(context)
                                                   .textTheme
                                                   .titleMedium,
@@ -2596,9 +2639,27 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           ],
                                         ),
                                       ),
-                                      if (_isFilterCollection ||
-                                          widget.isAllCards) ...[
-                                        const SizedBox(width: 8),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              ),
+                              if (_isFilterCollection || widget.isAllCards)
+                                Positioned(
+                                  right: 12,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (isMissing) ...[
+                                          _buildBadge(
+                                            l10n.missingLabel,
+                                            inverted: true,
+                                          ),
+                                          const SizedBox(width: 6),
+                                        ],
                                         Builder(
                                           builder: (buttonContext) {
                                             final isAnimating =
@@ -2607,6 +2668,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                             );
                                             return IconButton(
                                               tooltip: l10n.addOne,
+                                              iconSize: 36,
                                               icon: AnimatedSwitcher(
                                                 duration: const Duration(
                                                     milliseconds: 250),
@@ -2623,11 +2685,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                     ? const Icon(
                                                         Icons.check_circle,
                                                         key: ValueKey('check'),
+                                                        size: 36,
                                                       )
                                                     : const Icon(
                                                         Icons
                                                             .add_circle_outline,
                                                         key: ValueKey('add'),
+                                                        size: 36,
                                                       ),
                                               ),
                                               color: const Color(0xFFE9C46A),
@@ -2642,10 +2706,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           },
                                         ),
                                       ],
-                                    ],
+                                    ),
                                   ),
                                 ),
-                              ),
                               if (_selectionMode || _isSelected(entry))
                                 Positioned(
                                   top: 6,
@@ -2653,12 +2716,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   child: _buildSelectionBadge(
                                     _isSelected(entry),
                                   ),
-                                ),
-                              if (isMissing)
-                                Positioned(
-                                  top: 6,
-                                  right: hasCornerQuantity ? 42 : 8,
-                                  child: _buildBadge(l10n.missingLabel),
                                 ),
                               if (entry.foil || entry.altArt)
                                 Positioned(
@@ -2684,7 +2741,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                 ),
                             ],
                           ),
-                        ),
                       );
                     },
                   )
@@ -2722,11 +2778,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           }
                           _showCardActions(entry);
                         },
-                        child: Opacity(
-                          opacity: isMissing ? 0.45 : 1,
-                          child: Stack(
-                            children: [
-                              Container(
+                        child: Stack(
+                          children: [
+                              Opacity(
+                                opacity: isMissing ? 0.6 : 1.0,
+                                child: Container(
                                 decoration: _cardTintDecoration(context, entry),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2754,89 +2810,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                     fit: BoxFit.cover,
                                                     alignment: Alignment.topCenter,
                                                   ),
-                                            if ((_isFilterCollection ||
-                                                    widget.isAllCards) &&
-                                                !_selectionMode)
-                                              Positioned(
-                                                top: 8,
-                                                left: 8,
-                                                child: Builder(
-                                                  builder: (buttonContext) {
-                                                    final isAnimating =
-                                                        _quickAddAnimating
-                                                            .contains(
-                                                      entry.cardId,
-                                                    );
-                                                    return Material(
-                                                      color: const Color(
-                                                              0xFF1C1713)
-                                                          .withValues(
-                                                              alpha: 0.9),
-                                                      shape:
-                                                          const CircleBorder(),
-                                                      child: InkWell(
-                                                        customBorder:
-                                                            const CircleBorder(),
-                                                        onTap: () =>
-                                                            _quickAddCard(
-                                                          entry,
-                                                          anchorContext:
-                                                              buttonContext,
-                                                        ),
-                                                        child: Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .all(9),
-                                                          child:
-                                                              AnimatedSwitcher(
-                                                            duration:
-                                                                const Duration(
-                                                              milliseconds:
-                                                                  250,
-                                                            ),
-                                                            transitionBuilder:
-                                                                (child,
-                                                                    animation) =>
-                                                                    ScaleTransition(
-                                                              scale: animation,
-                                                              child:
-                                                                  FadeTransition(
-                                                                opacity:
-                                                                    animation,
-                                                                child: child,
-                                                              ),
-                                                            ),
-                                                            child: isAnimating
-                                                                ? const Icon(
-                                                                    Icons.check,
-                                                                    key: ValueKey(
-                                                                        'check'),
-                                                                    size: 22,
-                                                                    color: Color(
-                                                                        0xFFE9C46A),
-                                                                  )
-                                                                : const Icon(
-                                                                    Icons.add,
-                                                                    key: ValueKey(
-                                                                        'add'),
-                                                                    size: 22,
-                                                                    color: Color(
-                                                                        0xFFE9C46A),
-                                                                  ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            if (isMissing)
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child:
-                                                    _buildBadge(l10n.missingLabel),
-                                              ),
                                             if (entry.foil || entry.altArt)
                                               Positioned(
                                                 bottom: 8,
@@ -2862,94 +2835,89 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                       ),
                                     ),
                                     Padding(
-                                      padding: const EdgeInsets.all(10),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                      padding:
+                                          const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                                      child: Stack(
                                         children: [
-                                          SizedBox(
-                                            height: 44,
-                                            child: Text(
-                                              entry.name,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodyMedium,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Row(
+                                          Column(
+                                            mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment:
-                                                CrossAxisAlignment.end,
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              _buildSetIcon(entry.setCode,
-                                                  size: 22),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      _setLabelForEntry(entry),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: Theme.of(context)
-                                                          .textTheme
-                                                          .bodySmall
-                                                          ?.copyWith(
-                                                            color: const Color(
-                                                                0xFFBFAE95),
-                                                          ),
-                                                    ),
-                                                    Builder(
-                                                      builder: (context) {
-                                                        final progress =
-                                                            _collectorProgressLabel(
-                                                                entry);
-                                                        final hasRarity = entry
-                                                            .rarity
-                                                            .trim()
-                                                            .isNotEmpty;
-                                                        if (!hasRarity &&
-                                                            progress
-                                                                .isEmpty) {
-                                                          return const SizedBox
-                                                              .shrink();
-                                                        }
-                                                        return Row(
-                                                          children: [
-                                                            const Spacer(),
-                                                            if (progress
-                                                                .isNotEmpty)
-                                                              Text(
-                                                                progress,
-                                                                style: Theme.of(
-                                                                        context)
-                                                                    .textTheme
-                                                                    .bodySmall
-                                                                    ?.copyWith(
-                                                                      color: const Color(
-                                                                          0xFFBFAE95),
-                                                                    ),
-                                                              ),
-                                                            if (hasRarity) ...[
-                                                              const SizedBox(
-                                                                  width: 6),
-                                                              _raritySquare(
-                                                                  entry.rarity),
-                                                            ],
-                                                          ],
-                                                        );
-                                                      },
-                                                    ),
-                                                  ],
+                                              SizedBox(
+                                                height: 38,
+                                                child: Text(
+                                                  entry.name,
+                                                  maxLines: 2,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium,
                                                 ),
                                               ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                _setLabelForEntry(entry),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall
+                                                    ?.copyWith(
+                                                      color: const Color(
+                                                          0xFFBFAE95),
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 22),
                                             ],
+                                          ),
+                                          Positioned(
+                                            left: 0,
+                                            bottom: 0,
+                                            child: _buildSetIcon(
+                                              entry.setCode,
+                                              size: 22,
+                                            ),
+                                          ),
+                                          Positioned(
+                                            right: 0,
+                                            bottom: 0,
+                                            child: Builder(
+                                              builder: (context) {
+                                                final progress =
+                                                    _collectorProgressLabel(
+                                                        entry);
+                                                final hasRarity = entry
+                                                    .rarity
+                                                    .trim()
+                                                    .isNotEmpty;
+                                                if (!hasRarity &&
+                                                    progress.isEmpty) {
+                                                  return const SizedBox.shrink();
+                                                }
+                                                return Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    if (progress.isNotEmpty)
+                                                      Text(
+                                                        progress,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              color: const Color(
+                                                                  0xFFBFAE95),
+                                                            ),
+                                                      ),
+                                                    if (hasRarity) ...[
+                                                      const SizedBox(width: 6),
+                                                      _raritySquare(
+                                                          entry.rarity),
+                                                    ],
+                                                  ],
+                                                );
+                                              },
+                                            ),
                                           ),
                                         ],
                                       ),
@@ -2957,6 +2925,67 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   ],
                                 ),
                               ),
+                              ),
+                              if (isMissing)
+                                Align(
+                                  alignment: const Alignment(1, 0.0),
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _buildBadge(
+                                      l10n.missingLabel,
+                                      inverted: true,
+                                    ),
+                                  ),
+                              ),
+                              if ((_isFilterCollection || widget.isAllCards) &&
+                                  !_selectionMode)
+                                Positioned(
+                                  top: 24,
+                                  left: 12,
+                                  child: Builder(
+                                    builder: (buttonContext) {
+                                      final isAnimating =
+                                          _quickAddAnimating.contains(
+                                        entry.cardId,
+                                      );
+                                      return IconButton(
+                                        tooltip: l10n.addOne,
+                                        iconSize: 36,
+                                        onPressed: () => _quickAddCard(
+                                          entry,
+                                          anchorContext: buttonContext,
+                                        ),
+                                        icon: AnimatedSwitcher(
+                                          duration: const Duration(
+                                            milliseconds: 250,
+                                          ),
+                                          transitionBuilder:
+                                              (child, animation) =>
+                                                  ScaleTransition(
+                                            scale: animation,
+                                            child: FadeTransition(
+                                              opacity: animation,
+                                              child: child,
+                                            ),
+                                          ),
+                                          child: isAnimating
+                                              ? const Icon(
+                                                  Icons.check_circle,
+                                                  key: ValueKey('check'),
+                                                  size: 36,
+                                                  color: Color(0xFFE9C46A),
+                                                )
+                                              : const Icon(
+                                                  Icons.add_circle_outline,
+                                                  key: ValueKey('add'),
+                                                  size: 36,
+                                                  color: Color(0xFFE9C46A),
+                                                ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
                               if (_selectionMode || _isSelected(entry))
                                 Positioned(
                                   top: 8,
@@ -2974,7 +3003,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                 ),
                             ],
                           ),
-                        ),
                       );
                     },
                   ),

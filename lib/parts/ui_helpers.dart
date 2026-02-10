@@ -66,19 +66,26 @@ Widget _emptySetIcon(double size) {
   );
 }
 
-Widget _buildBadge(String label) {
+Widget _buildBadge(String label, {bool inverted = false}) {
+  final background =
+      inverted ? const Color(0xFFE9C46A) : const Color(0xFF2A221B);
+  final foreground =
+      inverted ? const Color(0xFF2A221B) : const Color(0xFFE9C46A);
+  final borderColor =
+      inverted ? const Color(0xFFE9C46A) : const Color(0xFF3A2F24);
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
-      color: const Color(0xFF2A221B),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: const Color(0xFF3A2F24)),
+      color: background,
+      borderRadius: BorderRadius.circular(9999),
+      border: Border.all(color: borderColor),
     ),
     child: Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
-        color: Color(0xFFE9C46A),
+        fontWeight: FontWeight.w700,
+        color: foreground,
       ),
     ),
   );

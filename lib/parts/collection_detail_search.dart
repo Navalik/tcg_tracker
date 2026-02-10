@@ -863,17 +863,31 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               void Function(T) toggle,
               String Function(T) label,
             ) {
+              const chipText = Color(0xFFE9C46A);
+              const chipSelectedText = Color(0xFF1C1510);
+              const chipBorder = Color(0xFF3A2F24);
+              const chipBackground = Color(0xFF2A221B);
+              const chipSelectedBackground = Color(0xFFE9C46A);
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: items
-                    .map(
-                      (item) => FilterChip(
+                    .map((item) {
+                      final selected = isSelected(item);
+                      return FilterChip(
                         label: Text(label(item)),
-                        selected: isSelected(item),
+                        selected: selected,
+                        showCheckmark: false,
+                        backgroundColor: chipBackground,
+                        selectedColor: chipSelectedBackground,
+                        side: const BorderSide(color: chipBorder),
+                        labelStyle: TextStyle(
+                          color: selected ? chipSelectedText : chipText,
+                          fontWeight: FontWeight.w600,
+                        ),
                         onSelected: (_) => setSheetState(() => toggle(item)),
-                      ),
-                    )
+                      );
+                    })
                     .toList(),
               );
             }
@@ -1162,24 +1176,51 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     const SizedBox(height: 20),
                     Row(
                       children: [
-                        TextButton(
-                          onPressed: () {
-                            setSheetState(() {
-                              tempRarities.clear();
-                              tempSetCodes.clear();
-                              tempColors.clear();
-                              tempTypes.clear();
-                              nameController.clear();
-                              artistController.clear();
-                              artistSuggestions = [];
-                              loadingArtists = false;
-                              minController.clear();
-                              maxController.clear();
-                              setQuery = '';
-                              typeQuery = '';
-                            });
-                          },
-                          child: Text(l10n.clear),
+                        Material(
+                          color: Colors.transparent,
+                          child: Ink(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFB85A5A),
+                                  Color(0xFF7A2E2E),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () {
+                                setSheetState(() {
+                                  tempRarities.clear();
+                                  tempSetCodes.clear();
+                                  tempColors.clear();
+                                  tempTypes.clear();
+                                  nameController.clear();
+                                  artistController.clear();
+                                  artistSuggestions = [];
+                                  loadingArtists = false;
+                                  minController.clear();
+                                  maxController.clear();
+                                  setQuery = '';
+                                  typeQuery = '';
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 10,
+                                ),
+                                child: Text(
+                                  l10n.clear,
+                                  style: const TextStyle(
+                                    color: Color(0xFFF6E8D7),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const Spacer(),
                         FilledButton(
@@ -1761,11 +1802,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
-    return Opacity(
-      opacity: isMissing ? 0.45 : 1,
-      child: Stack(
-        children: [
-          InkWell(
+    return Stack(
+      children: [
+        Opacity(
+          opacity: isMissing ? 0.6 : 1.0,
+          child: InkWell(
             onTap: () => _onResultTap(card),
             onLongPress: () => _showPreview(card),
             borderRadius: BorderRadius.circular(16),
@@ -1851,14 +1892,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               ),
             ),
           ),
-          if (isMissing)
-            Positioned(
-              top: 6,
-              right: 8,
-              child: _buildBadge(l10n.missingLabel),
+        ),
+        if (isMissing)
+          Positioned(
+            top: 6,
+            right: 8,
+            child: _buildBadge(
+              l10n.missingLabel,
+              inverted: true,
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 
@@ -1870,15 +1914,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
-    return InkWell(
-      onTap: () => _onResultTap(card),
-      onLongPress: () => _showPreview(card),
-      borderRadius: BorderRadius.circular(16),
-      child: Opacity(
-        opacity: isMissing ? 0.45 : 1,
-        child: Stack(
-          children: [
-            Container(
+    return Stack(
+      children: [
+        Opacity(
+          opacity: isMissing ? 0.6 : 1.0,
+          child: InkWell(
+            onTap: () => _onResultTap(card),
+            onLongPress: () => _showPreview(card),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
               decoration: _cardTintDecorationForSearch(card),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1952,12 +1996,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   ),
                                 ),
                               ),
-                            ),
-                          if (!canSelectCards && isMissing)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: _buildBadge(l10n.missingLabel),
                             ),
                         ],
                       ),
@@ -2038,9 +2076,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                 ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        if (!canSelectCards && isMissing)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: _buildBadge(
+              l10n.missingLabel,
+              inverted: true,
+            ),
+          ),
+      ],
     );
   }
 
