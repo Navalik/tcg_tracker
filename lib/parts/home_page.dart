@@ -845,8 +845,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _onScanCardPressed();
     } else if (selection == _HomeAddAction.addCards) {
       await _openAddCardsForAllCards(context);
-    } else if (selection == _HomeAddAction.addCardsToCollection) {
-      await _openAddCardsForCollection(context);
     } else if (selection == _HomeAddAction.addCollection) {
       await _showCreateCollectionOptions(context);
     }
@@ -2369,10 +2367,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _bulkDownloading = false;
           _bulkDownloadProgress = 1;
         });
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context)!.downloadComplete(targetPath),
-        );
         await _importBulkFile(targetPath);
       } finally {
         client.close();
@@ -2930,13 +2924,6 @@ class _HomeAddSheet extends StatelessWidget {
             title: Text(l10n.addCards),
             subtitle: Text(l10n.addCardsToCatalogSubtitle),
             onTap: () => Navigator.of(context).pop(_HomeAddAction.addCards),
-          ),
-          ListTile(
-            leading: const Icon(Icons.playlist_add),
-            title: Text(l10n.addCardsToCollection),
-            subtitle: Text(l10n.addCardsToCollectionSubtitle),
-            onTap: () =>
-                Navigator.of(context).pop(_HomeAddAction.addCardsToCollection),
           ),
           ListTile(
             leading: const Icon(Icons.collections_bookmark),
@@ -4836,7 +4823,7 @@ class _ScanFieldStatusBox extends StatelessWidget {
 
 enum _CollectionAction { rename, editFilters, delete }
 
-enum _HomeAddAction { addByScan, addCards, addCardsToCollection, addCollection }
+enum _HomeAddAction { addByScan, addCards, addCollection }
 
 enum _CollectionCreateAction { custom, setBased }
 

@@ -183,11 +183,24 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.resetComplete,
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('App deve essere riavviata'),
+          actions: [
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
-    Navigator.of(context).popUntil((route) => route.isFirst);
+    SystemNavigator.pop();
   }
 
   Future<void> _deleteBulkFiles() async {

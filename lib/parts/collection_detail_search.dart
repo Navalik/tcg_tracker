@@ -1402,11 +1402,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (!mounted) {
       return;
     }
-    if (entry == null) {
-      _showPreview(card);
+    if (entry != null) {
+      await _showEntryDetails(entry);
       return;
     }
-    await _showEntryDetails(entry);
+    final ensured = await _ensureCardStored(card);
+    if (!mounted) {
+      return;
+    }
+    if (!ensured) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.networkErrorTryAgain,
+      );
+      return;
+    }
+    final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
+      card.id,
+      collectionId: widget.ownershipCollectionId,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (refreshed == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.networkErrorTryAgain,
+      );
+      return;
+    }
+    await _showEntryDetails(refreshed);
   }
 
   Future<void> _showEntryDetails(CollectionCardEntry entry) {
@@ -1415,6 +1440,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
+        final addButtonKey = GlobalKey();
+        var showCheck = false;
         final l10n = AppLocalizations.of(context)!;
         final details = _parseCardDetails(l10n, entry);
         final typeLine = entry.typeLine.trim();
@@ -1424,150 +1451,177 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         final toughness = entry.toughness.trim();
         final loyalty = entry.loyalty.trim();
         final stats = _joinStats(power, toughness);
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> handleAdd() async {
+              await _addCardFromDetails(entry);
+              if (!mounted) {
+                return;
+              }
+              _showMiniToast(addButtonKey, '+1');
+              setModalState(() {
+                showCheck = true;
+              });
+              await Future<void>.delayed(const Duration(milliseconds: 700));
+              if (!mounted) {
+                return;
+              }
+              setModalState(() {
+                showCheck = false;
+              });
+            }
+
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: SafeArea(
-            top: false,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.name,
-                              style: Theme.of(context).textTheme.titleMedium,
+                      Row(
+                        children: [
+                          if (manaCost.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A221B),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: const Color(0xFF3A2F24)),
+                              ),
+                              child: Text(
+                                manaCost,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _subtitleLabelForEntry(entry),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: const Color(0xFFBFAE95),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  entry.name,
+                                  style: Theme.of(context).textTheme.titleMedium,
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (widget.ownershipCollectionId != null)
+                            FilledButton(
+                              key: addButtonKey,
+                              onPressed: _addingFromPreview ? null : handleAdd,
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 250),
+                                transitionBuilder: (child, animation) =>
+                                    ScaleTransition(
+                                  scale: animation,
+                                  child: FadeTransition(
+                                    opacity: animation,
+                                    child: child,
                                   ),
+                                ),
+                                child: showCheck
+                                    ? const Icon(Icons.check,
+                                        key: ValueKey('check'))
+                                    : const Icon(Icons.add,
+                                        key: ValueKey('add')),
+                              ),
                             ),
-                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _buildSetIcon(entry.setCode, size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            _subtitleLabelForEntry(entry),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFFBFAE95),
+                                ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (typeLine.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          typeLine,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: const Color(0xFFE3D4B8),
+                              ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _buildSetIcon(entry.setCode, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                        _subtitleLabelForEntry(entry),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFBFAE95),
-                            ),
-                      ),
-                      const Spacer(),
-                      if (manaCost.isNotEmpty)
+                      ],
+                      if (oracleText.isNotEmpty) ...[
+                        const SizedBox(height: 14),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2A221B),
-                            borderRadius: BorderRadius.circular(999),
+                            color: const Color(0xFF201A14),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: const Color(0xFF3A2F24)),
                           ),
                           child: Text(
-                            manaCost,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            oracleText,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
+                      ],
+                      if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (stats.isNotEmpty) _buildBadge(stats),
+                            if (loyalty.isNotEmpty)
+                              _buildBadge(l10n.loyaltyLabel(loyalty)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (entry.imageUri != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.network(
+                            entry.imageUri!,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.details,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildDetailGrid(details),
                     ],
                   ),
-                  if (typeLine.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      typeLine,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFFE3D4B8),
-                          ),
-                    ),
-                  ],
-                  if (oracleText.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF201A14),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
-                      ),
-                      child: Text(
-                        oracleText,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                  if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (stats.isNotEmpty) _buildBadge(stats),
-                        if (loyalty.isNotEmpty)
-                          _buildBadge(l10n.loyaltyLabel(loyalty)),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  if (entry.imageUri != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        entry.imageUri!,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  if (entry.imageUri != null &&
-                      _subtitleLabelForEntry(entry).isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _subtitleLabelForEntry(entry),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFBFAE95),
-                          ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.details,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDetailGrid(details),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -1583,7 +1637,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (progress.isEmpty) {
       return setLabel;
     }
-    return '$setLabel â€¢ $progress';
+    return '$setLabel • $progress';
   }
 
   List<_CardDetail> _parseCardDetails(
@@ -2527,6 +2581,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _addingFromPreview = true;
     });
     try {
+      final ensured = await _ensureCardStored(card);
+      if (!ensured) {
+        if (mounted) {
+          showAppSnackBar(
+            context,
+            AppLocalizations.of(context)!.networkErrorTryAgain,
+          );
+        }
+        return;
+      }
       await ScryfallDatabase.instance.addCardToCollection(collectionId, card.id);
       if (!mounted) {
         return;
@@ -2550,6 +2614,160 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         });
       }
     }
+  }
+
+  Future<void> _addCardFromDetails(CollectionCardEntry entry) async {
+    final collectionId = widget.ownershipCollectionId;
+    if (collectionId == null || _addingFromPreview) {
+      return;
+    }
+    setState(() {
+      _addingFromPreview = true;
+    });
+    try {
+      await ScryfallDatabase.instance.addCardToCollection(
+        collectionId,
+        entry.cardId,
+      );
+      if (!mounted) {
+        return;
+      }
+      final current = _ownedQuantitiesByCardId[entry.cardId] ?? entry.quantity;
+      setState(() {
+        _ownedQuantitiesByCardId = {
+          ..._ownedQuantitiesByCardId,
+          entry.cardId: current + 1,
+        };
+      });
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.addedCards(1),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _addingFromPreview = false;
+        });
+      }
+    }
+  }
+
+  void _showMiniToast(GlobalKey targetKey, String label) {
+    final overlay = Overlay.of(context);
+    final box = targetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) {
+      return;
+    }
+    final position = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: position.dx + (size.width / 2) - 18,
+          top: position.dy - 28,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9C46A),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF1C1510),
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      entry.remove();
+    });
+  }
+
+  Future<bool> _ensureCardStored(CardSearchResult card) async {
+    final existing =
+        await ScryfallDatabase.instance.fetchCardEntryById(card.id);
+    if (existing != null) {
+      return true;
+    }
+    final fetched = await _fetchAndUpsertCardById(card.id);
+    if (fetched) {
+      return true;
+    }
+    try {
+      await ScryfallDatabase.instance.upsertCardFromScryfall(
+        _minimalCardPayload(card),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _fetchAndUpsertCardById(String cardId) async {
+    try {
+      final uri = Uri.parse('https://api.scryfall.com/cards/$cardId');
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) {
+        return false;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return false;
+      }
+      await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Map<String, dynamic> _minimalCardPayload(CardSearchResult card) {
+    final colors = _splitColorCsv(card.colors);
+    final colorIdentity = _splitColorCsv(card.colorIdentity);
+    return {
+      'id': card.id,
+      'name': card.name,
+      'set': card.setCode,
+      'set_name': card.setName,
+      'printed_total': card.setTotal,
+      'collector_number': card.collectorNumber,
+      'rarity': card.rarity,
+      'type_line': card.typeLine,
+      'colors': colors,
+      'color_identity': colorIdentity,
+      'image_uris': card.imageUri == null
+          ? null
+          : {
+              'normal': card.imageUri,
+            },
+      'lang': 'en',
+    };
+  }
+
+  List<String> _splitColorCsv(String value) {
+    if (value.trim().isEmpty) {
+      return const [];
+    }
+    return value
+        .split(',')
+        .map((item) => item.trim().toUpperCase())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
   }
 }
 

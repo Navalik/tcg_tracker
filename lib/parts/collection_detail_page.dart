@@ -64,6 +64,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   _CardSortMode _sortMode = _CardSortMode.name;
   bool _selectionMode = false;
   final Set<String> _selectedCardIds = {};
+  final Set<String> _quickAddAnimating = {};
 
   bool get _isFilterCollection =>
       !widget.isAllCards && (widget.filter != null || widget.isSetCollection);
@@ -691,7 +692,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (progress.isEmpty) {
       return setLabel;
     }
-    return '$setLabel â€¢ $progress';
+    return '$setLabel • $progress';
   }
 
   Future<void> _showAdvancedFilters() async {
@@ -1085,7 +1086,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     );
   }
 
-  Future<void> _quickAddCard(CollectionCardEntry entry) async {
+  Future<void> _quickAddCard(
+    CollectionCardEntry entry, {
+    BuildContext? anchorContext,
+  }) async {
     final ownedCollectionId = _ownedCollectionId;
     if (ownedCollectionId == null) {
       return;
@@ -1098,6 +1102,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       foil: entry.foil,
       altArt: entry.altArt,
     );
+    if (mounted) {
+      setState(() {
+        _quickAddAnimating.add(entry.cardId);
+      });
+      if (anchorContext != null) {
+        _showMiniToastForContext(anchorContext, '+1');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (mounted) {
+        setState(() {
+          _quickAddAnimating.remove(entry.cardId);
+        });
+      }
+    }
     await _loadCards();
   }
 
@@ -1810,146 +1828,276 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final toughness = entry.toughness.trim();
     final loyalty = entry.loyalty.trim();
     final stats = _joinStats(power, toughness);
+    final addButtonKey = GlobalKey();
+    var showCheck = false;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.7,
-          minChildSize: 0.4,
-          maxChildSize: 0.95,
-          builder: (context, scrollController) {
-            return Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(18),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: ListView(
-                controller: scrollController,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          entry.name,
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> handleAdd() async {
+              await _quickAddCard(entry, anchorContext: addButtonKey.currentContext);
+              if (!mounted) {
+                return;
+              }
+              _showMiniToast(addButtonKey, '+1');
+              setModalState(() {
+                showCheck = true;
+              });
+              await Future<void>.delayed(const Duration(milliseconds: 700));
+              if (!mounted) {
+                return;
+              }
+              setModalState(() {
+                showCheck = false;
+              });
+            }
+
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              minChildSize: 0.4,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) {
+                return Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  Row(
+                  child: ListView(
+                    controller: scrollController,
                     children: [
-                      _buildSetIcon(entry.setCode, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                        _subtitleLabel(entry),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFBFAE95),
+                      Row(
+                        children: [
+                          if (manaCost.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A221B),
+                                borderRadius: BorderRadius.circular(999),
+                                border:
+                                    Border.all(color: const Color(0xFF3A2F24)),
+                              ),
+                              child: Text(
+                                manaCost,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
                             ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      if (manaCost.isNotEmpty)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              entry.name,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          FilledButton(
+                            key: addButtonKey,
+                            onPressed: handleAdd,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder: (child, animation) =>
+                                  ScaleTransition(
+                                scale: animation,
+                                child: FadeTransition(
+                                  opacity: animation,
+                                  child: child,
+                                ),
+                              ),
+                              child: showCheck
+                                  ? const Icon(Icons.check,
+                                      key: ValueKey('check'))
+                                  : const Icon(Icons.add,
+                                      key: ValueKey('add')),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _buildSetIcon(entry.setCode, size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            _subtitleLabel(entry),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFFBFAE95),
+                                ),
+                          ),
+                        ],
+                      ),
+                      if (typeLine.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          typeLine,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: const Color(0xFFE3D4B8),
+                              ),
+                        ),
+                      ],
+                      if (oracleText.isNotEmpty) ...[
+                        const SizedBox(height: 14),
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2A221B),
-                            borderRadius: BorderRadius.circular(999),
-                            border:
-                                Border.all(color: const Color(0xFF3A2F24)),
+                            color: const Color(0xFF201A14),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF3A2F24)),
                           ),
                           child: Text(
-                            manaCost,
-                            style: Theme.of(context).textTheme.bodySmall,
+                            oracleText,
+                            style: Theme.of(context).textTheme.bodyMedium,
                           ),
                         ),
+                      ],
+                      if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (stats.isNotEmpty) _buildBadge(stats),
+                            if (loyalty.isNotEmpty)
+                              _buildBadge(l10n.loyaltyLabel(loyalty)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (entry.imageUri != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.network(
+                            entry.imageUri!,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.details,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildDetailGrid(details),
                     ],
                   ),
-                  if (typeLine.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      typeLine,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: const Color(0xFFE3D4B8),
-                          ),
-                    ),
-                  ],
-                  if (oracleText.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF201A14),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
-                      ),
-                      child: Text(
-                        oracleText,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ),
-                  ],
-                  if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        if (stats.isNotEmpty) _buildBadge(stats),
-                        if (loyalty.isNotEmpty)
-                          _buildBadge(l10n.loyaltyLabel(loyalty)),
-                      ],
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  if (entry.imageUri != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        entry.imageUri!,
-                        fit: BoxFit.contain,
-                      ),
-                    ),
-                  if (entry.imageUri != null &&
-                      _subtitleLabel(entry).isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _subtitleLabel(entry),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFBFAE95),
-                          ),
-                    ),
-                  ],
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.details,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 8),
-                  _buildDetailGrid(details),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  void _showMiniToast(GlobalKey targetKey, String label) {
+    final overlay = Overlay.of(context);
+    final box = targetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) {
+      return;
+    }
+    final position = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: position.dx + (size.width / 2) - 18,
+          top: position.dy - 28,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9C46A),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF1C1510),
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      entry.remove();
+    });
+  }
+
+  void _showMiniToastForContext(BuildContext targetContext, String label) {
+    final overlay = Overlay.of(context);
+    final box = targetContext.findRenderObject() as RenderBox?;
+    if (overlay == null || box == null) {
+      return;
+    }
+    final position = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: position.dx + (size.width / 2) - 18,
+          top: position.dy - 28,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9C46A),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: const Color(0xFF1C1510),
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      entry.remove();
+    });
   }
 
   List<_CardDetail> _parseCardDetails(
@@ -2451,14 +2599,47 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                       if (_isFilterCollection ||
                                           widget.isAllCards) ...[
                                         const SizedBox(width: 8),
-                                        IconButton(
-                                          tooltip: l10n.addOne,
-                                          icon: const Icon(
-                                              Icons.add_circle_outline),
-                                          color: const Color(0xFFE9C46A),
-                                          onPressed: _selectionMode
-                                              ? null
-                                              : () => _quickAddCard(entry),
+                                        Builder(
+                                          builder: (buttonContext) {
+                                            final isAnimating =
+                                                _quickAddAnimating.contains(
+                                              entry.cardId,
+                                            );
+                                            return IconButton(
+                                              tooltip: l10n.addOne,
+                                              icon: AnimatedSwitcher(
+                                                duration: const Duration(
+                                                    milliseconds: 250),
+                                                transitionBuilder:
+                                                    (child, animation) =>
+                                                        ScaleTransition(
+                                                  scale: animation,
+                                                  child: FadeTransition(
+                                                    opacity: animation,
+                                                    child: child,
+                                                  ),
+                                                ),
+                                                child: isAnimating
+                                                    ? const Icon(
+                                                        Icons.check_circle,
+                                                        key: ValueKey('check'),
+                                                      )
+                                                    : const Icon(
+                                                        Icons
+                                                            .add_circle_outline,
+                                                        key: ValueKey('add'),
+                                                      ),
+                                              ),
+                                              color: const Color(0xFFE9C46A),
+                                              onPressed: _selectionMode
+                                                  ? null
+                                                  : () => _quickAddCard(
+                                                        entry,
+                                                        anchorContext:
+                                                            buttonContext,
+                                                      ),
+                                            );
+                                          },
                                         ),
                                       ],
                                     ],
@@ -2579,26 +2760,74 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                               Positioned(
                                                 top: 8,
                                                 left: 8,
-                                                child: Material(
-                                                  color: const Color(0xFF1C1713)
-                                                      .withValues(alpha: 0.9),
-                                                  shape: const CircleBorder(),
-                                                  child: InkWell(
-                                                    customBorder:
-                                                        const CircleBorder(),
-                                                    onTap: () =>
-                                                        _quickAddCard(entry),
-                                                    child: const Padding(
-                                                      padding:
-                                                          EdgeInsets.all(9),
-                                                      child: Icon(
-                                                        Icons.add,
-                                                        size: 22,
-                                                        color:
-                                                            Color(0xFFE9C46A),
+                                                child: Builder(
+                                                  builder: (buttonContext) {
+                                                    final isAnimating =
+                                                        _quickAddAnimating
+                                                            .contains(
+                                                      entry.cardId,
+                                                    );
+                                                    return Material(
+                                                      color: const Color(
+                                                              0xFF1C1713)
+                                                          .withValues(
+                                                              alpha: 0.9),
+                                                      shape:
+                                                          const CircleBorder(),
+                                                      child: InkWell(
+                                                        customBorder:
+                                                            const CircleBorder(),
+                                                        onTap: () =>
+                                                            _quickAddCard(
+                                                          entry,
+                                                          anchorContext:
+                                                              buttonContext,
+                                                        ),
+                                                        child: Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(9),
+                                                          child:
+                                                              AnimatedSwitcher(
+                                                            duration:
+                                                                const Duration(
+                                                              milliseconds:
+                                                                  250,
+                                                            ),
+                                                            transitionBuilder:
+                                                                (child,
+                                                                    animation) =>
+                                                                    ScaleTransition(
+                                                              scale: animation,
+                                                              child:
+                                                                  FadeTransition(
+                                                                opacity:
+                                                                    animation,
+                                                                child: child,
+                                                              ),
+                                                            ),
+                                                            child: isAnimating
+                                                                ? const Icon(
+                                                                    Icons.check,
+                                                                    key: ValueKey(
+                                                                        'check'),
+                                                                    size: 22,
+                                                                    color: Color(
+                                                                        0xFFE9C46A),
+                                                                  )
+                                                                : const Icon(
+                                                                    Icons.add,
+                                                                    key: ValueKey(
+                                                                        'add'),
+                                                                    size: 22,
+                                                                    color: Color(
+                                                                        0xFFE9C46A),
+                                                                  ),
+                                                          ),
+                                                        ),
                                                       ),
-                                                    ),
-                                                  ),
+                                                    );
+                                                  },
                                                 ),
                                               ),
                                             if (isMissing)
