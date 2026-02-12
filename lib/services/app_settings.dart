@@ -9,6 +9,8 @@ class AppSettings {
   static const _prefsKeyCollectionViewMode = 'collection_view_mode';
   static const _prefsKeyBulkType = 'scryfall_bulk_type';
   static const _prefsKeyProUnlocked = 'pro_unlocked';
+  static const _prefsKeyFreeScanDate = 'free_scan_date';
+  static const _prefsKeyFreeScanCount = 'free_scan_count';
 
   static const List<String> languageCodes = [
     'en',
@@ -93,6 +95,55 @@ class AppSettings {
     await prefs.setBool(_prefsKeyProUnlocked, value);
   }
 
+  static String _todayKey([DateTime? now]) {
+    final local = (now ?? DateTime.now()).toLocal();
+    final yyyy = local.year.toString().padLeft(4, '0');
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    return '$yyyy-$mm-$dd';
+  }
+
+  static Future<int> loadTodayFreeScans({DateTime? now}) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayKey(now);
+    final storedDate = prefs.getString(_prefsKeyFreeScanDate);
+    if (storedDate != today) {
+      await prefs.setString(_prefsKeyFreeScanDate, today);
+      await prefs.setInt(_prefsKeyFreeScanCount, 0);
+      return 0;
+    }
+    return prefs.getInt(_prefsKeyFreeScanCount) ?? 0;
+  }
+
+  static Future<int> remainingFreeDailyScans({
+    int limit = 20,
+    DateTime? now,
+  }) async {
+    final used = await loadTodayFreeScans(now: now);
+    final remaining = limit - used;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  static Future<bool> consumeFreeDailyScan({
+    int limit = 20,
+    DateTime? now,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final today = _todayKey(now);
+    final storedDate = prefs.getString(_prefsKeyFreeScanDate);
+    var used = prefs.getInt(_prefsKeyFreeScanCount) ?? 0;
+    if (storedDate != today) {
+      used = 0;
+      await prefs.setString(_prefsKeyFreeScanDate, today);
+      await prefs.setInt(_prefsKeyFreeScanCount, 0);
+    }
+    if (used >= limit) {
+      return false;
+    }
+    await prefs.setInt(_prefsKeyFreeScanCount, used + 1);
+    return true;
+  }
+
   static Future<void> reset() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKeySearchLanguages);
@@ -101,6 +152,8 @@ class AppSettings {
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
     await prefs.remove(_prefsKeyProUnlocked);
+    await prefs.remove(_prefsKeyFreeScanDate);
+    await prefs.remove(_prefsKeyFreeScanCount);
   }
 
   static Future<CollectionViewMode> loadCollectionViewMode() async {

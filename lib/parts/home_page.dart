@@ -11,7 +11,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     with TickerProviderStateMixin {
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
-  static const int _freeCollectionLimit = 5;
+  static const int _freeCollectionLimit = 3;
+  static const int _freeDailyScanLimit = 20;
   bool _isProUnlocked = false;
   late final PurchaseManager _purchaseManager;
   late final VoidCallback _purchaseListener;
@@ -29,10 +30,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   int _bulkImportedCount = 0;
   String? _bulkUpdatedAtRaw;
   bool _cardsMissing = false;
+  bool _initialCollectionsLoading = true;
   int _totalCardCount = 0;
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseOpacity;
-  late final Animation<double> _pulseScale;
   late final AnimationController _snakeController;
   Map<String, String> _setNameLookup = {};
 
@@ -52,16 +51,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     _purchaseManager.addListener(_purchaseListener);
     unawaited(_purchaseManager.init());
     _isProUnlocked = _purchaseManager.isPro;
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _pulseOpacity = Tween<double>(begin: 0.7, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
-    _pulseScale = Tween<double>(begin: 0.96, end: 1.03).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
-    );
     _snakeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -72,7 +61,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _snakeController.dispose();
     _purchaseManager.removeListener(_purchaseListener);
     super.dispose();
@@ -166,98 +154,106 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
 
   Future<void> _loadCollections() async {
-    final collections = await ScryfallDatabase.instance.fetchCollections();
-    final owned = await ScryfallDatabase.instance.countOwnedCards();
-    if (!mounted) {
-      return;
-    }
-    final hasAllCards = collections
-        .any((collection) => collection.name == _allCardsCollectionName);
-    if (!hasAllCards) {
-      final id =
-          await ScryfallDatabase.instance.addCollection(
-            _allCardsCollectionName,
-            type: CollectionType.all,
-          );
+    try {
+      final collections = await ScryfallDatabase.instance.fetchCollections();
+      final owned = await ScryfallDatabase.instance.countOwnedCards();
       if (!mounted) {
         return;
       }
-      final updated = [
-        CollectionInfo(
-          id: id,
-          name: _allCardsCollectionName,
-          cardCount: owned,
-          type: CollectionType.all,
-          filter: null,
-        ),
-        ...collections,
-      ];
-      setState(() {
-        _collections
-          ..clear()
-          ..addAll(updated);
-        _totalCardCount = owned;
-      });
-      return;
-    }
-    if (collections.isEmpty) {
-      final id =
-          await ScryfallDatabase.instance.addCollection(
-            _allCardsCollectionName,
-            type: CollectionType.all,
-          );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _collections
-          ..clear()
-          ..add(CollectionInfo(
-              id: id,
-              name: _allCardsCollectionName,
-              cardCount: 0,
+      final hasAllCards = collections
+          .any((collection) => collection.name == _allCardsCollectionName);
+      if (!hasAllCards) {
+        final id =
+            await ScryfallDatabase.instance.addCollection(
+              _allCardsCollectionName,
               type: CollectionType.all,
-              filter: null,
-            ));
-        _totalCardCount = owned;
-      });
-      return;
-    }
-    final renamed = <CollectionInfo>[];
-    final setCodes = <String>[];
-    for (final collection in collections) {
-      if (collection.name == _legacyMyCollectionName) {
-        await ScryfallDatabase.instance
-            .renameCollection(collection.id, _allCardsCollectionName);
-        renamed.add(
+            );
+        if (!mounted) {
+          return;
+        }
+        final updated = [
           CollectionInfo(
-            id: collection.id,
+            id: id,
             name: _allCardsCollectionName,
-            cardCount: collection.cardCount,
+            cardCount: owned,
             type: CollectionType.all,
-            filter: collection.filter,
+            filter: null,
           ),
-        );
-      } else {
-        renamed.add(collection);
+          ...collections,
+        ];
+        setState(() {
+          _collections
+            ..clear()
+            ..addAll(updated);
+          _totalCardCount = owned;
+        });
+        return;
       }
-      final setCode = _setCodeForCollection(collection);
-      if (setCode != null) {
-        setCodes.add(setCode);
+      if (collections.isEmpty) {
+        final id =
+            await ScryfallDatabase.instance.addCollection(
+              _allCardsCollectionName,
+              type: CollectionType.all,
+            );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _collections
+            ..clear()
+            ..add(CollectionInfo(
+                id: id,
+                name: _allCardsCollectionName,
+                cardCount: 0,
+                type: CollectionType.all,
+                filter: null,
+              ));
+          _totalCardCount = owned;
+        });
+        return;
+      }
+      final renamed = <CollectionInfo>[];
+      final setCodes = <String>[];
+      for (final collection in collections) {
+        if (collection.name == _legacyMyCollectionName) {
+          await ScryfallDatabase.instance
+              .renameCollection(collection.id, _allCardsCollectionName);
+          renamed.add(
+            CollectionInfo(
+              id: collection.id,
+              name: _allCardsCollectionName,
+              cardCount: collection.cardCount,
+              type: CollectionType.all,
+              filter: collection.filter,
+            ),
+          );
+        } else {
+          renamed.add(collection);
+        }
+        final setCode = _setCodeForCollection(collection);
+        if (setCode != null) {
+          setCodes.add(setCode);
+        }
+      }
+      final setNames =
+          await ScryfallDatabase.instance.fetchSetNamesForCodes(setCodes);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _collections
+          ..clear()
+          ..addAll(renamed);
+        _totalCardCount = owned;
+        _setNameLookup = setNames;
+      });
+    } finally {
+      if (mounted && _initialCollectionsLoading) {
+        setState(() {
+          _initialCollectionsLoading = false;
+        });
       }
     }
-    final setNames =
-        await ScryfallDatabase.instance.fetchSetNamesForCodes(setCodes);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _collections
-        ..clear()
-        ..addAll(renamed);
-      _totalCardCount = owned;
-      _setNameLookup = setNames;
-    });
   }
 
   List<Widget> _buildCollectionSections(BuildContext context) {
@@ -444,35 +440,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (_selectedBulkType != null) {
       await _checkScryfallBulk();
     }
-  }
-
-  Future<bool> _ensureBulkTypeSelected() async {
-    if (_selectedBulkType != null) {
-      return true;
-    }
-    final selected = await _showBulkTypePicker(
-      context,
-      allowCancel: true,
-    );
-    if (!mounted) {
-      return false;
-    }
-    if (selected == null) {
-      return false;
-    }
-    await AppSettings.saveBulkType(selected);
-    if (!mounted) {
-      return false;
-    }
-    setState(() {
-      _selectedBulkType = selected;
-      _bulkUpdateAvailable = false;
-      _bulkDownloadUri = null;
-      _bulkUpdatedAt = null;
-      _bulkUpdatedAtRaw = null;
-    });
-    await _checkScryfallBulk();
-    return true;
   }
 
   Future<void> _checkScryfallBulk() async {
@@ -880,6 +847,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<void> _onScanCardPressed() async {
     var keepScanning = true;
     while (mounted && keepScanning) {
+      final canStart = await _canStartScanSession();
+      if (!canStart) {
+        return;
+      }
       if (!mounted) {
         return;
       }
@@ -890,6 +861,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         ),
       );
       if (!mounted || recognizedText == null) {
+        return;
+      }
+      final consumed = await _consumeFreeScanIfNeeded();
+      if (!consumed || !mounted) {
         return;
       }
       final setCodes = await _fetchKnownSetCodes();
@@ -943,6 +918,71 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       keepScanning = await _askScanAnotherCard();
     }
+  }
+
+  Future<bool> _canStartScanSession() async {
+    if (_isProUnlocked) {
+      return true;
+    }
+    final remaining = await AppSettings.remainingFreeDailyScans(
+      limit: _freeDailyScanLimit,
+    );
+    if (remaining > 0) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    await _showFreeScanLimitDialog();
+    return false;
+  }
+
+  Future<bool> _consumeFreeScanIfNeeded() async {
+    if (_isProUnlocked) {
+      return true;
+    }
+    final consumed = await AppSettings.consumeFreeDailyScan(
+      limit: _freeDailyScanLimit,
+    );
+    if (consumed) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    await _showFreeScanLimitDialog();
+    return false;
+  }
+
+  Future<void> _showFreeScanLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Daily scan limit reached'),
+          content: const Text(
+            'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPage(),
+                  ),
+                );
+              },
+              child: const Text('Discover Plus'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(_OcrSearchSeed seed) async {
@@ -2014,61 +2054,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .then((_) => _loadCollections());
   }
 
-  Future<void> _openAddCardsForCollection(BuildContext context) async {
-    var candidates = _collections
-        .where((collection) => collection.name != _allCardsCollectionName)
-        .toList();
-    if (candidates.isEmpty) {
-      await _loadCollections();
-      if (!context.mounted) {
-        return;
-      }
-      candidates = _collections
-          .where((collection) => collection.name != _allCardsCollectionName)
-          .toList();
-    }
-    if (candidates.isEmpty) {
-      if (!context.mounted) {
-        return;
-      }
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.createCustomCollectionFirst,
-      );
-      return;
-    }
-    if (!context.mounted) {
-      return;
-    }
-    final selected = await showModalBottomSheet<CollectionInfo>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _PickCollectionSheet(
-        collections: candidates,
-        displayName: _collectionDisplayName,
-        isSetCollection: _isSetCollection,
-      ),
-    );
-    if (selected == null || !context.mounted) {
-      return;
-    }
-    final isSet = _isSetCollection(selected);
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => CollectionDetailPage(
-              collectionId: selected.id,
-              name: _collectionDisplayName(selected),
-              isSetCollection: isSet,
-              setCode: isSet ? _setCodeForCollection(selected) : null,
-              autoOpenAddCard: !isSet,
-              filter: selected.filter,
-            ),
-          ),
-        )
-        .then((_) => _loadCollections());
-  }
-
   Future<void> _showCollectionActions(
     CollectionInfo collection,
     Offset globalPosition,
@@ -2271,33 +2256,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Future<void> _onBulkUpdatePressed() async {
-    if (_bulkDownloading) {
-      return;
-    }
-    if (_bulkImporting) {
-      return;
-    }
-    final ready = await _ensureBulkTypeSelected();
-    if (!ready) {
-      return;
-    }
-    if (_bulkDownloadUri == null) {
-      await _checkScryfallBulk();
-    }
-    if (!mounted) {
-      return;
-    }
-    if (_bulkDownloadUri == null) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.downloadLinkUnavailable,
-      );
-      return;
-    }
-    await _downloadBulkFile(_bulkDownloadUri!);
-  }
-
   Future<void> _downloadBulkFile(String downloadUri) async {
     final bulkType = _selectedBulkType;
     if (bulkType == null) {
@@ -2493,93 +2451,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  Widget _buildUpdateCta(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final progressPercent = (_bulkDownloadProgress * 100).clamp(0, 100).round();
-    final importPercent = (_bulkImportProgress * 100).clamp(0, 100).round();
-    final isBusy = _bulkDownloading || _bulkImporting;
-    final actionLabel = _selectedBulkType == null
-        ? l10n.chooseDatabase
-        : _cardsMissing
-            ? l10n.downloadDatabase
-            : l10n.downloadUpdate;
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-      child: FadeTransition(
-        opacity: _pulseOpacity,
-        child: ScaleTransition(
-          scale: _pulseScale,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [
-                  Color(0xFFE9C46A),
-                  Color(0xFFB85C38),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFE9C46A).withValues(alpha: 0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: isBusy ? null : _onBulkUpdatePressed,
-                borderRadius: BorderRadius.circular(18),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 16,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isBusy ? Icons.downloading : Icons.cloud_download,
-                        color: Colors.black,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        _bulkDownloading
-                            ? (_bulkDownloadTotal > 0
-                                ? l10n.downloadingWithPercent(progressPercent)
-                                : l10n.downloading)
-                            : _bulkImporting
-                                ? l10n.importingWithPercent(importPercent)
-                                : actionLabel,
-                        style:
-                            Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  color: Colors.black,
-                                ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final isBlockingSync = _bulkDownloading || _bulkImporting;
+    final blockingLabel = _bulkDownloading
+        ? (_bulkDownloadTotal > 0
+            ? l10n.downloadingWithPercent(
+                (_bulkDownloadProgress * 100).clamp(0, 100).round(),
+              )
+            : l10n.downloading)
+        : l10n.importingCardsWithCount(
+            (_bulkImportProgress * 100).clamp(0, 100).round(),
+            _bulkImportedCount,
+          );
     final bulkLabel = _bulkTypeLabel(l10n, _selectedBulkType);
-    final showImportCta = _cardsMissing ||
-        _bulkUpdateAvailable ||
-        _bulkDownloadError != null ||
-        _bulkDownloading ||
-        _bulkImporting ||
-        _selectedBulkType == null;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -2698,18 +2584,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                 color: const Color(0xFF908676),
                               ),
                         ),
-                      const SizedBox(height: 10),
-                      if (showImportCta)
-                        OutlinedButton.icon(
-                          onPressed: (_bulkDownloading || _bulkImporting)
-                              ? null
-                              : _onBulkUpdatePressed,
-                          icon: const Icon(Icons.cloud_download, size: 18),
-                          label: Text(l10n.importNow),
-                        ),
                       if (_bulkDownloading || _bulkImporting)
                         Padding(
-                          padding: const EdgeInsets.only(top: 12),
+                          padding: const EdgeInsets.only(top: 10),
                           child: _SnakeProgressBar(
                             animation: _snakeController,
                             value: _bulkDownloading
@@ -2721,16 +2598,46 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   ),
                 ),
                 Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
-                    children: [
-                      ..._buildCollectionSections(context),
-                    ],
-                  ),
+                  child: _initialCollectionsLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(),
+                        )
+                      : ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+                          children: [
+                            ..._buildCollectionSections(context),
+                          ],
+                        ),
                 ),
               ],
             ),
           ),
+          if (isBlockingSync) ...[
+            const ModalBarrier(
+              dismissible: false,
+              color: Color(0x880E0A08),
+            ),
+            Center(
+              child: Chip(
+                avatar: const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                label: Text('$blockingLabel. Please wait.'),
+                backgroundColor: const Color(0xFFE9C46A),
+                labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: const Color(0xFF1C1510),
+                      fontWeight: FontWeight.w700,
+                    ),
+                side: BorderSide.none,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -2743,24 +2650,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             children: [
               FloatingActionButton(
                 heroTag: 'home_search_fab',
-                onPressed: _onSearchCardPressed,
+                onPressed: isBlockingSync ? null : _onSearchCardPressed,
                 child: const Icon(Icons.search),
               ),
               FloatingActionButton(
                 heroTag: 'home_add_fab',
-                onPressed: () => _showHomeAddOptions(context),
+                onPressed: isBlockingSync ? null : () => _showHomeAddOptions(context),
                 child: const Icon(Icons.add),
               ),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: (_bulkUpdateAvailable ||
-              _bulkDownloading ||
-              _bulkImporting ||
-              _cardsMissing)
-          ? _buildUpdateCta(context)
-          : null,
     );
   }
 }
@@ -2930,69 +2831,6 @@ class _HomeAddSheet extends StatelessWidget {
             title: Text(l10n.addCollection),
             subtitle: Text(l10n.addCollectionSubtitle),
             onTap: () => Navigator.of(context).pop(_HomeAddAction.addCollection),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PickCollectionSheet extends StatelessWidget {
-  const _PickCollectionSheet({
-    required this.collections,
-    required this.displayName,
-    required this.isSetCollection,
-  });
-
-  final List<CollectionInfo> collections;
-  final String Function(CollectionInfo) displayName;
-  final bool Function(CollectionInfo) isSetCollection;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            l10n.chooseCollection,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: collections.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final collection = collections[index];
-                final isSet = isSetCollection(collection);
-                return ListTile(
-                  leading: const Icon(Icons.collections_bookmark),
-                  title: Text(displayName(collection)),
-                  subtitle: Text(
-                    isSet
-                        ? l10n.setCollectionCount(collection.cardCount)
-                        : l10n.customCollectionCount(collection.cardCount),
-                  ),
-                  onTap: () => Navigator.of(context).pop(collection),
-                );
-              },
-            ),
           ),
         ],
       ),

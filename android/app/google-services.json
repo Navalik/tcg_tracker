@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "282351902341",
+    "project_id": "bindervault",
+    "storage_bucket": "bindervault.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:282351902341:android:3b34de8b419f77786f53ec",
+        "android_client_info": {
+          "package_name": "com.navalik.bindervault"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "282351902341-uvijeemo5d5a5gscb9prul7ari4k5j2a.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.navalik.bindervault",
+            "certificate_hash": "77ed69aeab95c89b324baf81ef6288b248033a5a"
+          }
+        },
+        {
+          "client_id": "282351902341-olv7n57lbqifjuj07fitmk5eekcm2d0i.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCAMND4AqOqCNL6H15dYUoILfRUibp_-p8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "282351902341-olv7n57lbqifjuj07fitmk5eekcm2d0i.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

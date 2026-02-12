@@ -1,16 +1,16 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 class _CardSearchSelection {
   _CardSearchSelection.single(CardSearchResult card)
-      : cards = const [],
-        isBulk = false,
-        count = 1,
-        cardIds = [card.id];
+    : cards = const [],
+      isBulk = false,
+      count = 1,
+      cardIds = [card.id];
 
   _CardSearchSelection.bulk(this.cards)
-      : isBulk = true,
-        count = cards.length,
-        cardIds = cards.map((card) => card.id).toList(growable: false);
+    : isBulk = true,
+      count = cards.length,
+      cardIds = cards.map((card) => card.id).toList(growable: false);
 
   final List<CardSearchResult> cards;
   final bool isBulk;
@@ -106,8 +106,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final seedQuery = (initialQuery != null && initialQuery.isNotEmpty)
         ? initialQuery
         : ((initialCollector != null && initialCollector.isNotEmpty)
-            ? initialCollector
-            : null);
+              ? initialCollector
+              : null);
     if (seedQuery != null) {
       _controller.text = seedQuery;
       _query = seedQuery;
@@ -213,8 +213,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _countLoading = true;
     });
     final filter = _buildAdvancedFilter();
-    final total =
-        await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+    final total = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
       filter,
       searchQuery: _query.isEmpty ? null : _query,
     );
@@ -262,10 +261,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       final ownershipCollectionId = widget.ownershipCollectionId;
       Map<String, int> localOwnedQuantities = const {};
       if (ownershipCollectionId != null && filteredLocal.isNotEmpty) {
-        localOwnedQuantities = await ScryfallDatabase.instance.fetchCollectionQuantities(
-          ownershipCollectionId,
-          filteredLocal.map((card) => card.id).toList(growable: false),
-        );
+        localOwnedQuantities = await ScryfallDatabase.instance
+            .fetchCollectionQuantities(
+              ownershipCollectionId,
+              filteredLocal.map((card) => card.id).toList(growable: false),
+            );
         if (_ownedOnlyFilter) {
           filteredLocal = filteredLocal
               .where((card) => (localOwnedQuantities[card.id] ?? 0) > 0)
@@ -324,10 +324,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     Map<String, int> ownedQuantities = const {};
     final ownershipCollectionId = widget.ownershipCollectionId;
     if (ownershipCollectionId != null && page.isNotEmpty) {
-      ownedQuantities = await ScryfallDatabase.instance.fetchCollectionQuantities(
-        ownershipCollectionId,
-        page.map((card) => card.id).toList(growable: false),
-      );
+      ownedQuantities = await ScryfallDatabase.instance
+          .fetchCollectionQuantities(
+            ownershipCollectionId,
+            page.map((card) => card.id).toList(growable: false),
+          );
       if (_ownedOnlyFilter) {
         page = page
             .where((card) => (ownedQuantities[card.id] ?? 0) > 0)
@@ -366,27 +367,25 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       final namedUri = Uri.parse(
         'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(trimmed)}',
       );
-      final namedResponse =
-          await http.get(namedUri).timeout(const Duration(seconds: 4));
+      final namedResponse = await http
+          .get(namedUri)
+          .timeout(const Duration(seconds: 4));
       String? oracleId;
       var resolvedName = '';
       if (namedResponse.statusCode == 200) {
         final namedPayload = jsonDecode(namedResponse.body);
         if (namedPayload is Map<String, dynamic>) {
           oracleId = (namedPayload['oracle_id'] as String?)?.trim();
-          resolvedName =
-              ((namedPayload['name'] as String?) ?? '').trim().replaceAll('"', '\\"');
+          resolvedName = ((namedPayload['name'] as String?) ?? '')
+              .trim()
+              .replaceAll('"', '\\"');
         }
       }
 
       final rawEscaped = trimmed.replaceAll('"', '\\"');
       final prefixTokens = _tokenizeSearch(trimmed);
-      final prefixQuery = prefixTokens
-          .map((token) => 'name:$token*')
-          .join(' ');
-      if (resolvedName.isNotEmpty &&
-          oracleId != null &&
-          oracleId.isNotEmpty) {
+      final prefixQuery = prefixTokens.map((token) => 'name:$token*').join(' ');
+      if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
         final strict = await _fetchScryfallSearchResults(
           '!"$resolvedName" oracleid:$oracleId include:extras',
           maxPages: 20,
@@ -399,11 +398,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         queryCandidates.add(prefixQuery);
       }
       queryCandidates.add(rawEscaped);
-      if (resolvedName.isNotEmpty &&
-          oracleId != null &&
-          oracleId.isNotEmpty) {
-        queryCandidates
-            .add('!"$resolvedName" oracleid:$oracleId include:extras');
+      if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
+        queryCandidates.add(
+          '!"$resolvedName" oracleid:$oracleId include:extras',
+        );
       }
       if (resolvedName.isNotEmpty) {
         queryCandidates.add('!"$resolvedName"');
@@ -443,7 +441,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final results = <CardSearchResult>[];
     var page = 0;
     while (page < maxPages) {
-      final response = await http.get(nextUri).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(nextUri)
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) {
         break;
       }
@@ -596,8 +596,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (bySet != 0) {
         return bySet;
       }
-      return _collectorSortKey(a.collectorNumber)
-          .compareTo(_collectorSortKey(b.collectorNumber));
+      return _collectorSortKey(
+        a.collectorNumber,
+      ).compareTo(_collectorSortKey(b.collectorNumber));
     });
     return values;
   }
@@ -638,8 +639,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final sets = await ScryfallDatabase.instance.fetchAvailableSets();
     final map = <String, String>{};
     for (final set in sets) {
-      map[set.code.trim().toLowerCase()] =
-          set.name.trim().isNotEmpty ? set.name.trim() : set.code.toUpperCase();
+      map[set.code.trim().toLowerCase()] = set.name.trim().isNotEmpty
+          ? set.name.trim()
+          : set.code.toUpperCase();
     }
     _availableSetCodesCache = map;
     return map;
@@ -817,13 +819,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           .where((code) => !availableSetCodes.containsKey(code))
           .toList();
       if (missing.isNotEmpty) {
-        final names =
-            await ScryfallDatabase.instance.fetchSetNamesForCodes(missing);
+        final names = await ScryfallDatabase.instance.fetchSetNamesForCodes(
+          missing,
+        );
         for (final entry in names.entries) {
-          availableSetCodes[entry.key.trim().toLowerCase()] =
-              entry.value.trim().isNotEmpty
-                  ? entry.value.trim()
-                  : entry.key.toUpperCase();
+          availableSetCodes[entry.key
+              .trim()
+              .toLowerCase()] = entry.value.trim().isNotEmpty
+              ? entry.value.trim()
+              : entry.key.toUpperCase();
         }
       }
     }
@@ -841,10 +845,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     List<String> artistSuggestions = [];
     bool loadingArtists = false;
     Timer? artistDebounce;
-    final minController =
-        TextEditingController(text: _manaValueMin?.toString() ?? '');
-    final maxController =
-        TextEditingController(text: _manaValueMax?.toString() ?? '');
+    final minController = TextEditingController(
+      text: _manaValueMin?.toString() ?? '',
+    );
+    final maxController = TextEditingController(
+      text: _manaValueMax?.toString() ?? '',
+    );
     var setQuery = '';
     var typeQuery = '';
 
@@ -871,24 +877,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               return Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: items
-                    .map((item) {
-                      final selected = isSelected(item);
-                      return FilterChip(
-                        label: Text(label(item)),
-                        selected: selected,
-                        showCheckmark: false,
-                        backgroundColor: chipBackground,
-                        selectedColor: chipSelectedBackground,
-                        side: const BorderSide(color: chipBorder),
-                        labelStyle: TextStyle(
-                          color: selected ? chipSelectedText : chipText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        onSelected: (_) => setSheetState(() => toggle(item)),
-                      );
-                    })
-                    .toList(),
+                children: items.map((item) {
+                  final selected = isSelected(item);
+                  return FilterChip(
+                    label: Text(label(item)),
+                    selected: selected,
+                    showCheckmark: false,
+                    backgroundColor: chipBackground,
+                    selectedColor: chipSelectedBackground,
+                    side: const BorderSide(color: chipBorder),
+                    labelStyle: TextStyle(
+                      color: selected ? chipSelectedText : chipText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    onSelected: (_) => setSheetState(() => toggle(item)),
+                  );
+                }).toList(),
               );
             }
 
@@ -915,8 +919,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             }).toList();
             const colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
             final sortedColors = availableColors.toList()
-              ..sort((a, b) =>
-                  colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)));
+              ..sort(
+                (a, b) =>
+                    colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)),
+              );
             final sortedTypes = availableTypes.toList()..sort();
             final filteredRarities = sortedRarities;
             final filteredColors = sortedColors;
@@ -1123,18 +1129,20 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           });
                           return;
                         }
-                        artistDebounce =
-                            Timer(const Duration(milliseconds: 250), () async {
-                          setSheetState(() {
-                            loadingArtists = true;
-                          });
-                          final results = await ScryfallDatabase.instance
-                              .fetchAvailableArtists(query: query);
-                          setSheetState(() {
-                            artistSuggestions = results;
-                            loadingArtists = false;
-                          });
-                        });
+                        artistDebounce = Timer(
+                          const Duration(milliseconds: 250),
+                          () async {
+                            setSheetState(() {
+                              loadingArtists = true;
+                            });
+                            final results = await ScryfallDatabase.instance
+                                .fetchAvailableArtists(query: query);
+                            setSheetState(() {
+                              artistSuggestions = results;
+                              loadingArtists = false;
+                            });
+                          },
+                        );
                       },
                     ),
                     if (artistController.text.trim().isNotEmpty) ...[
@@ -1147,7 +1155,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           child: ListView.separated(
                             shrinkWrap: true,
                             itemCount: artistSuggestions.length,
-                            separatorBuilder: (_, _) => const Divider(height: 1),
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1),
                             itemBuilder: (context, index) {
                               final artist = artistSuggestions[index];
                               return ListTile(
@@ -1157,7 +1166,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                     artistController.text = artist;
                                     artistController.selection =
                                         TextSelection.collapsed(
-                                            offset: artist.length);
+                                          offset: artist.length,
+                                        );
                                     artistSuggestions = [];
                                   });
                                 },
@@ -1181,10 +1191,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           child: Ink(
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [
-                                  Color(0xFFB85A5A),
-                                  Color(0xFF7A2E2E),
-                                ],
+                                colors: [Color(0xFFB85A5A), Color(0xFF7A2E2E)],
                               ),
                               borderRadius: BorderRadius.circular(999),
                             ),
@@ -1308,14 +1315,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       const pageSize = 200;
       var offset = 0;
       while (true) {
-        final page =
-            await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
-          filter,
-          searchQuery: _query.isEmpty ? null : _query,
-          languages: _effectiveLanguages(),
-          limit: pageSize,
-          offset: offset,
-        );
+        final page = await ScryfallDatabase.instance
+            .fetchCardsForAdvancedFilters(
+              filter,
+              searchQuery: _query.isEmpty ? null : _query,
+              languages: _effectiveLanguages(),
+              limit: pageSize,
+              offset: offset,
+            );
         if (page.isEmpty) {
           break;
         }
@@ -1537,11 +1544,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           if (manaCost.isNotEmpty)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF2A221B),
                                 borderRadius: BorderRadius.circular(999),
-                                border: Border.all(color: const Color(0xFF3A2F24)),
+                                border: Border.all(
+                                  color: const Color(0xFF3A2F24),
+                                ),
                               ),
                               child: Text(
                                 manaCost,
@@ -1563,7 +1574,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               children: [
                                 Text(
                                   entry.name,
-                                  style: Theme.of(context).textTheme.titleMedium,
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
                                 ),
                               ],
                             ),
@@ -1576,17 +1589,21 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 duration: const Duration(milliseconds: 250),
                                 transitionBuilder: (child, animation) =>
                                     ScaleTransition(
-                                  scale: animation,
-                                  child: FadeTransition(
-                                    opacity: animation,
-                                    child: child,
-                                  ),
-                                ),
+                                      scale: animation,
+                                      child: FadeTransition(
+                                        opacity: animation,
+                                        child: child,
+                                      ),
+                                    ),
                                 child: showCheck
-                                    ? const Icon(Icons.check,
-                                        key: ValueKey('check'))
-                                    : const Icon(Icons.add,
-                                        key: ValueKey('add')),
+                                    ? const Icon(
+                                        Icons.check,
+                                        key: ValueKey('check'),
+                                      )
+                                    : const Icon(
+                                        Icons.add,
+                                        key: ValueKey('add'),
+                                      ),
                               ),
                             ),
                         ],
@@ -1598,9 +1615,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           const SizedBox(width: 8),
                           Text(
                             _subtitleLabelForEntry(entry),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: const Color(0xFFBFAE95),
-                                ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
                           ),
                         ],
                       ),
@@ -1609,9 +1625,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         const SizedBox(height: 10),
                         Text(
                           typeLine,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: const Color(0xFFE3D4B8),
-                              ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: const Color(0xFFE3D4B8)),
                         ),
                       ],
                       if (oracleText.isNotEmpty) ...[
@@ -1669,8 +1684,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   String _subtitleLabelForEntry(CollectionCardEntry entry) {
-    final setLabel =
-        entry.setName.trim().isNotEmpty ? entry.setName.trim() : entry.setCode.toUpperCase();
+    final setLabel = entry.setName.trim().isNotEmpty
+        ? entry.setName.trim()
+        : entry.setCode.toUpperCase();
     final progress = entry.collectorNumber.trim();
     if (setLabel.isEmpty) {
       return progress;
@@ -1685,8 +1701,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     AppLocalizations l10n,
     CollectionCardEntry entry,
   ) {
-    final setLabel =
-        entry.setName.isNotEmpty ? entry.setName : entry.setCode.toUpperCase();
+    final setLabel = entry.setName.isNotEmpty
+        ? entry.setName
+        : entry.setCode.toUpperCase();
     final details = <_CardDetail>[
       _CardDetail(l10n.detailSet, setLabel),
       _CardDetail(l10n.detailCollector, entry.collectorNumber),
@@ -1736,10 +1753,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               .map(
                 (item) => SizedBox(
                   width: width,
-                  child: _DetailRow(
-                    label: item.label,
-                    value: item.value,
-                  ),
+                  child: _DetailRow(label: item.label, value: item.value),
                 ),
               )
               .toList(),
@@ -1802,6 +1816,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
+    final showRightActions = showAdd || canSelectCards || isMissing;
     return Stack(
       children: [
         Opacity(
@@ -1818,9 +1833,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Center(
-                      child: _buildSetIcon(card.setCode, size: 60),
-                    ),
+                    Center(child: _buildSetIcon(card.setCode, size: 60)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
@@ -1829,13 +1842,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         children: [
                           Text(
                             card.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 4),
                           Builder(
                             builder: (context) {
-                              final leftLabel =
-                                  setLabel.isNotEmpty ? setLabel : collectorNumber;
+                              final leftLabel = setLabel.isNotEmpty
+                                  ? setLabel
+                                  : collectorNumber;
                               return Row(
                                 children: [
                                   Expanded(
@@ -1873,33 +1889,43 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ],
                       ),
                     ),
-                    if (showAdd)
-                      IconButton(
-                        tooltip: l10n.addOne,
-                        icon: const Icon(Icons.add_circle_outline),
-                        color: const Color(0xFFE9C46A),
-                        onPressed: _addingFromPreview
-                            ? null
-                            : () => _addCardFromPreview(card),
-                      )
-                    else if (canSelectCards)
-                      const Icon(
-                        Icons.add_circle_outline,
-                        color: Color(0xFFE9C46A),
-                      ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        if (isMissing)
+        if (showRightActions)
           Positioned(
-            top: 6,
-            right: 8,
-            child: _buildBadge(
-              l10n.missingLabel,
-              inverted: true,
+            right: 12,
+            top: 0,
+            bottom: 0,
+            child: Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isMissing) ...[
+                    _buildBadge(l10n.missingLabel, inverted: true),
+                    const SizedBox(width: 6),
+                  ],
+                  if (showAdd)
+                    IconButton(
+                      tooltip: l10n.addOne,
+                      iconSize: 36,
+                      icon: const Icon(Icons.add_circle_outline, size: 36),
+                      color: const Color(0xFFE9C46A),
+                      onPressed: _addingFromPreview
+                          ? null
+                          : () => _addCardFromPreview(card),
+                    )
+                  else if (canSelectCards)
+                    const Icon(
+                      Icons.add_circle_outline,
+                      size: 36,
+                      color: Color(0xFFE9C46A),
+                    ),
+                ],
+              ),
             ),
           ),
       ],
@@ -1947,7 +1973,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   imageUrl,
                                   fit: BoxFit.cover,
                                   alignment: Alignment.topCenter,
-                                  errorBuilder: (_, __, ___) => Container(
+                                  errorBuilder: (context, error, stackTrace) => Container(
                                     color: const Color(0xFF201A14),
                                     child: const Icon(
                                       Icons.image_not_supported,
@@ -1955,120 +1981,72 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                     ),
                                   ),
                                 ),
-                          if (showAdd)
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Material(
-                                color: const Color(0xFF1C1713)
-                                    .withValues(alpha: 0.9),
-                                shape: const CircleBorder(),
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: _addingFromPreview
-                                      ? null
-                                      : () => _addCardFromPreview(card),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(9),
-                                    child: Icon(
-                                      Icons.add,
-                                      size: 22,
-                                      color: Color(0xFFE9C46A),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            )
-                          else if (canSelectCards)
-                            Positioned(
-                              top: 8,
-                              left: 8,
-                              child: Material(
-                                color: const Color(0xFF1C1713)
-                                    .withValues(alpha: 0.9),
-                                shape: const CircleBorder(),
-                                child: const Padding(
-                                  padding: EdgeInsets.all(9),
-                                  child: Icon(
-                                    Icons.add,
-                                    size: 22,
-                                    color: Color(0xFFE9C46A),
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                    child: Stack(
                       children: [
-                        SizedBox(
-                          height: 44,
-                          child: Text(
-                            card.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildSetIcon(card.setCode, size: 22),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    setLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFFBFAE95),
-                                        ),
-                                  ),
-                                  Builder(
-                                    builder: (context) {
-                                      if (collectorNumber.isEmpty &&
-                                          !hasRarity) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Row(
-                                        children: [
-                                          const Spacer(),
-                                          if (collectorNumber.isNotEmpty)
-                                            Text(
-                                              collectorNumber,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall
-                                                  ?.copyWith(
-                                                    color: const Color(
-                                                        0xFFBFAE95),
-                                                  ),
-                                            ),
-                                          if (hasRarity) ...[
-                                            const SizedBox(width: 6),
-                                            _raritySquare(card.rarity),
-                                          ],
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ],
+                            SizedBox(
+                              height: 38,
+                              child: Text(
+                                card.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodyMedium,
                               ),
                             ),
+                            const SizedBox(height: 4),
+                            Text(
+                              setLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFBFAE95)),
+                            ),
+                            const SizedBox(height: 22),
                           ],
+                        ),
+                        Positioned(
+                          left: 0,
+                          bottom: 0,
+                          child: _buildSetIcon(card.setCode, size: 22),
+                        ),
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Builder(
+                            builder: (context) {
+                              if (collectorNumber.isEmpty && !hasRarity) {
+                                return const SizedBox.shrink();
+                              }
+                              return Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (collectorNumber.isNotEmpty)
+                                    Text(
+                                      collectorNumber,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFFBFAE95),
+                                          ),
+                                    ),
+                                  if (hasRarity) ...[
+                                    const SizedBox(width: 6),
+                                    _raritySquare(card.rarity),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -2078,13 +2056,39 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             ),
           ),
         ),
-        if (!canSelectCards && isMissing)
+        if (isMissing)
+          Align(
+            alignment: const Alignment(1, 0.0),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _buildBadge(l10n.missingLabel, inverted: true),
+            ),
+          ),
+        if (showAdd)
           Positioned(
-            top: 8,
-            right: 8,
-            child: _buildBadge(
-              l10n.missingLabel,
-              inverted: true,
+            top: 24,
+            left: 12,
+            child: IconButton(
+              tooltip: l10n.addOne,
+              iconSize: 36,
+              icon: const Icon(
+                Icons.add_circle_outline,
+                size: 36,
+                color: Color(0xFFE9C46A),
+              ),
+              onPressed: _addingFromPreview
+                  ? null
+                  : () => _addCardFromPreview(card),
+            ),
+          )
+        else if (canSelectCards)
+          const Positioned(
+            top: 24,
+            left: 12,
+            child: Icon(
+              Icons.add_circle_outline,
+              size: 36,
+              color: Color(0xFFE9C46A),
             ),
           ),
       ],
@@ -2109,157 +2113,164 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         ),
         child: SafeArea(
           top: false,
-            child: SizedBox(
-              height: sheetHeight,
-              child: Stack(
-                children: [
-                  Column(
-                    children: [
-                  const SizedBox(height: 12),
-                  Container(
-                    width: 48,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B3229),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-                  child: Row(
-                    children: [
-                      Expanded(
+          child: SizedBox(
+            height: sheetHeight,
+            child: Stack(
+              children: [
+                Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 48,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B3229),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              l10n.searchCardTitle,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          if (!canSelectCards)
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _galleryView = !_galleryView;
+                                });
+                              },
+                              icon: Icon(
+                                _galleryView
+                                    ? Icons.view_agenda_outlined
+                                    : Icons.grid_view_rounded,
+                              ),
+                            ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focusNode,
+                        decoration: InputDecoration(
+                          hintText: l10n.typeCardNameHint,
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _onlineArtworkLoading
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                    if (!canSelectCards)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+                        child: Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
+                          children: [
+                            FilterChip(
+                              selected: _artworkSearchEnabled,
+                              onSelected: (value) async {
+                                setState(() {
+                                  _artworkSearchEnabled = value;
+                                });
+                                if (_query.trim().isNotEmpty) {
+                                  await _runSearch();
+                                }
+                              },
+                              avatar: const Icon(
+                                Icons.style_outlined,
+                                size: 18,
+                              ),
+                              label: const Text('Artwork (online)'),
+                            ),
+                            if (widget.ownershipCollectionId != null)
+                              FilterChip(
+                                selected: _ownedOnlyFilter,
+                                onSelected: (value) async {
+                                  setState(() {
+                                    _ownedOnlyFilter = value;
+                                  });
+                                  await _runSearch();
+                                },
+                                avatar: const Icon(
+                                  Icons.inventory_2_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Owned'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    if (_onlineArtworkLoading)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Searching online printings...',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFBFAE95)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (!showSummary &&
+                        (_query.isNotEmpty ||
+                            (filtersActive && _query.isEmpty)) &&
+                        filtersActive &&
+                        _filterTotalCount != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          l10n.searchCardTitle,
-                          style: Theme.of(context).textTheme.titleLarge,
+                          l10n.filteredResultsSummary(
+                            visibleResults.length,
+                            _filterTotalCount!,
+                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFBFAE95)),
                         ),
                       ),
-                      if (!canSelectCards)
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _galleryView = !_galleryView;
-                            });
-                          },
-                          icon: Icon(
-                            _galleryView
-                                ? Icons.view_agenda_outlined
-                                : Icons.grid_view_rounded,
-                          ),
+                    const SizedBox(height: 12),
+                    if (!_loading && filtersActive && canSelectCards)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: OutlinedButton.icon(
+                          onPressed: _bulkAddByFilters,
+                          icon: const Icon(Icons.playlist_add_check),
+                          label: Text(l10n.addFilteredCards),
                         ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close),
                       ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    decoration: InputDecoration(
-                      hintText: l10n.typeCardNameHint,
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _onlineArtworkLoading
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              ),
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-                if (!canSelectCards)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 8,
-                      children: [
-                        FilterChip(
-                          selected: _artworkSearchEnabled,
-                          onSelected: (value) async {
-                            setState(() {
-                              _artworkSearchEnabled = value;
-                            });
-                            if (_query.trim().isNotEmpty) {
-                              await _runSearch();
-                            }
-                          },
-                          avatar: const Icon(Icons.style_outlined, size: 18),
-                          label: const Text('Artwork (online)'),
-                        ),
-                        if (widget.ownershipCollectionId != null)
-                          FilterChip(
-                            selected: _ownedOnlyFilter,
-                            onSelected: (value) async {
-                              setState(() {
-                                _ownedOnlyFilter = value;
-                              });
-                              await _runSearch();
-                            },
-                            avatar: const Icon(Icons.inventory_2_outlined, size: 18),
-                            label: const Text('Owned'),
-                          ),
-                      ],
-                    ),
-                  ),
-                if (_onlineArtworkLoading)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 2, 20, 6),
-                    child: Row(
-                      children: [
-                        const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Searching online printings...',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFBFAE95),
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (!showSummary &&
-                    (_query.isNotEmpty || (filtersActive && _query.isEmpty)) &&
-                    filtersActive &&
-                    _filterTotalCount != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      l10n.filteredResultsSummary(
-                        visibleResults.length,
-                        _filterTotalCount!,
-                      ),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFBFAE95),
-                          ),
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                if (!_loading && filtersActive && canSelectCards)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: OutlinedButton.icon(
-                      onPressed: _bulkAddByFilters,
-                      icon: const Icon(Icons.playlist_add_check),
-                      label: Text(l10n.addFilteredCards),
-                    ),
-                  ),
-                Expanded(
-                  child: _loading
-                      ? _buildSearchLoadingState()
-                      : visibleResults.isEmpty
+                    Expanded(
+                      child: _loading
+                          ? _buildSearchLoadingState()
+                          : visibleResults.isEmpty
                           ? Padding(
                               padding: const EdgeInsets.all(24),
                               child: Column(
@@ -2268,12 +2279,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   Text(
                                     _query.isEmpty
                                         ? (filtersActive
-                                            ? l10n.noCardsMatchFilters
-                                            : l10n.startTypingToSearch)
+                                              ? l10n.noCardsMatchFilters
+                                              : l10n.startTypingToSearch)
                                         : l10n.noResultsFound,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .headlineSmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.headlineSmall,
                                     textAlign: TextAlign.center,
                                   ),
                                   if (_query.isNotEmpty ||
@@ -2296,194 +2307,189 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               ),
                             )
                           : showSummary
-                              ? Center(
-                                  child: Container(
-                                    margin: const EdgeInsets.all(24),
-                                    padding: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1C1713),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: const Color(0xFF322A22),
-                                      ),
+                          ? Center(
+                              child: Container(
+                                margin: const EdgeInsets.all(24),
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF1C1713),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: const Color(0xFF322A22),
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      l10n.filteredResultsTitle,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
                                     ),
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          l10n.filteredResultsTitle,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .titleMedium,
+                                    const SizedBox(height: 8),
+                                    if (_countLoading)
+                                      const Padding(
+                                        padding: EdgeInsets.symmetric(
+                                          vertical: 12,
                                         ),
-                                        const SizedBox(height: 8),
-                                        if (_countLoading)
-                                          const Padding(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: 12,
-                                            ),
-                                            child: SizedBox(
-                                              width: 22,
-                                              height: 22,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            ),
-                                          )
-                                        else
-                                          Text(
-                                            _filterTotalCount == null
-                                                ? '-'
-                                                : _filterTotalCount!.toString(),
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .headlineMedium,
+                                        child: SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
                                           ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          l10n.filteredCardsCountLabel,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: const Color(0xFFBFAE95),
-                                              ),
-                                          textAlign: TextAlign.center,
                                         ),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: FilledButton(
-                                                onPressed: _countLoading
-                                                    ? null
-                                                    : _bulkAddByFilters,
-                                                child: Text(l10n.addAll),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: OutlinedButton(
-                                                onPressed: _countLoading
-                                                    ? null
-                                                    : () async {
-                                                        setState(() {
-                                                          _showResults = true;
-                                                        });
-                                                        await _runSearch();
-                                                      },
-                                                child: Text(l10n.viewResults),
-                                              ),
-                                            ),
-                                          ],
+                                      )
+                                    else
+                                      Text(
+                                        _filterTotalCount == null
+                                            ? '-'
+                                            : _filterTotalCount!.toString(),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.headlineMedium,
+                                      ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      l10n.filteredCardsCountLabel,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFFBFAE95),
+                                          ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: FilledButton(
+                                            onPressed: _countLoading
+                                                ? null
+                                                : _bulkAddByFilters,
+                                            child: Text(l10n.addAll),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: OutlinedButton(
+                                            onPressed: _countLoading
+                                                ? null
+                                                : () async {
+                                                    setState(() {
+                                                      _showResults = true;
+                                                    });
+                                                    await _runSearch();
+                                                  },
+                                            child: Text(l10n.viewResults),
+                                          ),
                                         ),
                                       ],
                                     ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : _galleryView
+                          ? GridView.builder(
+                              padding: const EdgeInsets.fromLTRB(
+                                20,
+                                16,
+                                20,
+                                90,
+                              ),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                    childAspectRatio: 0.72,
                                   ),
-                                )
-                              : _galleryView
-                                  ? GridView.builder(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        20,
-                                        16,
-                                        20,
-                                        90,
+                              itemCount: visibleResults.length,
+                              itemBuilder: (context, index) {
+                                final card = visibleResults[index];
+                                return _buildGalleryCard(card, l10n);
+                              },
+                            )
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+                              itemCount:
+                                  visibleResults.length +
+                                  ((_loadingMore ||
+                                          (!_loading &&
+                                              _hasMore &&
+                                              visibleResults.isNotEmpty))
+                                      ? 1
+                                      : 0),
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                if (index >= visibleResults.length) {
+                                  if (_loadingMore) {
+                                    return const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
                                       ),
-                                      gridDelegate:
-                                          const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 2,
-                                        crossAxisSpacing: 16,
-                                        mainAxisSpacing: 16,
-                                        childAspectRatio: 0.72,
+                                      child: Center(
+                                        child: SizedBox(
+                                          width: 28,
+                                          height: 28,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
                                       ),
-                                      itemCount: visibleResults.length,
-                                      itemBuilder: (context, index) {
-                                        final card = visibleResults[index];
-                                        return _buildGalleryCard(card, l10n);
-                                      },
-                                    )
-                                  : ListView.separated(
-                                      shrinkWrap: true,
-                                      padding: const EdgeInsets.fromLTRB(
-                                        20,
-                                        0,
-                                        20,
-                                        80,
+                                    );
+                                  }
+                                  return Center(
+                                    child: TextButton.icon(
+                                      onPressed: _loading || !_hasMore
+                                          ? null
+                                          : () => _loadNextPage(_query),
+                                      icon: const Icon(Icons.expand_more),
+                                      label: Text(
+                                        AppLocalizations.of(context)!.loadMore,
                                       ),
-                                      itemCount: visibleResults.length +
-                                          ((_loadingMore ||
-                                                      (!_loading &&
-                                                          _hasMore &&
-                                                          visibleResults.isNotEmpty))
-                                                  ? 1
-                                                  : 0),
-                                      separatorBuilder: (_, _) =>
-                                          const SizedBox(height: 12),
-                                      itemBuilder: (context, index) {
-                                        if (index >= visibleResults.length) {
-                                          if (_loadingMore) {
-                                            return const Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                vertical: 12,
-                                              ),
-                                              child: Center(
-                                                child: SizedBox(
-                                                  width: 28,
-                                                  height: 28,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                          return Center(
-                                            child: TextButton.icon(
-                                              onPressed: _loading || !_hasMore
-                                                  ? null
-                                                  : () => _loadNextPage(
-                                                        _query,
-                                                      ),
-                                              icon: const Icon(Icons.expand_more),
-                                              label: Text(
-                                                AppLocalizations.of(context)!.loadMore,
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                        final card = visibleResults[index];
-                                        final isMissing = _isMissingCard(card);
-                                        return _buildResultTile(card, l10n);
-                                      },
                                     ),
+                                  );
+                                }
+                                final card = visibleResults[index];
+                                return _buildResultTile(card, l10n);
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-                    ],
-                  ),
-                  if (widget.showFilterButton)
-                    Positioned(
-                      left: 20,
-                      bottom: 16 + mediaQuery.padding.bottom,
-                      child: FloatingActionButton(
-                        heroTag: 'search_filters_fab',
-                        onPressed: _showAdvancedFilters,
-                        tooltip: l10n.filters,
-                        backgroundColor: filtersActive
-                            ? const Color(0xFFE9C46A)
-                            : null,
-                        foregroundColor: filtersActive
-                            ? const Color(0xFF1C1510)
-                            : null,
-                        child: Icon(
-                          filtersActive ? Icons.filter_list_alt : Icons.filter_list,
-                        ),
+                if (widget.showFilterButton)
+                  Positioned(
+                    left: 20,
+                    bottom: 16 + mediaQuery.padding.bottom,
+                    child: FloatingActionButton(
+                      heroTag: 'search_filters_fab',
+                      onPressed: _showAdvancedFilters,
+                      tooltip: l10n.filters,
+                      backgroundColor: filtersActive
+                          ? const Color(0xFFE9C46A)
+                          : null,
+                      foregroundColor: filtersActive
+                          ? const Color(0xFF1C1510)
+                          : null,
+                      child: Icon(
+                        filtersActive
+                            ? Icons.filter_list_alt
+                            : Icons.filter_list,
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 
   void _showPreview(CardSearchResult card) {
@@ -2526,9 +2532,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           offset: const Offset(0, 12),
                         ),
                       ],
-                      border: Border.all(
-                        color: const Color(0xFF3A2F24),
-                      ),
+                      border: Border.all(color: const Color(0xFF3A2F24)),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(18),
@@ -2557,7 +2561,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                     return const SizedBox(
                                       height: 420,
                                       child: Center(
-                                        child: Icon(Icons.broken_image, size: 48),
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          size: 48,
+                                        ),
                                       ),
                                     );
                                   },
@@ -2565,7 +2572,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               ),
                               if (widget.ownershipCollectionId != null)
                                 Padding(
-                                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    8,
+                                    12,
+                                    12,
+                                  ),
                                   child: SizedBox(
                                     width: double.infinity,
                                     child: FilledButton.icon(
@@ -2638,7 +2650,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         }
         return;
       }
-      await ScryfallDatabase.instance.addCardToCollection(collectionId, card.id);
+      await ScryfallDatabase.instance.addCardToCollection(
+        collectionId,
+        card.id,
+      );
       if (!mounted) {
         return;
       }
@@ -2649,10 +2664,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           card.id: current + 1,
         };
       });
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.addedCards(1),
-      );
+      showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
       await _hidePreview(immediate: false);
     } finally {
       if (mounted) {
@@ -2686,10 +2698,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           entry.cardId: current + 1,
         };
       });
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.addedCards(1),
-      );
+      showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
     } finally {
       if (mounted) {
         setState(() {
@@ -2702,7 +2711,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   void _showMiniToast(GlobalKey targetKey, String label) {
     final overlay = Overlay.of(context);
     final box = targetKey.currentContext?.findRenderObject() as RenderBox?;
-    if (overlay == null || box == null) {
+    if (box == null) {
       return;
     }
     final position = box.localToGlobal(Offset.zero);
@@ -2730,9 +2739,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               child: Text(
                 label,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: const Color(0xFF1C1510),
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: const Color(0xFF1C1510),
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
@@ -2746,8 +2755,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<bool> _ensureCardStored(CardSearchResult card) async {
-    final existing =
-        await ScryfallDatabase.instance.fetchCardEntryById(card.id);
+    final existing = await ScryfallDatabase.instance.fetchCardEntryById(
+      card.id,
+    );
     if (existing != null) {
       return true;
     }
@@ -2797,11 +2807,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       'type_line': card.typeLine,
       'colors': colors,
       'color_identity': colorIdentity,
-      'image_uris': card.imageUri == null
-          ? null
-          : {
-              'normal': card.imageUri,
-            },
+      'image_uris': card.imageUri == null ? null : {'normal': card.imageUri},
       'lang': 'en',
     };
   }
@@ -2817,4 +2823,3 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         .toList(growable: false);
   }
 }
-

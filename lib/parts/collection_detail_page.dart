@@ -39,6 +39,7 @@ class CollectionDetailPage extends StatefulWidget {
 
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
   static const int _pageSize = 120;
+  static const int _freeDailyScanLimit = 20;
   final List<CollectionCardEntry> _cards = [];
   final ScrollController _scrollController = ScrollController();
   bool _loading = true;
@@ -663,22 +664,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     return entry.setCode.toUpperCase();
   }
 
-  int? _setTotalForEntry(CollectionCardEntry entry) {
-    final direct = entry.setTotal;
-    if (direct != null && direct > 0) {
-      return direct;
-    }
-    final code = entry.setCode.trim().toLowerCase();
-    final fromMap = _setTotalsByCode[code];
-    if (fromMap != null && fromMap > 0) {
-      return fromMap;
-    }
-    if (widget.isSetCollection && _cards.isNotEmpty) {
-      return _cards.length;
-    }
-    return null;
-  }
-
   String _collectorProgressLabel(CollectionCardEntry entry) {
     return entry.collectorNumber.trim();
   }
@@ -1147,7 +1132,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       setState(() {
         _quickAddAnimating.add(entry.cardId);
       });
-      if (anchorContext != null) {
+      if (anchorContext != null && anchorContext.mounted) {
         _showMiniToastForContext(anchorContext, '+1');
       }
       await Future<void>.delayed(const Duration(milliseconds: 700));
@@ -1258,12 +1243,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _addCardByScan(BuildContext context, int ownedCollectionId) async {
+    final canStart = await _canStartScanForCollection();
+    if (!canStart || !context.mounted) {
+      return;
+    }
     final recognizedText = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => const _CardScannerPage(),
       ),
     );
     if (!context.mounted || recognizedText == null) {
+      return;
+    }
+    final consumed = await _consumeFreeScanForCollection();
+    if (!consumed || !context.mounted) {
       return;
     }
     final setCodes = await _fetchKnownSetCodesForScan();
@@ -1298,6 +1291,71 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       initialQuery: resolvedSeed.query,
       initialSetCode: resolvedSeed.setCode,
       initialCollectorNumber: resolvedSeed.collectorNumber,
+    );
+  }
+
+  Future<bool> _canStartScanForCollection() async {
+    if (PurchaseManager.instance.isPro) {
+      return true;
+    }
+    final remaining = await AppSettings.remainingFreeDailyScans(
+      limit: _freeDailyScanLimit,
+    );
+    if (remaining > 0) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    await _showScanLimitDialogForCollection();
+    return false;
+  }
+
+  Future<bool> _consumeFreeScanForCollection() async {
+    if (PurchaseManager.instance.isPro) {
+      return true;
+    }
+    final consumed = await AppSettings.consumeFreeDailyScan(
+      limit: _freeDailyScanLimit,
+    );
+    if (consumed) {
+      return true;
+    }
+    if (!mounted) {
+      return false;
+    }
+    await _showScanLimitDialogForCollection();
+    return false;
+  }
+
+  Future<void> _showScanLimitDialogForCollection() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Daily scan limit reached'),
+          content: const Text(
+            'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Not now'),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProPage(),
+                  ),
+                );
+              },
+              child: const Text('Discover Plus'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -2052,7 +2110,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   void _showMiniToast(GlobalKey targetKey, String label) {
     final overlay = Overlay.of(context);
     final box = targetKey.currentContext?.findRenderObject() as RenderBox?;
-    if (overlay == null || box == null) {
+    if (box == null) {
       return;
     }
     final position = box.localToGlobal(Offset.zero);
@@ -2098,7 +2156,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   void _showMiniToastForContext(BuildContext targetContext, String label) {
     final overlay = Overlay.of(context);
     final box = targetContext.findRenderObject() as RenderBox?;
-    if (overlay == null || box == null) {
+    if (box == null) {
       return;
     }
     final position = box.localToGlobal(Offset.zero);
