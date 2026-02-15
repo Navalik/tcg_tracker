@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "282351902341-sifc7pq2ck4fmsthkseui9ujlell3pi8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.navalik.bindervault",
+            "certificate_hash": "c76a7590e95e19ea6e8b9b5afc5b806f153e5c6b"
+          }
+        },
+        {
           "client_id": "282351902341-uvijeemo5d5a5gscb9prul7ari4k5j2a.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

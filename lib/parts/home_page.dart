@@ -55,8 +55,29 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
+    unawaited(_checkForAppUpdateOnStartup());
     _initializeStartup();
     _loadCollections();
+  }
+
+  Future<void> _checkForAppUpdateOnStartup() async {
+    if (kIsWeb || !Platform.isAndroid) {
+      return;
+    }
+    try {
+      final updateInfo = await InAppUpdate.checkForUpdate();
+      if (updateInfo.updateAvailability != UpdateAvailability.updateAvailable) {
+        return;
+      }
+      final immediateAllowed =
+          updateInfo.immediateUpdateAllowed || updateInfo.flexibleUpdateAllowed;
+      if (!immediateAllowed) {
+        return;
+      }
+      await InAppUpdate.performImmediateUpdate();
+    } catch (_) {
+      // Best effort only: if Play update API is unavailable, continue app startup.
+    }
   }
 
   @override
