@@ -1068,7 +1068,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get previewBillingNotice =>
-      'Preview screen: real billing flow will be integrated next.';
+      'Purchases are handled client-side for now. Server validation can be added later.';
+
+  @override
+  String get billingLoadingPlans => 'Loading subscription plans...';
+
+  @override
+  String get billingPlansUnavailable =>
+      'Subscription plans are not available right now.';
+
+  @override
+  String get billingStoreUnavailable =>
+      'Store is unavailable on this device/account.';
+
+  @override
+  String get billingRestoringPurchases => 'Restoring purchases...';
+
+  @override
+  String get billingWaitingPurchase => 'Waiting for purchase confirmation...';
 
   @override
   String planSelectedPreview(Object plan) {

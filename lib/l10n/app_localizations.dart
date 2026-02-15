@@ -1985,8 +1985,38 @@ abstract class AppLocalizations {
   /// No description provided for @previewBillingNotice.
   ///
   /// In en, this message translates to:
-  /// **'Preview screen: real billing flow will be integrated next.'**
+  /// **'Purchases are handled client-side for now. Server validation can be added later.'**
   String get previewBillingNotice;
+
+  /// No description provided for @billingLoadingPlans.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading subscription plans...'**
+  String get billingLoadingPlans;
+
+  /// No description provided for @billingPlansUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscription plans are not available right now.'**
+  String get billingPlansUnavailable;
+
+  /// No description provided for @billingStoreUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Store is unavailable on this device/account.'**
+  String get billingStoreUnavailable;
+
+  /// No description provided for @billingRestoringPurchases.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring purchases...'**
+  String get billingRestoringPurchases;
+
+  /// No description provided for @billingWaitingPurchase.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for purchase confirmation...'**
+  String get billingWaitingPurchase;
 
   /// No description provided for @planSelectedPreview.
   ///

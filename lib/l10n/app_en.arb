@@ -506,7 +506,12 @@
   "oneMonthLabel": "1 month",
   "twelveMonthsLabel": "12 months",
   "alreadySubscribedRestore": "Already subscribed? Restore",
-  "previewBillingNotice": "Preview screen: real billing flow will be integrated next.",
+  "previewBillingNotice": "Purchases are handled client-side for now. Server validation can be added later.",
+  "billingLoadingPlans": "Loading subscription plans...",
+  "billingPlansUnavailable": "Subscription plans are not available right now.",
+  "billingStoreUnavailable": "Store is unavailable on this device/account.",
+  "billingRestoringPurchases": "Restoring purchases...",
+  "billingWaitingPurchase": "Waiting for purchase confirmation...",
   "planSelectedPreview": "{plan} plan selected. Billing will be enabled in a next step.",
   "@planSelectedPreview": {
     "placeholders": {

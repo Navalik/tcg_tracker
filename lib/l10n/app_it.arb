@@ -559,7 +559,12 @@
     "oneMonthLabel":  "1 mese",
     "twelveMonthsLabel":  "12 mesi",
     "alreadySubscribedRestore":  "Hai gia un abbonamento? Ripristina",
-    "previewBillingNotice":  "Schermata preview: il flusso di pagamento reale verra integrato nel prossimo step.",
+    "previewBillingNotice":  "Gli acquisti sono gestiti lato client per ora. La validazione server puo essere aggiunta in seguito.",
+    "billingLoadingPlans":  "Caricamento piani di abbonamento...",
+    "billingPlansUnavailable":  "I piani di abbonamento non sono disponibili al momento.",
+    "billingStoreUnavailable":  "Store non disponibile su questo dispositivo/account.",
+    "billingRestoringPurchases":  "Ripristino acquisti in corso...",
+    "billingWaitingPurchase":  "In attesa della conferma acquisto...",
     "planSelectedPreview":  "Piano {plan} selezionato. La fatturazione verra abilitata nel prossimo step.",
     "@planSelectedPreview":  {
         "placeholders":  {

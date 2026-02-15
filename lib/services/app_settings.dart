@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 enum CollectionViewMode { list, gallery }
 
 class AppSettings {
+  static const _prefsKeyUserTier = 'user_tier';
+  static const _prefsKeyOwnedTcgs = 'owned_tcgs';
   static const _prefsKeySearchLanguages = 'search_languages';
   static const _prefsKeySearchAllLanguages = 'search_all_languages';
   static const _prefsKeyAvailableLanguages = 'available_languages';
@@ -156,6 +158,47 @@ class AppSettings {
     await prefs.setBool(_prefsKeyProUnlocked, value);
   }
 
+  static Future<String> loadUserTier() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_prefsKeyUserTier)?.trim().toLowerCase();
+    if (stored == 'plus') {
+      return 'plus';
+    }
+    if (stored == 'free') {
+      return 'free';
+    }
+    final legacyPro = prefs.getBool(_prefsKeyProUnlocked) ?? false;
+    final fallback = legacyPro ? 'plus' : 'free';
+    await prefs.setString(_prefsKeyUserTier, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveUserTier(String tier) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = tier.trim().toLowerCase() == 'plus' ? 'plus' : 'free';
+    await prefs.setString(_prefsKeyUserTier, normalized);
+    await prefs.setBool(_prefsKeyProUnlocked, normalized == 'plus');
+  }
+
+  static Future<Set<String>> loadOwnedTcgs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = prefs.getStringList(_prefsKeyOwnedTcgs) ?? const <String>[];
+    return values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+  }
+
+  static Future<void> saveOwnedTcgs(Set<String> ownedTcgs) async {
+    final prefs = await SharedPreferences.getInstance();
+    final values = ownedTcgs
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList()
+      ..sort();
+    await prefs.setStringList(_prefsKeyOwnedTcgs, values);
+  }
+
   static String _todayKey([DateTime? now]) {
     final local = (now ?? DateTime.now()).toLocal();
     final yyyy = local.year.toString().padLeft(4, '0');
@@ -207,6 +250,8 @@ class AppSettings {
 
   static Future<void> reset() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKeyUserTier);
+    await prefs.remove(_prefsKeyOwnedTcgs);
     await prefs.remove(_prefsKeySearchLanguages);
     await prefs.remove(_prefsKeySearchAllLanguages);
     await prefs.remove(_prefsKeyAvailableLanguages);

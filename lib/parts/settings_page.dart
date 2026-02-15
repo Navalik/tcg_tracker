@@ -278,6 +278,60 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _signInWithGoogleFromSettings() async {
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        return;
+      }
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.authGoogleSignInFailedTryAgain)),
+      );
+    }
+  }
+
+  Future<void> _promptGuestSignIn() async {
+    if (!_supportsFirebaseAuth) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final shouldSignIn = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.authSignInWithGoogle),
+          content: Text(l10n.authWelcomeSubtitle),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton.icon(
+              onPressed: () => Navigator.of(context).pop(true),
+              icon: const Icon(Icons.login_rounded),
+              label: Text(l10n.authSignInWithGoogle),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldSignIn != true) {
+      return;
+    }
+    await _signInWithGoogleFromSettings();
+  }
+
   Widget _buildProfileTile(User? user) {
     final displayName = user?.displayName?.trim();
     final email = user?.email?.trim();
@@ -292,6 +346,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: isGuest ? _promptGuestSignIn : null,
       leading: CircleAvatar(
         radius: 22,
         backgroundColor: const Color(0xFF2D241B),

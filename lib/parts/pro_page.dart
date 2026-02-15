@@ -17,12 +17,17 @@ class _ProPageState extends State<ProPage> {
     unawaited(_manager.init());
   }
 
-  void _showPreviewMessage(String planLabel) {
-    final l10n = AppLocalizations.of(context)!;
-    showAppSnackBar(
-      context,
-      l10n.planSelectedPreview(planLabel),
-    );
+  String _errorLabel(AppLocalizations l10n, String? error) {
+    if (error == null || error.trim().isEmpty) {
+      return l10n.billingPlansUnavailable;
+    }
+    if (error == 'store_unavailable') {
+      return l10n.billingStoreUnavailable;
+    }
+    if (error == 'plans_unavailable' || error == 'missing_offer_token') {
+      return l10n.billingPlansUnavailable;
+    }
+    return error;
   }
 
   Widget _buildPlanCell({
@@ -92,6 +97,8 @@ class _ProPageState extends State<ProPage> {
       builder: (context, _) {
         final isPro = _manager.isPro;
         final l10n = AppLocalizations.of(context)!;
+        final monthly = _manager.monthlyPlan;
+        final yearly = _manager.yearlyPlan;
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
@@ -215,67 +222,150 @@ class _ProPageState extends State<ProPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _showPreviewMessage(
-                            l10n.monthlyPlanLabel,
+                  if (_manager.loadingPlans)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Column(
+                        children: [
+                          const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: const BorderSide(color: Color(0xFFE9C46A)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                          const SizedBox(height: 10),
+                          Text(
+                            l10n.billingLoadingPlans,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (!_manager.storeAvailable || monthly == null || yearly == null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0x221D1712),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            _manager.storeAvailable
+                                ? _errorLabel(l10n, _manager.lastError)
+                                : l10n.billingStoreUnavailable,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton(
+                              onPressed: _manager.loadingPlans
+                                  ? null
+                                  : () => _manager.refreshCatalog(),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFF5D4731)),
+                              ),
+                              child: Text(l10n.retry),
                             ),
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'EUR 1.99',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                              SizedBox(height: 2),
-                              Text(l10n.oneMonthLabel),
-                            ],
-                          ),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => _showPreviewMessage(
-                            l10n.yearlyPlanLabel,
-                          ),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFE9C46A),
-                            foregroundColor: const Color(0xFF1C1510),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _manager.purchasePending
+                                ? null
+                                : () => _manager.purchasePlus(PlusPlanPeriod.monthly),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: const BorderSide(color: Color(0xFFE9C46A)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  monthly.formattedPrice,
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(l10n.oneMonthLabel),
+                              ],
                             ),
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'EUR 19.90',
-                                style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: _manager.purchasePending
+                                ? null
+                                : () => _manager.purchasePlus(PlusPlanPeriod.yearly),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFE9C46A),
+                              foregroundColor: const Color(0xFF1C1510),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              SizedBox(height: 2),
-                              Text(l10n.twelveMonthsLabel),
-                            ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  yearly.formattedPrice,
+                                  style: const TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(l10n.twelveMonthsLabel),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
+                      ],
+                    ),
                   const SizedBox(height: 10),
                   TextButton(
-                    onPressed: _manager.restorePurchases,
+                    onPressed: _manager.restoringPurchases
+                        ? null
+                        : _manager.restorePurchases,
                     child: Text(l10n.alreadySubscribedRestore),
                   ),
+                  if (_manager.purchasePending || _manager.restoringPurchases) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _manager.restoringPurchases
+                          ? l10n.billingRestoringPurchases
+                          : l10n.billingWaitingPurchase,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFBFAE95),
+                          ),
+                    ),
+                  ],
+                  if (_manager.lastError != null &&
+                      _manager.lastError!.trim().isNotEmpty &&
+                      _manager.lastError != 'plans_unavailable') ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorLabel(l10n, _manager.lastError),
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFE6B1A6),
+                          ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     l10n.previewBillingNotice,
