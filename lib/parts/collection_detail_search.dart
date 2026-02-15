@@ -1488,6 +1488,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Widget _buildLimitedCoverageBadge() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1497,16 +1498,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(
+        children: [
+          const Icon(
             Icons.warning_amber_rounded,
             size: 15,
             color: Color(0xFFE9C46A),
           ),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text(
-            'Limited coverage - tap All artworks',
-            style: TextStyle(
+            l10n.limitedCoverageTapAllArtworks,
+            style: const TextStyle(
               color: Color(0xFFEFDDBA),
               fontSize: 11.5,
               fontWeight: FontWeight.w700,
@@ -1785,7 +1786,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (progress.isEmpty) {
       return setLabel;
     }
-    return '$setLabel â€¢ $progress';
+    return '$setLabel \u2022 $progress';
   }
 
   List<_CardDetail> _parseCardDetails(
@@ -1931,7 +1932,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       return cached;
     }
     final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
-    final symbol = currency == 'usd' ? r'$' : 'â‚¬';
+    final symbol = currency == 'usd' ? r'$' : '\u20AC';
     return _SearchPriceData(
       base: _normalizePriceOrNa(currency == 'usd' ? card.priceUsd : card.priceEur, symbol),
       foil: _normalizePriceOrNa(
@@ -1975,7 +1976,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           continue;
         }
         final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
-        final symbol = currency == 'usd' ? r'$' : 'â‚¬';
+        final symbol = currency == 'usd' ? r'$' : '\u20AC';
         nextData[cardId] = _SearchPriceData(
           base: _normalizePriceOrNa(
             currency == 'usd' ? entry.priceUsd : entry.priceEur,

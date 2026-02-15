@@ -1868,11 +1868,29 @@ abstract class AppLocalizations {
   /// **'Waiting'**
   String get waitingStatus;
 
+  /// No description provided for @pleaseWait.
+  ///
+  /// In en, this message translates to:
+  /// **'Please wait.'**
+  String get pleaseWait;
+
   /// No description provided for @liveOcrActive.
   ///
   /// In en, this message translates to:
   /// **'Live OCR active'**
   String get liveOcrActive;
+
+  /// No description provided for @liveCardScanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Live card scan'**
+  String get liveCardScanTitle;
+
+  /// No description provided for @torchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Torch'**
+  String get torchTooltip;
 
   /// No description provided for @uiLanguageTitle.
   ///
@@ -2017,6 +2035,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Waiting for purchase confirmation...'**
   String get billingWaitingPurchase;
+
+  /// No description provided for @scryfallProviderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Scryfall'**
+  String get scryfallProviderLabel;
+
+  /// No description provided for @currencyEurCode.
+  ///
+  /// In en, this message translates to:
+  /// **'EUR'**
+  String get currencyEurCode;
+
+  /// No description provided for @currencyUsdCode.
+  ///
+  /// In en, this message translates to:
+  /// **'USD'**
+  String get currencyUsdCode;
+
+  /// No description provided for @limitedCoverageTapAllArtworks.
+  ///
+  /// In en, this message translates to:
+  /// **'Limited coverage for the active database'**
+  String get limitedCoverageTapAllArtworks;
 
   /// No description provided for @planSelectedPreview.
   ///

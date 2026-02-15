@@ -1008,7 +1008,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get waitingStatus => 'Waiting';
 
   @override
+  String get pleaseWait => 'Please wait.';
+
+  @override
   String get liveOcrActive => 'Live OCR active';
+
+  @override
+  String get liveCardScanTitle => 'Live card scan';
+
+  @override
+  String get torchTooltip => 'Torch';
 
   @override
   String get uiLanguageTitle => 'UI language';
@@ -1086,6 +1095,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get billingWaitingPurchase => 'Waiting for purchase confirmation...';
+
+  @override
+  String get scryfallProviderLabel => 'Scryfall';
+
+  @override
+  String get currencyEurCode => 'EUR';
+
+  @override
+  String get currencyUsdCode => 'USD';
+
+  @override
+  String get limitedCoverageTapAllArtworks =>
+      'Limited coverage for the active database';
 
   @override
   String planSelectedPreview(Object plan) {

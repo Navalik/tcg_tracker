@@ -317,7 +317,10 @@
     "ocrUnstableRetryingStatus":  "OCR instabile, riprovo...",
     "nameLabel":  "Nome",
     "waitingStatus":  "In attesa",
+    "pleaseWait":  "Attendi.",
     "liveOcrActive":  "OCR live attivo",
+    "liveCardScanTitle":  "Scansione carta live",
+    "torchTooltip":  "Torcia",
     "uiLanguageTitle":  "Lingua interfaccia",
     "uiLanguageSubtitle":  "Scegli la lingua dell\u0027interfaccia dell\u0027app.",
     "allCards":  "Tutte le carte",
@@ -565,6 +568,10 @@
     "billingStoreUnavailable":  "Store non disponibile su questo dispositivo/account.",
     "billingRestoringPurchases":  "Ripristino acquisti in corso...",
     "billingWaitingPurchase":  "In attesa della conferma acquisto...",
+    "scryfallProviderLabel":  "Scryfall",
+    "currencyEurCode":  "EUR",
+    "currencyUsdCode":  "USD",
+    "limitedCoverageTapAllArtworks":  "Copertura limitata del database attivo",
     "planSelectedPreview":  "Piano {plan} selezionato. La fatturazione verra abilitata nel prossimo step.",
     "@planSelectedPreview":  {
         "placeholders":  {

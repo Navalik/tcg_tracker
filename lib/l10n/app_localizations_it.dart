@@ -1023,7 +1023,16 @@ class AppLocalizationsIt extends AppLocalizations {
   String get waitingStatus => 'In attesa';
 
   @override
+  String get pleaseWait => 'Attendi.';
+
+  @override
   String get liveOcrActive => 'OCR live attivo';
+
+  @override
+  String get liveCardScanTitle => 'Scansione carta live';
+
+  @override
+  String get torchTooltip => 'Torcia';
 
   @override
   String get uiLanguageTitle => 'Lingua interfaccia';
@@ -1102,6 +1111,19 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get billingWaitingPurchase => 'In attesa della conferma acquisto...';
+
+  @override
+  String get scryfallProviderLabel => 'Scryfall';
+
+  @override
+  String get currencyEurCode => 'EUR';
+
+  @override
+  String get currencyUsdCode => 'USD';
+
+  @override
+  String get limitedCoverageTapAllArtworks =>
+      'Copertura limitata del database attivo';
 
   @override
   String planSelectedPreview(Object plan) {

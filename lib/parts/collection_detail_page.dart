@@ -2556,6 +2556,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             return;
                           }
                           await _refreshCardEntryInPlace(entry.cardId);
+                          if (!context.mounted) {
+                            return;
+                          }
                           Navigator.of(context).pop();
                           if (!mounted) {
                             return;
@@ -2586,6 +2589,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             return;
                           }
                           await _refreshCardEntryInPlace(entry.cardId);
+                          if (!context.mounted) {
+                            return;
+                          }
                           Navigator.of(context).pop();
                           if (!mounted) {
                             return;
@@ -2938,9 +2944,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               if (_isFilterCollection || widget.isAllCards)
                                 Positioned(
                                   right: 12,
-                                  top: 0,
-                                  bottom: 16,
-                                  child: Center(
+                                  top: 10,
+                                  height: 80,
+                                  child: Align(
+                                    alignment: Alignment.centerRight,
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [

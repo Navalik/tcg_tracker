@@ -480,7 +480,10 @@
   "ocrUnstableRetryingStatus": "OCR unstable, retrying...",
   "nameLabel": "Name",
   "waitingStatus": "Waiting",
+  "pleaseWait": "Please wait.",
   "liveOcrActive": "Live OCR active",
+  "liveCardScanTitle": "Live card scan",
+  "torchTooltip": "Torch",
   "uiLanguageTitle": "UI language",
   "uiLanguageSubtitle": "Choose the app interface language.",
   "plusPageTitle": "BinderVault Plus",
@@ -512,6 +515,10 @@
   "billingStoreUnavailable": "Store is unavailable on this device/account.",
   "billingRestoringPurchases": "Restoring purchases...",
   "billingWaitingPurchase": "Waiting for purchase confirmation...",
+  "scryfallProviderLabel": "Scryfall",
+  "currencyEurCode": "EUR",
+  "currencyUsdCode": "USD",
+  "limitedCoverageTapAllArtworks": "Limited coverage for the active database",
   "planSelectedPreview": "{plan} plan selected. Billing will be enabled in a next step.",
   "@planSelectedPreview": {
     "placeholders": {

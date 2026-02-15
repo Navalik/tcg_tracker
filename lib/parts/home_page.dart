@@ -2646,7 +2646,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
-                label: Text('$blockingLabel. Please wait.'),
+                label: Text('$blockingLabel ${l10n.pleaseWait}'),
                 backgroundColor: const Color(0xFFE9C46A),
                 labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
                       color: const Color(0xFF1C1510),
@@ -3860,6 +3860,7 @@ class _CardScannerPage extends StatefulWidget {
 class _CardScannerPageState extends State<_CardScannerPage>
     with SingleTickerProviderStateMixin {
   static const double _cardAspectRatio = 64 / 96;
+  static const bool _showCoverageBadgeInScanner = false;
   static const int _requiredStableHits = 3;
   static const int _requiredNameFieldHits = 2;
   static const int _requiredSetFieldHits = 3;
@@ -4400,6 +4401,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
   }
 
   Widget _buildLimitedCoverageBadge() {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
@@ -4409,15 +4411,15 @@ class _CardScannerPageState extends State<_CardScannerPage>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          Icon(
+        children: [
+          const Icon(
             Icons.warning_amber_rounded,
             size: 16,
             color: Color(0xFFE9C46A),
           ),
-          SizedBox(width: 6),
+          const SizedBox(width: 6),
           Text(
-            'Limited coverage - tap All artworks',
+            l10n.limitedCoverageTapAllArtworks,
             style: TextStyle(
               color: Color(0xFFF5EEDA),
               fontWeight: FontWeight.w700,
@@ -4432,12 +4434,13 @@ class _CardScannerPageState extends State<_CardScannerPage>
   @override
   Widget build(BuildContext context) {
     final controller = _cameraController;
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Live card scan'),
+        title: Text(l10n.liveCardScanTitle),
         actions: [
           IconButton(
-            tooltip: 'Torch',
+            tooltip: l10n.torchTooltip,
             onPressed: (_initializing || !_torchAvailable) ? null : _toggleTorch,
             icon: Icon(
               _torchEnabled ? Icons.flash_on : Icons.flash_off,
@@ -4496,7 +4499,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
               },
             ),
           ),
-          if (_limitedPrintCoverage)
+          if (_showCoverageBadgeInScanner && _limitedPrintCoverage)
             Positioned(
               top: 8,
               left: 16,

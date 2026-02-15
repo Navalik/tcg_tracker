@@ -109,7 +109,7 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: () => Navigator.of(context).pop('scryfall'),
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Scryfall'),
+                title: Text(l10n.scryfallProviderLabel),
                 subtitle: Text(l10n.dailySnapshot),
               ),
             ),
@@ -622,14 +622,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         children: [
                           Expanded(
                             child: Row(
-                              children: const [
+                              children: [
                                 Expanded(
                                   child: RadioListTile<String>(
                                     contentPadding: EdgeInsets.zero,
                                     dense: true,
                                     visualDensity: VisualDensity.compact,
                                     value: 'eur',
-                                    title: Text('EUR'),
+                                    title: Text(l10n.currencyEurCode),
                                   ),
                                 ),
                                 SizedBox(width: 10),
@@ -639,7 +639,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     dense: true,
                                     visualDensity: VisualDensity.compact,
                                     value: 'usd',
-                                    title: Text('USD'),
+                                    title: Text(l10n.currencyUsdCode),
                                   ),
                                 ),
                               ],
