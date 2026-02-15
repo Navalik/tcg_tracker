@@ -8,6 +8,9 @@ class AppSettings {
   static const _prefsKeyAvailableLanguages = 'available_languages';
   static const _prefsKeyCollectionViewMode = 'collection_view_mode';
   static const _prefsKeyBulkType = 'scryfall_bulk_type';
+  static const _prefsKeyPriceCurrency = 'price_currency';
+  static const _prefsKeyShowPrices = 'show_prices';
+  static const _prefsKeyAppLocale = 'app_locale';
   static const _prefsKeyProUnlocked = 'pro_unlocked';
   static const _prefsKeyFreeScanDate = 'free_scan_date';
   static const _prefsKeyFreeScanCount = 'free_scan_count';
@@ -35,6 +38,10 @@ class AppSettings {
 
   static const List<String> defaultLanguages = [
     'en',
+  ];
+  static const List<String> supportedAppLocales = [
+    'en',
+    'it',
   ];
 
   static Future<Set<String>> loadSearchLanguages() async {
@@ -83,6 +90,60 @@ class AppSettings {
   static Future<void> saveBulkType(String value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyBulkType, value);
+  }
+
+  static Future<String> loadPriceCurrency() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getString(_prefsKeyPriceCurrency)?.trim().toLowerCase();
+    if (stored == 'usd') {
+      return 'usd';
+    }
+    if (stored == 'eur') {
+      return 'eur';
+    }
+    const fallback = 'eur';
+    await prefs.setString(_prefsKeyPriceCurrency, fallback);
+    return fallback;
+  }
+
+  static Future<void> savePriceCurrency(String value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    await prefs.setString(_prefsKeyPriceCurrency, normalized);
+  }
+
+  static Future<bool> loadShowPrices() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool(_prefsKeyShowPrices);
+    if (stored != null) {
+      return stored;
+    }
+    const fallback = true;
+    await prefs.setBool(_prefsKeyShowPrices, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveShowPrices(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyShowPrices, value);
+  }
+
+  static Future<String> loadAppLocale() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyAppLocale)?.trim().toLowerCase();
+    if (value != null && supportedAppLocales.contains(value)) {
+      return value;
+    }
+    const fallback = 'en';
+    await prefs.setString(_prefsKeyAppLocale, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveAppLocale(String localeCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = localeCode.trim().toLowerCase();
+    final normalized = supportedAppLocales.contains(value) ? value : 'en';
+    await prefs.setString(_prefsKeyAppLocale, normalized);
   }
 
   static Future<bool> loadProUnlocked() async {
@@ -151,6 +212,9 @@ class AppSettings {
     await prefs.remove(_prefsKeyAvailableLanguages);
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
+    await prefs.remove(_prefsKeyPriceCurrency);
+    await prefs.remove(_prefsKeyShowPrices);
+    await prefs.remove(_prefsKeyAppLocale);
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);

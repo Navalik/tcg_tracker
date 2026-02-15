@@ -1,0 +1,586 @@
+﻿{
+    "@@locale":  "it",
+    "appTitle":  "BinderVault",
+    "bulkAllPrintingsTitle":  "Tutte le stampe",
+    "bulkAllPrintingsDescription":  "Tutte le stampe (ideale per copertura completa da scansione).",
+    "bulkOracleCardsTitle":  "Carte Oracle",
+    "bulkOracleCardsDescription":  "Livello Oracle (non tutte le stampe/varianti).",
+    "bulkUniqueArtworkTitle":  "Artwork unica",
+    "bulkUniqueArtworkDescription":  "Una per artwork (non copertura completa delle stampe).",
+    "@cardCount":  {
+                       "placeholders":  {
+                                            "count":  {
+                                                          "type":  "int"
+                                                      }
+                                        }
+                   },
+    "settings":  "Impostazioni",
+    "searchHint":  "Cerca",
+    "loadMore":  "Carica altri risultati",
+    "cardDatabase":  "Database carte",
+    "cardDatabaseSubtitle":  "Scegli quale database scaricare da Scryfall.",
+    "change":  "Cambia",
+    "changeDatabaseTitle":  "Cambiare database?",
+    "changeDatabaseBody":  "Il database attuale verra rimosso e dovrai scaricare di nuovo le carte.",
+    "confirm":  "Conferma",
+    "updatingDatabaseTitle":  "Aggiornamento database",
+    "preparingDatabaseBody":  "Preparazione del nuovo database...",
+    "databaseChangedGoHome":  "Database cambiato. Torna alla Home per scaricare.",
+    "@primaryGameSet":  {
+                            "placeholders":  {
+                                                 "game":  {
+
+                                                          }
+                                             }
+                        },
+    "pro":  "Pro",
+    "@priceLabel":  {
+                        "placeholders":  {
+                                             "price":  {
+
+                                                       }
+                                         }
+                    },
+    "notNow":  "Non ora",
+    "cancel":  "Annulla",
+    "@downloadingWithPercent":  {
+                                    "placeholders":  {
+                                                         "percent":  {
+                                                                         "type":  "int"
+                                                                     }
+                                                     }
+                                },
+    "@importingWithPercent":  {
+                                  "placeholders":  {
+                                                       "percent":  {
+                                                                       "type":  "int"
+                                                                   }
+                                                   }
+                              },
+    "@downloadingUpdateWithTotal":  {
+                                        "placeholders":  {
+                                                             "percent":  {
+                                                                             "type":  "int"
+                                                                         },
+                                                             "received":  {
+
+                                                                          },
+                                                             "total":  {
+
+                                                                       }
+                                                         }
+                                    },
+    "@downloadingUpdateNoTotal":  {
+                                      "placeholders":  {
+                                                           "received":  {
+
+                                                                        }
+                                                       }
+                                  },
+    "@importingCardsWithCount":  {
+                                     "placeholders":  {
+                                                          "percent":  {
+                                                                          "type":  "int"
+                                                                      },
+                                                          "count":  {
+                                                                        "type":  "int"
+                                                                    }
+                                                      }
+                                 },
+    "@databaseMissingDownloadRequired":  {
+                                             "placeholders":  {
+                                                                  "name":  {
+
+                                                                           }
+                                                              }
+                                         },
+    "@updateReadyWithDate":  {
+                                 "placeholders":  {
+                                                      "date":  {
+
+                                                               }
+                                                  }
+                             },
+    "@gameLabel":  {
+                       "placeholders":  {
+                                            "game":  {
+
+                                                     }
+                                        }
+                   },
+    "@collectionLimitReachedBody":  {
+                                        "placeholders":  {
+                                                             "limit":  {
+                                                                           "type":  "int"
+                                                                       }
+                                                         }
+                                    },
+    "@basePlanCollectionLimit":  {
+                                     "placeholders":  {
+                                                          "limit":  {
+                                                                        "type":  "int"
+                                                                    }
+                                                      }
+                                 },
+    "yes":  "Si",
+    "@failedToAddCollection":  {
+                                   "placeholders":  {
+                                                        "error":  {
+
+                                                                  }
+                                                    }
+                               },
+    "create":  "Crea",
+    "rename":  "Rinomina",
+    "delete":  "Elimina",
+    "save":  "Salva",
+    "@deleteCollectionBody":  {
+                                  "placeholders":  {
+                                                       "name":  {
+
+                                                                }
+                                                   }
+                              },
+    "update":  "Aggiorna",
+    "@downloadComplete":  {
+                              "placeholders":  {
+                                                   "path":  {
+
+                                                            }
+                                               }
+                          },
+    "@downloadFailedWithError":  {
+                                     "placeholders":  {
+                                                          "error":  {
+
+                                                                    }
+                                                      }
+                                 },
+    "searchCardsHint":  "Cerca carte",
+    "@ownedCount":  {
+                        "placeholders":  {
+                                             "count":  {
+                                                           "type":  "int"
+                                                       }
+                                         }
+                    },
+    "@missingCount":  {
+                          "placeholders":  {
+                                               "count":  {
+                                                             "type":  "int"
+                                                         }
+                                           }
+                      },
+    "@addedCards":  {
+                        "placeholders":  {
+                                             "count":  {
+                                                           "type":  "int"
+                                                       }
+                                         }
+                    },
+    "@quantityMultiplier":  {
+                                "placeholders":  {
+                                                     "count":  {
+                                                                   "type":  "int"
+                                                               }
+                                                 }
+                            },
+    "@importFailed":  {
+                          "placeholders":  {
+                                               "error":  {
+
+                                                         }
+                                           }
+                      },
+    "@addAllResultsBody":  {
+                               "placeholders":  {
+                                                    "count":  {
+                                                                  "type":  "int"
+                                                              }
+                                                }
+                           },
+    "filters":  "Filtri",
+    "@resultsWithFilters":  {
+                                "placeholders":  {
+                                                     "visible":  {
+                                                                     "type":  "int"
+                                                                 },
+                                                     "total":  {
+                                                                   "type":  "int"
+                                                               },
+                                                     "languages":  {
+
+                                                                   }
+                                                 }
+                            },
+    "@resultsWithoutFilters":  {
+                                   "placeholders":  {
+                                                        "total":  {
+                                                                      "type":  "int"
+                                                                  },
+                                                        "languages":  {
+
+                                                                      }
+                                                    }
+                               },
+    "searchSetHint":  "Cerca set",
+    "@setCollectionCount":  {
+                                "placeholders":  {
+                                                     "count":  {
+                                                                   "type":  "int"
+                                                               }
+                                                 }
+                            },
+    "@customCollectionCount":  {
+                                   "placeholders":  {
+                                                        "count":  {
+                                                                      "type":  "int"
+                                                                  }
+                                                    }
+                               },
+    "details":  "Dettagli",
+    "@loyaltyLabel":  {
+                          "placeholders":  {
+                                               "value":  {
+
+                                                         }
+                                           }
+                      },
+    "sortBy":  "Ordina per",
+    "@selectedCardsCount":  {
+                                "placeholders":  {
+                                                     "count":  {
+                                                                   "type":  "int"
+                                                               }
+                                                 }
+                            },
+    "selectAll":  "Seleziona tutto",
+    "deselectAll":  "Deseleziona tutto",
+    "@deleteCardsBody":  {
+                             "placeholders":  {
+                                                  "count":  {
+                                                                "type":  "int"
+                                                            }
+                                              }
+                         },
+    "@filteredResultsSummary":  {
+                                    "placeholders":  {
+                                                         "visible":  {
+                                                                         "type":  "int"
+                                                                     },
+                                                         "total":  {
+                                                                       "type":  "int"
+                                                                   }
+                                                     }
+                                },
+    "priceSourceTitle":  "Fonte prezzi",
+    "dailySnapshot":  "Snapshot giornaliera",
+    "unableToSignOutTryAgain":  "Impossibile uscire. Riprova.",
+    "signOut":  "Esci",
+    "guestLabel":  "Ospite",
+    "googleUserLabel":  "Utente Google",
+    "localProfileLabel":  "Profilo locale",
+    "signedInWithGoogle":  "Accesso con Google",
+    "profile":  "Profilo",
+    "proCardSubtitle":  "Sblocca limiti piu alti e funzionalita premium in arrivo.",
+    "needMoreThanFreeTitle":  "Ti serve piu del piano Free?",
+    "needMoreThanFreeBody":  "Confronta i piani, i limiti, e scegli l\u0027opzione migliore per il tuo flusso di collezione.",
+    "discoverPlus":  "Scopri Plus",
+    "pricesTitle":  "Prezzi",
+    "pricesSubtitle":  "Provider prezzi e valute visibili.",
+    "showPricesLabel":  "Mostra prezzi",
+    "scryfallDailySnapshot":  "Snapshot giornaliera Scryfall",
+    "availableCurrenciesHint":  "Disponibili nell\u0027app: EUR e USD (foil usa il valore foil quando disponibile).",
+    "appInfo":  "Info app",
+    "versionLabel":  "Versione",
+    "addByNameTitle":  "Per nome",
+    "addByNameSubtitle":  "Cerca e aggiungi manualmente",
+    "addByScanTitle":  "Da scansione",
+    "addByScanSubtitle":  "Riconoscimento carta OCR live",
+    "dailyScanLimitReachedTitle":  "Limite scansioni giornaliere raggiunto",
+    "allArtworks":  "Tutte le artwork",
+    "ownedLabel":  "Possedute",
+    "searchingOnlinePrintings":  "Ricerca stampe online...",
+    "addToCollection":  "Aggiungi alla collezione",
+    "closePreview":  "Chiudi anteprima",
+    "retry":  "Riprova",
+    "addLabel":  "Aggiungi",
+    "cardAddedTitle":  "Carta aggiunta",
+    "addViaScanTitle":  "Aggiungi tramite scan",
+    "scanCardWithLiveOcrSubtitle":  "Scansiona una carta con OCR live",
+    "alignCardInFrame":  "Allinea la carta nel riquadro.",
+    "cameraUnavailableCheckPermissions":  "Camera non disponibile. Controlla i permessi.",
+    "flashNotAvailableOnDevice":  "Flash non disponibile su questo dispositivo.",
+    "searchingCardTextStatus":  "Cerco testo carta...",
+    "searchingCardNameStatus":  "Cerco nome carta...",
+    "nameRecognizedOpeningSearchStatus":  "Nome riconosciuto. Apro la ricerca...",
+    "ocrUnstableRetryingStatus":  "OCR instabile, riprovo...",
+    "nameLabel":  "Nome",
+    "waitingStatus":  "In attesa",
+    "liveOcrActive":  "OCR live attivo",
+    "uiLanguageTitle":  "Lingua interfaccia",
+    "uiLanguageSubtitle":  "Scegli la lingua dell\u0027interfaccia dell\u0027app.",
+    "allCards":  "Tutte le carte",
+    "notSelected":  "Non selezionato",
+    "gamePokemonDescription":  "Collezioni Pokemon TCG.",
+    "gameMagicDescription":  "Collezioni Magic: The Gathering.",
+    "gameYugiohDescription":  "Collezioni Yu-Gi-Oh!.",
+    "cardCount":  "{count, plural, =0 {0 carte} =1 {1 carta} other {{count} carte}}",
+    "searchLanguages":  "Lingue ricerca",
+    "searchLanguagesSubtitle":  "Scegli quali lingue delle carte mostrare nella ricerca.",
+    "cardName":  "Nome carta",
+    "typeArtistNameHint":  "Digita il nome di un artista",
+    "flavorText":  "Testo narrativo",
+    "typeFlavorTextHint":  "Digita il testo narrativo",
+    "defaultLabel":  "Predefinito",
+    "remove":  "Rimuovi",
+    "addLanguage":  "Aggiungi lingua",
+    "allLanguagesAdded":  "Tutte le lingue sono gia state aggiunte.",
+    "languageAddedDownloadAgain":  "Lingua aggiunta. Scarica di nuovo per importare le carte.",
+    "selectedType":  "Tipo selezionato",
+    "games":  "Giochi",
+    "gamesSubtitle":  "Gestisci quali TCG sono abilitati.",
+    "makePrimary":  "Imposta principale",
+    "addGame":  "Aggiungi gioco",
+    "gameLimitReachedTitle":  "Limite giochi raggiunto",
+    "gameLimitReachedBody":  "La versione gratuita consente un solo gioco. Passa a Pro per aggiungerne altri.",
+    "allGamesAdded":  "Tutti i giochi sono gia stati aggiunti.",
+    "primaryLabel":  "Principale",
+    "addedLabel":  "Aggiunto",
+    "primaryGameSet":  "Gioco principale impostato su {game}.",
+    "proSubtitle":  "Sblocca collezioni illimitate.",
+    "proStatus":  "Stato Pro",
+    "proActive":  "Pro attivo",
+    "basePlan":  "Piano Base",
+    "storeAvailable":  "Store disponibile",
+    "storeNotAvailableYet":  "Store non ancora disponibile",
+    "unlimitedCollectionsUnlocked":  "Collezioni illimitate sbloccate.",
+    "unlockProRemoveLimit":  "Sblocca Pro per rimuovere il limite di 5 collezioni.",
+    "priceLabel":  "Prezzo: {price}",
+    "whatYouGet":  "Cosa ottieni",
+    "unlimitedCollectionsFeature":  "Collezioni illimitate",
+    "supportFuturePremiumFeatures":  "Supporta le future funzioni premium",
+    "switchToBaseTest":  "Passa a Base (test)",
+    "switchToProTest":  "Passa a Pro (test)",
+    "restorePurchases":  "Ripristina acquisti",
+    "testMode":  "Modalita test",
+    "testModeSubtitle":  "Quando abilitata, Upgrade attiva Pro localmente.",
+    "manage":  "Gestisci",
+    "reset":  "Ripristina",
+    "resetSubtitle":  "Rimuovi tutte le collezioni e il database carte.",
+    "factoryReset":  "Ripristino di fabbrica",
+    "factoryResetTitle":  "Ripristino di fabbrica?",
+    "factoryResetBody":  "Rimuovera tutte le collezioni, il database carte e i download. L\u0027app tornera allo stato iniziale.",
+    "cleaningUpTitle":  "Pulizia in corso",
+    "removingLocalDataBody":  "Rimozione dati locali...",
+    "resetComplete":  "Ripristino completato. Riavvia l\u0027app.",
+    "upgrade":  "Passa a Pro",
+    "chooseDatabase":  "Scegli database",
+    "downloadDatabase":  "Scarica database",
+    "downloadUpdate":  "Scarica aggiornamento",
+    "downloading":  "Download in corso...",
+    "downloadingWithPercent":  "Download in corso... {percent}%",
+    "importingWithPercent":  "Importazione in corso... {percent}%",
+    "checkingUpdates":  "Controllo aggiornamenti...",
+    "downloadingUpdateWithTotal":  "Download aggiornamento... {percent}% ({received} / {total})",
+    "downloadingUpdateNoTotal":  "Download aggiornamento... {received}",
+    "importingCardsWithCount":  "Importazione carte... {percent}% ({count} carte)",
+    "downloadFailedTapUpdate":  "Download fallito. Tocca aggiorna di nuovo.",
+    "selectDatabaseToDownload":  "Seleziona un database da scaricare.",
+    "databaseMissingDownloadRequired":  "Database {name} mancante. Download richiesto.",
+    "updateReadyWithDate":  "Aggiornamento pronto: {date}",
+    "unknownDate":  "sconosciuta",
+    "upToDate":  "Aggiornato.",
+    "importNow":  "Importa ora",
+    "gameLabel":  "Gioco: {game}",
+    "rebuildingSearchIndex":  "Ricostruzione indice di ricerca",
+    "requiredAfterLargeUpdates":  "Richiesto dopo aggiornamenti importanti.",
+    "addTitle":  "Aggiungi",
+    "addCards":  "Aggiungi carta/e",
+    "addCardsToCatalogSubtitle":  "Aggiungi al catalogo principale.",
+    "addCardsToCollection":  "Aggiungi carta/e a una collezione",
+    "addCardsToCollectionSubtitle":  "Scegli una collezione personalizzata.",
+    "addCollection":  "Aggiungi una collezione",
+    "addCollectionSubtitle":  "Crea per set o personalizzata.",
+    "chooseCollection":  "Scegli collezione",
+    "chooseCardDatabaseTitle":  "Scegli database carte",
+    "chooseYourGameTitle":  "Scegli il tuo gioco",
+    "collectionLimitReachedTitle":  "Limite collezioni raggiunto",
+    "collectionLimitReachedBody":  "La versione gratuita consente fino a {limit} collezioni. Passa a Pro per sbloccare collezioni illimitate.",
+    "proActiveUnlimitedCollections":  "Pro attivo. Collezioni illimitate.",
+    "basePlanCollectionLimit":  "Piano Base: fino a {limit} collezioni.",
+    "proEnabled":  "Pro abilitato",
+    "upgradeToPro":  "Passa a Pro",
+    "myCollections":  "Le mie collezioni",
+    "buildYourCollectionsTitle":  "Crea le tue collezioni",
+    "buildYourCollectionsSubtitle":  "Tocca per creare la tua prima collezione.",
+    "addCardsNowTitle":  "Aggiungere carte ora?",
+    "addCardsNowBody":  "Usa ricerca e filtri per aggiungere piu carte.",
+    "noSetsAvailableYet":  "Nessun set disponibile al momento.",
+    "newSetCollectionTitle":  "Nuova collezione set",
+    "collectionAlreadyExists":  "La collezione esiste gia.",
+    "failedToAddCollection":  "Impossibile aggiungere collezione: {error}",
+    "newCollectionTitle":  "Nuova collezione",
+    "collectionNameHint":  "Nome collezione",
+    "createCustomCollectionFirst":  "Crea prima una collezione personalizzata.",
+    "renameCollectionTitle":  "Rinomina collezione",
+    "deleteCollectionTitle":  "Eliminare collezione?",
+    "deleteCollectionBody":  "\"{name}\" verra rimossa da questo dispositivo.",
+    "collectionDeleted":  "Collezione eliminata.",
+    "downloadLinkUnavailable":  "Link download non disponibile.",
+    "scryfallBulkUpdateAvailable":  "Aggiornamento bulk Scryfall disponibile.",
+    "advancedFiltersTitle":  "Filtri avanzati",
+    "rarity":  "Rarita",
+    "setLabel":  "Espansione",
+    "colorLabel":  "Colore",
+    "colorWhite":  "Bianco",
+    "colorBlue":  "Blu",
+    "colorBlack":  "Nero",
+    "colorRed":  "Rosso",
+    "colorGreen":  "Verde",
+    "colorColorless":  "Incolore",
+    "languageEnglish":  "Inglese",
+    "languageItalian":  "Italiano",
+    "languageFrench":  "Francese",
+    "languageGerman":  "Tedesco",
+    "languageSpanish":  "Spagnolo",
+    "languagePortuguese":  "Portoghese",
+    "languageJapanese":  "Giapponese",
+    "languageKorean":  "Coreano",
+    "languageRussian":  "Russo",
+    "languageChineseSimplified":  "Cinese (Semplificato)",
+    "languageChineseTraditional":  "Cinese (Tradizionale)",
+    "languageArabic":  "Arabo",
+    "languageHebrew":  "Ebraico",
+    "languageLatin":  "Latino",
+    "languageGreek":  "Greco",
+    "languageSanskrit":  "Sanscrito",
+    "languagePhyrexian":  "Phyrexiano",
+    "languageQuenya":  "Quenya",
+    "typeLabel":  "Tipo",
+    "manaValue":  "Valore mana",
+    "minLabel":  "Minimo",
+    "maxLabel":  "Massimo",
+    "noFiltersAvailableForList":  "Nessun filtro disponibile per questa lista.",
+    "noFiltersAvailable":  "Nessun filtro disponibile.",
+    "clear":  "Pulisci",
+    "apply":  "Applica",
+    "downloadComplete":  "Download completato: {path}",
+    "downloadFailedWithError":  "Download fallito: {error}",
+    "downloadFailedGeneric":  "Download fallito.",
+    "networkErrorTryAgain":  "Errore di rete. Riprova.",
+    "gallery":  "Galleria",
+    "list":  "Lista",
+    "noCardsMatchFilters":  "Nessuna carta corrisponde a questi filtri",
+    "noOwnedCardsYet":  "Nessuna carta posseduta",
+    "noCardsYet":  "Nessuna carta",
+    "tryEnablingOwnedOrMissing":  "Prova ad abilitare carte possedute o mancanti.",
+    "addCardsHereOrAny":  "Aggiungi carte qui o in qualsiasi collezione.",
+    "addFirstCardToStartCollection":  "Aggiungi la prima carta per iniziare questa collezione.",
+    "addCard":  "Aggiungi carta",
+    "ownedCount":  "Possedute ({count})",
+    "missingCount":  "Mancanti ({count})",
+    "useListToSetOwnedQuantities":  "Usa la lista per impostare le quantita possedute.",
+    "addedCards":  "Aggiunte {count} carte.",
+    "quantityLabel":  "Quantita",
+    "quantityMultiplier":  "x{count}",
+    "foilLabel":  "Foil",
+    "altArtLabel":  "Art alternativa",
+    "markMissing":  "Segna come mancante",
+    "importComplete":  "Importazione completata.",
+    "importFailed":  "Importazione fallita: {error}",
+    "selectFiltersFirst":  "Seleziona prima i filtri.",
+    "selectSetRarityTypeToNarrow":  "Seleziona Set, Rarita o Tipo per restringere i risultati.",
+    "addAllResultsTitle":  "Aggiungere tutti i risultati?",
+    "addAllResultsBody":  "Questo aggiungera {count} carte alla collezione.",
+    "addAll":  "Aggiungi tutto",
+    "addFilteredCards":  "Aggiungi carte filtrate",
+    "addAllResults":  "Aggiungi tutti i risultati",
+    "filteredResultsTitle":  "Risultati filtrati",
+    "filteredCardsCountLabel":  "Carte che corrispondono ai tuoi filtri",
+    "refineSearchToSeeMore":  "Affina la ricerca per vedere piu di 100 carte.",
+    "viewResults":  "Vedi risultati",
+    "searchCardTitle":  "Cerca carta",
+    "addOne":  "Aggiungi una",
+    "missingLabel":  "Mancante",
+    "typeCardNameHint":  "Digita il nome di una carta",
+    "resultsWithFilters":  "Risultati: {visible} / {total} · Lingue: {languages}",
+    "resultsWithoutFilters":  "Risultati: {total} · Lingue: {languages}",
+    "startTypingToSearch":  "Inizia a digitare per cercare.",
+    "noResultsFound":  "Nessun risultato trovato",
+    "tryRemovingChangingFilters":  "Prova a rimuovere o cambiare i filtri.",
+    "tryDifferentNameOrSpelling":  "Prova un nome o una grafia diversa.",
+    "allCardsCollectionNotFound":  "Collezione Tutte le carte non trovata.",
+    "setCollectionCount":  "Set • {count} carte",
+    "customCollectionCount":  "Personalizzata • {count} carte",
+    "createCollectionTitle":  "Crea collezione",
+    "setCollectionTitle":  "Collezione set",
+    "setCollectionSubtitle":  "Traccia le carte mancanti del set.",
+    "customCollectionTitle":  "Collezione personalizzata",
+    "customCollectionSubtitle":  "Aggiungi carte manualmente.",
+    "loyaltyLabel":  "Lealta {value}",
+    "detailSet":  "Espansione",
+    "detailCollector":  "Collezionista",
+    "detailRarity":  "Rarita",
+    "detailSetName":  "Nome set",
+    "detailLanguage":  "Lingua",
+    "detailRelease":  "Uscita",
+    "detailArtist":  "Artista",
+    "selectCards":  "Seleziona carte",
+    "selectedCardsCount":  "{count, plural, =0 {0 selezionate} =1 {1 selezionata} other {{count} selezionate}}",
+    "deleteCardsTitle":  "Eliminare le carte selezionate?",
+    "deleteCardsBody":  "Questo eliminera {count, plural, =0 {0 carte} =1 {1 carta} other {{count} carte}} da questa collezione.",
+    "filteredResultsSummary":  "Risultati: {visible}/{total}",
+    "viewMoreResults":  "Vedi piu risultati",
+    "noCardTextRecognizedTryLightFocus":  "Nessun testo carta riconosciuto. Prova con piu luce e messa a fuoco.",
+    "freePlan20ScansUpgradePlusBody":  "Il piano Free consente 20 scansioni al giorno. Passa a Plus per scansioni illimitate.",
+    "scanAnotherCardQuestion":  "Vuoi scansionare un\u0027altra carta?",
+    "no":  "No",
+    "plusPageTitle":  "BinderVault Plus",
+    "plusActive":  "Plus attivo",
+    "upgradeToPlus":  "Passa a Plus",
+    "freePlanLabel":  "Gratis",
+    "plusPlanLabel":  "Plus",
+    "dailyCardScansFeature":  "Scansioni carte giornaliere",
+    "collectionsFeature":  "Collezioni",
+    "cardSearchAddFeature":  "Ricerca e aggiunta carte",
+    "advancedFiltersFeature":  "Filtri avanzati",
+    "scansPerDay":  "{count}/giorno",
+    "@scansPerDay":  {
+        "placeholders":  {
+            "count":  {
+                "type":  "int"
+            }
+        }
+    },
+    "unlimitedLabel":  "Illimitato",
+    "monthlyPlanLabel":  "Mensile",
+    "yearlyPlanLabel":  "Annuale",
+    "oneMonthLabel":  "1 mese",
+    "twelveMonthsLabel":  "12 mesi",
+    "alreadySubscribedRestore":  "Hai gia un abbonamento? Ripristina",
+    "previewBillingNotice":  "Schermata preview: il flusso di pagamento reale verra integrato nel prossimo step.",
+    "planSelectedPreview":  "Piano {plan} selezionato. La fatturazione verra abilitata nel prossimo step.",
+    "@planSelectedPreview":  {
+        "placeholders":  {
+            "plan":  {}
+        }
+    },
+    "authNetworkErrorDuringSignIn":  "Errore di rete durante l'accesso. Controlla la connessione e riprova.",
+    "authInvalidGoogleCredential":  "Credenziali Google non valide. Riprova.",
+    "authGoogleSignInFailedWithCode":  "Accesso Google fallito ({code}).",
+    "@authGoogleSignInFailedWithCode":  {
+        "placeholders":  {
+            "code":  {}
+        }
+    },
+    "authGoogleSignInConfigError":  "Errore configurazione Google Sign-In (SHA/package/Firebase config).",
+    "authNetworkErrorDuringGoogleSignIn":  "Errore di rete durante l'accesso con Google.",
+    "authGoogleSignInCancelled":  "Accesso Google annullato.",
+    "authGoogleSignInFailedTryAgain":  "Accesso Google fallito. Riprova.",
+    "authWelcomeTitle":  "Benvenuto in BinderVault",
+    "authWelcomeSubtitle":  "Accedi con Google per sincronizzare il tuo account.",
+    "authSignInWithGoogle":  "Accedi con Google",
+    "authContinueAsGuest":  "Continua come ospite"
+}
+

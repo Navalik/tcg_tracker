@@ -245,6 +245,83 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _priceUsdMeta = const VerificationMeta(
+    'priceUsd',
+  );
+  @override
+  late final GeneratedColumn<String> priceUsd = GeneratedColumn<String>(
+    'price_usd',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceUsdFoilMeta = const VerificationMeta(
+    'priceUsdFoil',
+  );
+  @override
+  late final GeneratedColumn<String> priceUsdFoil = GeneratedColumn<String>(
+    'price_usd_foil',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceUsdEtchedMeta = const VerificationMeta(
+    'priceUsdEtched',
+  );
+  @override
+  late final GeneratedColumn<String> priceUsdEtched = GeneratedColumn<String>(
+    'price_usd_etched',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceEurMeta = const VerificationMeta(
+    'priceEur',
+  );
+  @override
+  late final GeneratedColumn<String> priceEur = GeneratedColumn<String>(
+    'price_eur',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceEurFoilMeta = const VerificationMeta(
+    'priceEurFoil',
+  );
+  @override
+  late final GeneratedColumn<String> priceEurFoil = GeneratedColumn<String>(
+    'price_eur_foil',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _priceTixMeta = const VerificationMeta(
+    'priceTix',
+  );
+  @override
+  late final GeneratedColumn<String> priceTix = GeneratedColumn<String>(
+    'price_tix',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pricesUpdatedAtMeta = const VerificationMeta(
+    'pricesUpdatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> pricesUpdatedAt = GeneratedColumn<int>(
+    'prices_updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -270,6 +347,13 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
     imageUris,
     cardFaces,
     cardJson,
+    priceUsd,
+    priceUsdFoil,
+    priceUsdEtched,
+    priceEur,
+    priceEurFoil,
+    priceTix,
+    pricesUpdatedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -428,6 +512,60 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         cardJson.isAcceptableOrUnknown(data['card_json']!, _cardJsonMeta),
       );
     }
+    if (data.containsKey('price_usd')) {
+      context.handle(
+        _priceUsdMeta,
+        priceUsd.isAcceptableOrUnknown(data['price_usd']!, _priceUsdMeta),
+      );
+    }
+    if (data.containsKey('price_usd_foil')) {
+      context.handle(
+        _priceUsdFoilMeta,
+        priceUsdFoil.isAcceptableOrUnknown(
+          data['price_usd_foil']!,
+          _priceUsdFoilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('price_usd_etched')) {
+      context.handle(
+        _priceUsdEtchedMeta,
+        priceUsdEtched.isAcceptableOrUnknown(
+          data['price_usd_etched']!,
+          _priceUsdEtchedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('price_eur')) {
+      context.handle(
+        _priceEurMeta,
+        priceEur.isAcceptableOrUnknown(data['price_eur']!, _priceEurMeta),
+      );
+    }
+    if (data.containsKey('price_eur_foil')) {
+      context.handle(
+        _priceEurFoilMeta,
+        priceEurFoil.isAcceptableOrUnknown(
+          data['price_eur_foil']!,
+          _priceEurFoilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('price_tix')) {
+      context.handle(
+        _priceTixMeta,
+        priceTix.isAcceptableOrUnknown(data['price_tix']!, _priceTixMeta),
+      );
+    }
+    if (data.containsKey('prices_updated_at')) {
+      context.handle(
+        _pricesUpdatedAtMeta,
+        pricesUpdatedAt.isAcceptableOrUnknown(
+          data['prices_updated_at']!,
+          _pricesUpdatedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -529,6 +667,34 @@ class $CardsTable extends Cards with TableInfo<$CardsTable, Card> {
         DriftSqlType.string,
         data['${effectivePrefix}card_json'],
       ),
+      priceUsd: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_usd'],
+      ),
+      priceUsdFoil: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_usd_foil'],
+      ),
+      priceUsdEtched: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_usd_etched'],
+      ),
+      priceEur: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_eur'],
+      ),
+      priceEurFoil: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_eur_foil'],
+      ),
+      priceTix: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}price_tix'],
+      ),
+      pricesUpdatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}prices_updated_at'],
+      ),
     );
   }
 
@@ -562,6 +728,13 @@ class Card extends DataClass implements Insertable<Card> {
   final String? imageUris;
   final String? cardFaces;
   final String? cardJson;
+  final String? priceUsd;
+  final String? priceUsdFoil;
+  final String? priceUsdEtched;
+  final String? priceEur;
+  final String? priceEurFoil;
+  final String? priceTix;
+  final int? pricesUpdatedAt;
   const Card({
     required this.id,
     this.oracleId,
@@ -586,6 +759,13 @@ class Card extends DataClass implements Insertable<Card> {
     this.imageUris,
     this.cardFaces,
     this.cardJson,
+    this.priceUsd,
+    this.priceUsdFoil,
+    this.priceUsdEtched,
+    this.priceEur,
+    this.priceEurFoil,
+    this.priceTix,
+    this.pricesUpdatedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -655,6 +835,27 @@ class Card extends DataClass implements Insertable<Card> {
     if (!nullToAbsent || cardJson != null) {
       map['card_json'] = Variable<String>(cardJson);
     }
+    if (!nullToAbsent || priceUsd != null) {
+      map['price_usd'] = Variable<String>(priceUsd);
+    }
+    if (!nullToAbsent || priceUsdFoil != null) {
+      map['price_usd_foil'] = Variable<String>(priceUsdFoil);
+    }
+    if (!nullToAbsent || priceUsdEtched != null) {
+      map['price_usd_etched'] = Variable<String>(priceUsdEtched);
+    }
+    if (!nullToAbsent || priceEur != null) {
+      map['price_eur'] = Variable<String>(priceEur);
+    }
+    if (!nullToAbsent || priceEurFoil != null) {
+      map['price_eur_foil'] = Variable<String>(priceEurFoil);
+    }
+    if (!nullToAbsent || priceTix != null) {
+      map['price_tix'] = Variable<String>(priceTix);
+    }
+    if (!nullToAbsent || pricesUpdatedAt != null) {
+      map['prices_updated_at'] = Variable<int>(pricesUpdatedAt);
+    }
     return map;
   }
 
@@ -721,6 +922,27 @@ class Card extends DataClass implements Insertable<Card> {
       cardJson: cardJson == null && nullToAbsent
           ? const Value.absent()
           : Value(cardJson),
+      priceUsd: priceUsd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceUsd),
+      priceUsdFoil: priceUsdFoil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceUsdFoil),
+      priceUsdEtched: priceUsdEtched == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceUsdEtched),
+      priceEur: priceEur == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceEur),
+      priceEurFoil: priceEurFoil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceEurFoil),
+      priceTix: priceTix == null && nullToAbsent
+          ? const Value.absent()
+          : Value(priceTix),
+      pricesUpdatedAt: pricesUpdatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pricesUpdatedAt),
     );
   }
 
@@ -753,6 +975,13 @@ class Card extends DataClass implements Insertable<Card> {
       imageUris: serializer.fromJson<String?>(json['imageUris']),
       cardFaces: serializer.fromJson<String?>(json['cardFaces']),
       cardJson: serializer.fromJson<String?>(json['cardJson']),
+      priceUsd: serializer.fromJson<String?>(json['priceUsd']),
+      priceUsdFoil: serializer.fromJson<String?>(json['priceUsdFoil']),
+      priceUsdEtched: serializer.fromJson<String?>(json['priceUsdEtched']),
+      priceEur: serializer.fromJson<String?>(json['priceEur']),
+      priceEurFoil: serializer.fromJson<String?>(json['priceEurFoil']),
+      priceTix: serializer.fromJson<String?>(json['priceTix']),
+      pricesUpdatedAt: serializer.fromJson<int?>(json['pricesUpdatedAt']),
     );
   }
   @override
@@ -782,6 +1011,13 @@ class Card extends DataClass implements Insertable<Card> {
       'imageUris': serializer.toJson<String?>(imageUris),
       'cardFaces': serializer.toJson<String?>(cardFaces),
       'cardJson': serializer.toJson<String?>(cardJson),
+      'priceUsd': serializer.toJson<String?>(priceUsd),
+      'priceUsdFoil': serializer.toJson<String?>(priceUsdFoil),
+      'priceUsdEtched': serializer.toJson<String?>(priceUsdEtched),
+      'priceEur': serializer.toJson<String?>(priceEur),
+      'priceEurFoil': serializer.toJson<String?>(priceEurFoil),
+      'priceTix': serializer.toJson<String?>(priceTix),
+      'pricesUpdatedAt': serializer.toJson<int?>(pricesUpdatedAt),
     };
   }
 
@@ -809,6 +1045,13 @@ class Card extends DataClass implements Insertable<Card> {
     Value<String?> imageUris = const Value.absent(),
     Value<String?> cardFaces = const Value.absent(),
     Value<String?> cardJson = const Value.absent(),
+    Value<String?> priceUsd = const Value.absent(),
+    Value<String?> priceUsdFoil = const Value.absent(),
+    Value<String?> priceUsdEtched = const Value.absent(),
+    Value<String?> priceEur = const Value.absent(),
+    Value<String?> priceEurFoil = const Value.absent(),
+    Value<String?> priceTix = const Value.absent(),
+    Value<int?> pricesUpdatedAt = const Value.absent(),
   }) => Card(
     id: id ?? this.id,
     oracleId: oracleId.present ? oracleId.value : this.oracleId,
@@ -837,6 +1080,17 @@ class Card extends DataClass implements Insertable<Card> {
     imageUris: imageUris.present ? imageUris.value : this.imageUris,
     cardFaces: cardFaces.present ? cardFaces.value : this.cardFaces,
     cardJson: cardJson.present ? cardJson.value : this.cardJson,
+    priceUsd: priceUsd.present ? priceUsd.value : this.priceUsd,
+    priceUsdFoil: priceUsdFoil.present ? priceUsdFoil.value : this.priceUsdFoil,
+    priceUsdEtched: priceUsdEtched.present
+        ? priceUsdEtched.value
+        : this.priceUsdEtched,
+    priceEur: priceEur.present ? priceEur.value : this.priceEur,
+    priceEurFoil: priceEurFoil.present ? priceEurFoil.value : this.priceEurFoil,
+    priceTix: priceTix.present ? priceTix.value : this.priceTix,
+    pricesUpdatedAt: pricesUpdatedAt.present
+        ? pricesUpdatedAt.value
+        : this.pricesUpdatedAt,
   );
   Card copyWithCompanion(CardsCompanion data) {
     return Card(
@@ -871,6 +1125,21 @@ class Card extends DataClass implements Insertable<Card> {
       imageUris: data.imageUris.present ? data.imageUris.value : this.imageUris,
       cardFaces: data.cardFaces.present ? data.cardFaces.value : this.cardFaces,
       cardJson: data.cardJson.present ? data.cardJson.value : this.cardJson,
+      priceUsd: data.priceUsd.present ? data.priceUsd.value : this.priceUsd,
+      priceUsdFoil: data.priceUsdFoil.present
+          ? data.priceUsdFoil.value
+          : this.priceUsdFoil,
+      priceUsdEtched: data.priceUsdEtched.present
+          ? data.priceUsdEtched.value
+          : this.priceUsdEtched,
+      priceEur: data.priceEur.present ? data.priceEur.value : this.priceEur,
+      priceEurFoil: data.priceEurFoil.present
+          ? data.priceEurFoil.value
+          : this.priceEurFoil,
+      priceTix: data.priceTix.present ? data.priceTix.value : this.priceTix,
+      pricesUpdatedAt: data.pricesUpdatedAt.present
+          ? data.pricesUpdatedAt.value
+          : this.pricesUpdatedAt,
     );
   }
 
@@ -899,7 +1168,14 @@ class Card extends DataClass implements Insertable<Card> {
           ..write('releasedAt: $releasedAt, ')
           ..write('imageUris: $imageUris, ')
           ..write('cardFaces: $cardFaces, ')
-          ..write('cardJson: $cardJson')
+          ..write('cardJson: $cardJson, ')
+          ..write('priceUsd: $priceUsd, ')
+          ..write('priceUsdFoil: $priceUsdFoil, ')
+          ..write('priceUsdEtched: $priceUsdEtched, ')
+          ..write('priceEur: $priceEur, ')
+          ..write('priceEurFoil: $priceEurFoil, ')
+          ..write('priceTix: $priceTix, ')
+          ..write('pricesUpdatedAt: $pricesUpdatedAt')
           ..write(')'))
         .toString();
   }
@@ -929,6 +1205,13 @@ class Card extends DataClass implements Insertable<Card> {
     imageUris,
     cardFaces,
     cardJson,
+    priceUsd,
+    priceUsdFoil,
+    priceUsdEtched,
+    priceEur,
+    priceEurFoil,
+    priceTix,
+    pricesUpdatedAt,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -956,7 +1239,14 @@ class Card extends DataClass implements Insertable<Card> {
           other.releasedAt == this.releasedAt &&
           other.imageUris == this.imageUris &&
           other.cardFaces == this.cardFaces &&
-          other.cardJson == this.cardJson);
+          other.cardJson == this.cardJson &&
+          other.priceUsd == this.priceUsd &&
+          other.priceUsdFoil == this.priceUsdFoil &&
+          other.priceUsdEtched == this.priceUsdEtched &&
+          other.priceEur == this.priceEur &&
+          other.priceEurFoil == this.priceEurFoil &&
+          other.priceTix == this.priceTix &&
+          other.pricesUpdatedAt == this.pricesUpdatedAt);
 }
 
 class CardsCompanion extends UpdateCompanion<Card> {
@@ -983,6 +1273,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
   final Value<String?> imageUris;
   final Value<String?> cardFaces;
   final Value<String?> cardJson;
+  final Value<String?> priceUsd;
+  final Value<String?> priceUsdFoil;
+  final Value<String?> priceUsdEtched;
+  final Value<String?> priceEur;
+  final Value<String?> priceEurFoil;
+  final Value<String?> priceTix;
+  final Value<int?> pricesUpdatedAt;
   final Value<int> rowid;
   const CardsCompanion({
     this.id = const Value.absent(),
@@ -1008,6 +1305,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.imageUris = const Value.absent(),
     this.cardFaces = const Value.absent(),
     this.cardJson = const Value.absent(),
+    this.priceUsd = const Value.absent(),
+    this.priceUsdFoil = const Value.absent(),
+    this.priceUsdEtched = const Value.absent(),
+    this.priceEur = const Value.absent(),
+    this.priceEurFoil = const Value.absent(),
+    this.priceTix = const Value.absent(),
+    this.pricesUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   CardsCompanion.insert({
@@ -1034,6 +1338,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
     this.imageUris = const Value.absent(),
     this.cardFaces = const Value.absent(),
     this.cardJson = const Value.absent(),
+    this.priceUsd = const Value.absent(),
+    this.priceUsdFoil = const Value.absent(),
+    this.priceUsdEtched = const Value.absent(),
+    this.priceEur = const Value.absent(),
+    this.priceEurFoil = const Value.absent(),
+    this.priceTix = const Value.absent(),
+    this.pricesUpdatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name);
@@ -1061,6 +1372,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Expression<String>? imageUris,
     Expression<String>? cardFaces,
     Expression<String>? cardJson,
+    Expression<String>? priceUsd,
+    Expression<String>? priceUsdFoil,
+    Expression<String>? priceUsdEtched,
+    Expression<String>? priceEur,
+    Expression<String>? priceEurFoil,
+    Expression<String>? priceTix,
+    Expression<int>? pricesUpdatedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1087,6 +1405,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
       if (imageUris != null) 'image_uris': imageUris,
       if (cardFaces != null) 'card_faces': cardFaces,
       if (cardJson != null) 'card_json': cardJson,
+      if (priceUsd != null) 'price_usd': priceUsd,
+      if (priceUsdFoil != null) 'price_usd_foil': priceUsdFoil,
+      if (priceUsdEtched != null) 'price_usd_etched': priceUsdEtched,
+      if (priceEur != null) 'price_eur': priceEur,
+      if (priceEurFoil != null) 'price_eur_foil': priceEurFoil,
+      if (priceTix != null) 'price_tix': priceTix,
+      if (pricesUpdatedAt != null) 'prices_updated_at': pricesUpdatedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1115,6 +1440,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
     Value<String?>? imageUris,
     Value<String?>? cardFaces,
     Value<String?>? cardJson,
+    Value<String?>? priceUsd,
+    Value<String?>? priceUsdFoil,
+    Value<String?>? priceUsdEtched,
+    Value<String?>? priceEur,
+    Value<String?>? priceEurFoil,
+    Value<String?>? priceTix,
+    Value<int?>? pricesUpdatedAt,
     Value<int>? rowid,
   }) {
     return CardsCompanion(
@@ -1141,6 +1473,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
       imageUris: imageUris ?? this.imageUris,
       cardFaces: cardFaces ?? this.cardFaces,
       cardJson: cardJson ?? this.cardJson,
+      priceUsd: priceUsd ?? this.priceUsd,
+      priceUsdFoil: priceUsdFoil ?? this.priceUsdFoil,
+      priceUsdEtched: priceUsdEtched ?? this.priceUsdEtched,
+      priceEur: priceEur ?? this.priceEur,
+      priceEurFoil: priceEurFoil ?? this.priceEurFoil,
+      priceTix: priceTix ?? this.priceTix,
+      pricesUpdatedAt: pricesUpdatedAt ?? this.pricesUpdatedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1217,6 +1556,27 @@ class CardsCompanion extends UpdateCompanion<Card> {
     if (cardJson.present) {
       map['card_json'] = Variable<String>(cardJson.value);
     }
+    if (priceUsd.present) {
+      map['price_usd'] = Variable<String>(priceUsd.value);
+    }
+    if (priceUsdFoil.present) {
+      map['price_usd_foil'] = Variable<String>(priceUsdFoil.value);
+    }
+    if (priceUsdEtched.present) {
+      map['price_usd_etched'] = Variable<String>(priceUsdEtched.value);
+    }
+    if (priceEur.present) {
+      map['price_eur'] = Variable<String>(priceEur.value);
+    }
+    if (priceEurFoil.present) {
+      map['price_eur_foil'] = Variable<String>(priceEurFoil.value);
+    }
+    if (priceTix.present) {
+      map['price_tix'] = Variable<String>(priceTix.value);
+    }
+    if (pricesUpdatedAt.present) {
+      map['prices_updated_at'] = Variable<int>(pricesUpdatedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1249,6 +1609,13 @@ class CardsCompanion extends UpdateCompanion<Card> {
           ..write('imageUris: $imageUris, ')
           ..write('cardFaces: $cardFaces, ')
           ..write('cardJson: $cardJson, ')
+          ..write('priceUsd: $priceUsd, ')
+          ..write('priceUsdFoil: $priceUsdFoil, ')
+          ..write('priceUsdEtched: $priceUsdEtched, ')
+          ..write('priceEur: $priceEur, ')
+          ..write('priceEurFoil: $priceEurFoil, ')
+          ..write('priceTix: $priceTix, ')
+          ..write('pricesUpdatedAt: $pricesUpdatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1962,6 +2329,13 @@ typedef $$CardsTableCreateCompanionBuilder =
       Value<String?> imageUris,
       Value<String?> cardFaces,
       Value<String?> cardJson,
+      Value<String?> priceUsd,
+      Value<String?> priceUsdFoil,
+      Value<String?> priceUsdEtched,
+      Value<String?> priceEur,
+      Value<String?> priceEurFoil,
+      Value<String?> priceTix,
+      Value<int?> pricesUpdatedAt,
       Value<int> rowid,
     });
 typedef $$CardsTableUpdateCompanionBuilder =
@@ -1989,6 +2363,13 @@ typedef $$CardsTableUpdateCompanionBuilder =
       Value<String?> imageUris,
       Value<String?> cardFaces,
       Value<String?> cardJson,
+      Value<String?> priceUsd,
+      Value<String?> priceUsdFoil,
+      Value<String?> priceUsdEtched,
+      Value<String?> priceEur,
+      Value<String?> priceEurFoil,
+      Value<String?> priceTix,
+      Value<int?> pricesUpdatedAt,
       Value<int> rowid,
     });
 
@@ -2112,6 +2493,41 @@ class $$CardsTableFilterComposer extends Composer<_$AppDatabase, $CardsTable> {
 
   ColumnFilters<String> get cardJson => $composableBuilder(
     column: $table.cardJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceUsd => $composableBuilder(
+    column: $table.priceUsd,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceUsdFoil => $composableBuilder(
+    column: $table.priceUsdFoil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceUsdEtched => $composableBuilder(
+    column: $table.priceUsdEtched,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceEur => $composableBuilder(
+    column: $table.priceEur,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get priceTix => $composableBuilder(
+    column: $table.priceTix,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get pricesUpdatedAt => $composableBuilder(
+    column: $table.pricesUpdatedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2239,6 +2655,41 @@ class $$CardsTableOrderingComposer
     column: $table.cardJson,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get priceUsd => $composableBuilder(
+    column: $table.priceUsd,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceUsdFoil => $composableBuilder(
+    column: $table.priceUsdFoil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceUsdEtched => $composableBuilder(
+    column: $table.priceUsdEtched,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceEur => $composableBuilder(
+    column: $table.priceEur,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get priceTix => $composableBuilder(
+    column: $table.priceTix,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get pricesUpdatedAt => $composableBuilder(
+    column: $table.pricesUpdatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$CardsTableAnnotationComposer
@@ -2326,6 +2777,35 @@ class $$CardsTableAnnotationComposer
 
   GeneratedColumn<String> get cardJson =>
       $composableBuilder(column: $table.cardJson, builder: (column) => column);
+
+  GeneratedColumn<String> get priceUsd =>
+      $composableBuilder(column: $table.priceUsd, builder: (column) => column);
+
+  GeneratedColumn<String> get priceUsdFoil => $composableBuilder(
+    column: $table.priceUsdFoil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get priceUsdEtched => $composableBuilder(
+    column: $table.priceUsdEtched,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get priceEur =>
+      $composableBuilder(column: $table.priceEur, builder: (column) => column);
+
+  GeneratedColumn<String> get priceEurFoil => $composableBuilder(
+    column: $table.priceEurFoil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get priceTix =>
+      $composableBuilder(column: $table.priceTix, builder: (column) => column);
+
+  GeneratedColumn<int> get pricesUpdatedAt => $composableBuilder(
+    column: $table.pricesUpdatedAt,
+    builder: (column) => column,
+  );
 }
 
 class $$CardsTableTableManager
@@ -2379,6 +2859,13 @@ class $$CardsTableTableManager
                 Value<String?> imageUris = const Value.absent(),
                 Value<String?> cardFaces = const Value.absent(),
                 Value<String?> cardJson = const Value.absent(),
+                Value<String?> priceUsd = const Value.absent(),
+                Value<String?> priceUsdFoil = const Value.absent(),
+                Value<String?> priceUsdEtched = const Value.absent(),
+                Value<String?> priceEur = const Value.absent(),
+                Value<String?> priceEurFoil = const Value.absent(),
+                Value<String?> priceTix = const Value.absent(),
+                Value<int?> pricesUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CardsCompanion(
                 id: id,
@@ -2404,6 +2891,13 @@ class $$CardsTableTableManager
                 imageUris: imageUris,
                 cardFaces: cardFaces,
                 cardJson: cardJson,
+                priceUsd: priceUsd,
+                priceUsdFoil: priceUsdFoil,
+                priceUsdEtched: priceUsdEtched,
+                priceEur: priceEur,
+                priceEurFoil: priceEurFoil,
+                priceTix: priceTix,
+                pricesUpdatedAt: pricesUpdatedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2431,6 +2925,13 @@ class $$CardsTableTableManager
                 Value<String?> imageUris = const Value.absent(),
                 Value<String?> cardFaces = const Value.absent(),
                 Value<String?> cardJson = const Value.absent(),
+                Value<String?> priceUsd = const Value.absent(),
+                Value<String?> priceUsdFoil = const Value.absent(),
+                Value<String?> priceUsdEtched = const Value.absent(),
+                Value<String?> priceEur = const Value.absent(),
+                Value<String?> priceEurFoil = const Value.absent(),
+                Value<String?> priceTix = const Value.absent(),
+                Value<int?> pricesUpdatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CardsCompanion.insert(
                 id: id,
@@ -2456,6 +2957,13 @@ class $$CardsTableTableManager
                 imageUris: imageUris,
                 cardFaces: cardFaces,
                 cardJson: cardJson,
+                priceUsd: priceUsd,
+                priceUsdFoil: priceUsdFoil,
+                priceUsdEtched: priceUsdEtched,
+                priceEur: priceEur,
+                priceEurFoil: priceEurFoil,
+                priceTix: priceTix,
+                pricesUpdatedAt: pricesUpdatedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

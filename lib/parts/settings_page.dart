@@ -10,9 +10,20 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   String? _bulkType;
+  String _priceSource = 'scryfall';
+  String _priceCurrency = 'eur';
+  bool _showPrices = true;
+  String _appLocaleCode = 'en';
   String _appVersion = '0.4.2';
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
+
+  List<Widget> _maybeWidget(Widget? widget) {
+    if (widget == null) {
+      return const <Widget>[];
+    }
+    return <Widget>[widget];
+  }
 
   @override
   void initState() {
@@ -22,6 +33,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _loadSettings() async {
     final bulkType = await AppSettings.loadBulkType();
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    final showPrices = await AppSettings.loadShowPrices();
+    final appLocaleCode = await AppSettings.loadAppLocale();
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -34,8 +48,108 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     setState(() {
       _bulkType = bulkType;
+      _priceCurrency = priceCurrency;
+      _showPrices = showPrices;
+      _appLocaleCode = appLocaleCode;
       _appVersion = appVersion;
       _loading = false;
+    });
+  }
+
+  Future<void> _changeAppLanguage() async {
+    final l10n = AppLocalizations.of(context)!;
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return SimpleDialog(
+          title: Text(l10n.uiLanguageTitle),
+          children: [
+            RadioGroup<String>(
+              groupValue: _appLocaleCode,
+              onChanged: (value) => Navigator.of(context).pop(value),
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'en',
+                    title: Text(l10n.languageEnglish),
+                  ),
+                  RadioListTile<String>(
+                    value: 'it',
+                    title: Text(l10n.languageItalian),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || selected == _appLocaleCode) {
+      return;
+    }
+    await AppSettings.saveAppLocale(selected);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appLocaleCode = selected;
+    });
+    _appLocaleNotifier.value = Locale(selected);
+  }
+
+  Future<void> _changePriceSource() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SimpleDialog(
+          title: Text(l10n.priceSourceTitle),
+          children: [
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(context).pop('scryfall'),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Scryfall'),
+                subtitle: Text(l10n.dailySnapshot),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || selected == _priceSource || !mounted) {
+      return;
+    }
+    setState(() {
+      _priceSource = selected;
+    });
+  }
+
+  Future<void> _changePriceCurrency(String currency) async {
+    final normalized = currency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    if (normalized == _priceCurrency) {
+      return;
+    }
+    await AppSettings.savePriceCurrency(normalized);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _priceCurrency = normalized;
+    });
+  }
+
+  Future<void> _changeShowPrices(String value) async {
+    final nextValue = value.trim().toLowerCase() == 'off' ? false : true;
+    if (nextValue == _showPrices) {
+      return;
+    }
+    await AppSettings.saveShowPrices(nextValue);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showPrices = nextValue;
     });
   }
 
@@ -157,8 +271,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to sign out. Try again.')),
+        SnackBar(content: Text(l10n.unableToSignOutTryAgain)),
       );
     }
   }
@@ -169,9 +284,11 @@ class _SettingsPageState extends State<SettingsPage> {
     final hasDisplayName = displayName != null && displayName.isNotEmpty;
     final hasEmail = email != null && email.isNotEmpty;
     final isGuest = user == null;
-    final title = hasDisplayName ? displayName : (isGuest ? 'Guest' : 'Google User');
+    final l10n = AppLocalizations.of(context)!;
+    final title =
+        hasDisplayName ? displayName : (isGuest ? l10n.guestLabel : l10n.googleUserLabel);
     final subtitle =
-        hasEmail ? email : (isGuest ? 'Local profile' : 'Signed in with Google');
+        hasEmail ? email : (isGuest ? l10n.localProfileLabel : l10n.signedInWithGoogle);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -191,7 +308,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ? null
           : TextButton(
               onPressed: _signOut,
-              child: const Text('Sign out'),
+              child: Text(l10n.signOut),
             ),
     );
   }
@@ -212,6 +329,7 @@ class _SettingsPageState extends State<SettingsPage> {
     required IconData icon,
     required String title,
     String? subtitle,
+    Widget? trailing,
     required List<Widget> children,
   }) {
     return Container(
@@ -241,6 +359,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
               ),
+              ..._maybeWidget(trailing),
             ],
           ),
           if (subtitle != null) ...[
@@ -282,9 +401,86 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.account_circle_outlined,
-                  title: 'Profile',
+                  title: l10n.profile,
                   children: [
                     _buildProfileSection(context),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.language_rounded,
+                  title: l10n.uiLanguageTitle,
+                  subtitle: l10n.uiLanguageSubtitle,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        _appLocaleCode == 'it'
+                            ? l10n.languageItalian
+                            : l10n.languageEnglish,
+                      ),
+                      trailing: OutlinedButton(
+                        onPressed: _changeAppLanguage,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF5D4731)),
+                        ),
+                        child: Text(l10n.change),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.workspace_premium_outlined,
+                  title: l10n.pro,
+                  subtitle: l10n.proCardSubtitle,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0x221D1712),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            l10n.needMoreThanFreeTitle,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.needMoreThanFreeBody,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: const Color(0xFFBFAE95),
+                                ),
+                          ),
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProPage(),
+                                  ),
+                                );
+                              },
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFE9C46A),
+                                foregroundColor: const Color(0xFF1C1510),
+                              ),
+                              icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+                              label: Text(l10n.discoverPlus),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -321,50 +517,86 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 14),
                 _buildSectionCard(
                   context: context,
-                  icon: Icons.workspace_premium_outlined,
-                  title: l10n.pro,
-                  subtitle: 'Unlock higher limits and upcoming premium features.',
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0x221D1712),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
+                  icon: Icons.sell_outlined,
+                  title: l10n.pricesTitle,
+                  subtitle: l10n.pricesSubtitle,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        l10n.showPricesLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFBFAE95),
+                        ),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(width: 2),
+                      Checkbox(
+                        value: _showPrices,
+                        activeColor: const Color(0xFFE9C46A),
+                        checkColor: const Color(0xFF1C1510),
+                        onChanged: (value) {
+                          _changeShowPrices((value ?? true) ? 'on' : 'off');
+                        },
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                  children: [
+                    Text(
+                      l10n.scryfallDailySnapshot,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      l10n.availableCurrenciesHint,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFFBFAE95),
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    RadioGroup<String>(
+                      groupValue: _priceCurrency,
+                      onChanged: (value) {
+                        if (value != null) {
+                          _changePriceCurrency(value);
+                        }
+                      },
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Text(
-                            'Need more than Free?',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'See plans, compare limits, and choose the best option for your collection workflow.',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: const Color(0xFFBFAE95),
-                                ),
-                          ),
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ProPage(),
+                          Expanded(
+                            child: Row(
+                              children: const [
+                                Expanded(
+                                  child: RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    visualDensity: VisualDensity.compact,
+                                    value: 'eur',
+                                    title: Text('EUR'),
                                   ),
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFFE9C46A),
-                                foregroundColor: const Color(0xFF1C1510),
-                              ),
-                              icon: const Icon(Icons.workspace_premium_rounded, size: 18),
-                              label: const Text('Discover Plus'),
+                                ),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: RadioListTile<String>(
+                                    contentPadding: EdgeInsets.zero,
+                                    dense: true,
+                                    visualDensity: VisualDensity.compact,
+                                    value: 'usd',
+                                    title: Text('USD'),
+                                  ),
+                                ),
+                              ],
                             ),
+                          ),
+                          const SizedBox(width: 10),
+                          OutlinedButton(
+                            onPressed: _changePriceSource,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(l10n.change),
                           ),
                         ],
                       ),
@@ -375,10 +607,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.info_outline_rounded,
-                  title: 'App info',
+                  title: l10n.appInfo,
                   children: [
                     ListTile(
-                      title: const Text('Version'),
+                      title: Text(l10n.versionLabel),
                       subtitle: Text(_appVersion),
                       contentPadding: EdgeInsets.zero,
                     ),

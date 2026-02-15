@@ -66,6 +66,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _selectionMode = false;
   final Set<String> _selectedCardIds = {};
   final Set<String> _quickAddAnimating = {};
+  final Set<String> _priceRefreshQueued = {};
+  String _priceCurrency = 'eur';
+  bool _showPrices = true;
 
   bool get _isFilterCollection =>
       !widget.isAllCards && (widget.filter != null || widget.isSetCollection);
@@ -88,6 +91,14 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _initialize() async {
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    final showPrices = await AppSettings.loadShowPrices();
+    if (mounted) {
+      setState(() {
+        _priceCurrency = priceCurrency;
+        _showPrices = showPrices;
+      });
+    }
     if (widget.isAllCards) {
       _ownedCollectionId = widget.collectionId;
     } else {
@@ -282,6 +293,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _loadingMore = false;
         _loading = false;
       });
+      _refreshListPrices(cards);
       _maybePrefetchIfShort();
     } catch (error, stackTrace) {
       debugPrint('CollectionDetailPage _loadMoreCards failed: $error');
@@ -678,6 +690,116 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return setLabel;
     }
     return '$setLabel • $progress';
+  }
+
+  (String, String) _listPriceLabels(CollectionCardEntry entry) {
+    final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    final symbol = currency == 'usd' ? r'$' : '€';
+    final baseValue = _normalizePriceValue(
+      currency == 'usd' ? entry.priceUsd : entry.priceEur,
+    );
+    final foilValue = _normalizePriceValue(
+      currency == 'usd' ? entry.priceUsdFoil : entry.priceEurFoil,
+    );
+    final baseLabel = baseValue == null ? 'N/A' : '$symbol$baseValue';
+    final foilLabel = foilValue == null ? 'N/A' : '$symbol$foilValue';
+    return (baseLabel, foilLabel);
+  }
+
+  bool _needsPriceRefresh(CollectionCardEntry entry) {
+    final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    if (currency == 'usd') {
+      return _normalizePriceValue(entry.priceUsd) == null &&
+          _normalizePriceValue(entry.priceUsdFoil) == null;
+    }
+    return _normalizePriceValue(entry.priceEur) == null &&
+        _normalizePriceValue(entry.priceEurFoil) == null;
+  }
+
+  void _refreshListPrices(List<CollectionCardEntry> entries) {
+    if (!_showPrices) {
+      return;
+    }
+    final cardIds = <String>[];
+    for (final entry in entries) {
+      if (!_needsPriceRefresh(entry)) {
+        continue;
+      }
+      if (_priceRefreshQueued.contains(entry.cardId)) {
+        continue;
+      }
+      _priceRefreshQueued.add(entry.cardId);
+      cardIds.add(entry.cardId);
+      if (cardIds.length >= 16) {
+        break;
+      }
+    }
+    if (cardIds.isEmpty) {
+      return;
+    }
+    unawaited(_refreshListPricesInternal(cardIds));
+  }
+
+  Future<void> _refreshListPricesInternal(List<String> cardIds) async {
+    try {
+      for (final cardId in cardIds) {
+        await PriceRepository.instance.ensurePricesFresh(cardId);
+      }
+      final lookupCollectionId =
+          widget.isAllCards ? widget.collectionId : (_ownedCollectionId ?? -1);
+      final refreshedEntries = await Future.wait(
+        cardIds.map(
+          (cardId) => ScryfallDatabase.instance.fetchCardEntryById(
+            cardId,
+            collectionId: lookupCollectionId,
+          ),
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      final refreshedById = <String, CollectionCardEntry>{};
+      for (final refreshed in refreshedEntries) {
+        if (refreshed != null) {
+          refreshedById[refreshed.cardId] = refreshed;
+        }
+      }
+      if (refreshedById.isEmpty) {
+        return;
+      }
+      setState(() {
+        for (var i = 0; i < _cards.length; i += 1) {
+          final replacement = refreshedById[_cards[i].cardId];
+          if (replacement != null) {
+            _cards[i] = replacement;
+          }
+        }
+      });
+    } catch (_) {
+      // Ignore refresh failures for list-row price badges.
+    } finally {
+      for (final cardId in cardIds) {
+        _priceRefreshQueued.remove(cardId);
+      }
+    }
+  }
+
+  Future<void> _refreshCardEntryInPlace(String cardId) async {
+    final lookupCollectionId =
+        widget.isAllCards ? widget.collectionId : (_ownedCollectionId ?? -1);
+    final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
+      cardId,
+      collectionId: lookupCollectionId,
+    );
+    if (!mounted || refreshed == null) {
+      return;
+    }
+    setState(() {
+      final index = _cards.indexWhere((item) => item.cardId == cardId);
+      if (index != -1) {
+        _cards[index] = refreshed;
+      }
+    });
   }
 
   Future<void> _showAdvancedFilters() async {
@@ -1223,15 +1345,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               const SizedBox(height: 12),
               ListTile(
                 leading: const Icon(Icons.search),
-                title: const Text('By name'),
-                subtitle: const Text('Search and add manually'),
+                title: Text(l10n.addByNameTitle),
+                subtitle: Text(l10n.addByNameSubtitle),
                 onTap: () =>
                     Navigator.of(context).pop(_AddCardEntryMode.byName),
               ),
               ListTile(
                 leading: const Icon(Icons.document_scanner_outlined),
-                title: const Text('By scan'),
-                subtitle: const Text('Live OCR card recognition'),
+                title: Text(l10n.addByScanTitle),
+                subtitle: Text(l10n.addByScanSubtitle),
                 onTap: () =>
                     Navigator.of(context).pop(_AddCardEntryMode.byScan),
               ),
@@ -1270,7 +1392,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (ocrSeed == null) {
       showAppSnackBar(
         context,
-        'No card text recognized. Try better light and focus.',
+        AppLocalizations.of(context)!.noCardTextRecognizedTryLightFocus,
       );
       return;
     }
@@ -1332,15 +1454,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
-          title: const Text('Daily scan limit reached'),
-          content: const Text(
-            'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.',
+          title: Text(l10n.dailyScanLimitReachedTitle),
+          content: Text(
+            l10n.freePlan20ScansUpgradePlusBody,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Not now'),
+              child: Text(l10n.notNow),
             ),
             FilledButton(
               onPressed: () {
@@ -1351,7 +1474,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                   ),
                 );
               },
-              child: const Text('Discover Plus'),
+              child: Text(l10n.discoverPlus),
             ),
           ],
         );
@@ -1580,7 +1703,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}',
       );
-      final response = await http.get(uri);
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return null;
       }
@@ -1619,7 +1746,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/$setCode/${Uri.encodeComponent(collector)}',
       );
-      final response = await http.get(uri);
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return null;
       }
@@ -1918,17 +2049,48 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _showCardDetails(CollectionCardEntry entry) async {
+    var detailEntry = entry;
+    final lookupCollectionId =
+        widget.isAllCards ? widget.collectionId : (_ownedCollectionId ?? -1);
+    try {
+      await PriceRepository.instance.ensurePricesFresh(entry.cardId);
+      final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
+        entry.cardId,
+        collectionId: lookupCollectionId,
+      );
+      if (refreshed != null) {
+        detailEntry = refreshed;
+        if (mounted) {
+          final index = _cards.indexWhere((item) => item.cardId == entry.cardId);
+          if (index != -1) {
+            setState(() {
+              _cards[index] = refreshed;
+            });
+          }
+        }
+      }
+    } catch (_) {
+      // Keep showing available card details even if price refresh fails.
+    }
+    if (!mounted) {
+      return;
+    }
+
     final l10n = AppLocalizations.of(context)!;
-    final details = _parseCardDetails(l10n, entry);
-    final typeLine = entry.typeLine.trim();
-    final manaCost = entry.manaCost.trim();
-    final oracleText = entry.oracleText.trim();
-    final power = entry.power.trim();
-    final toughness = entry.toughness.trim();
-    final loyalty = entry.loyalty.trim();
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    final details = _parseCardDetails(l10n, detailEntry, priceCurrency);
+    final typeLine = detailEntry.typeLine.trim();
+    final manaCost = detailEntry.manaCost.trim();
+    final oracleText = detailEntry.oracleText.trim();
+    final power = detailEntry.power.trim();
+    final toughness = detailEntry.toughness.trim();
+    final loyalty = detailEntry.loyalty.trim();
     final stats = _joinStats(power, toughness);
     final addButtonKey = GlobalKey();
     var showCheck = false;
+    if (!mounted) {
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2005,7 +2167,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         children: [
                           Expanded(
                             child: Text(
-                              entry.name,
+                              detailEntry.name,
                               style: Theme.of(context).textTheme.titleLarge,
                             ),
                           ),
@@ -2034,10 +2196,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          _buildSetIcon(entry.setCode, size: 22),
-                          const SizedBox(width: 8),
-                          Text(
-                            _subtitleLabel(entry),
+                            _buildSetIcon(detailEntry.setCode, size: 22),
+                            const SizedBox(width: 8),
+                            Text(
+                            _subtitleLabel(detailEntry),
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: const Color(0xFFBFAE95),
                                 ),
@@ -2202,6 +2364,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   List<_CardDetail> _parseCardDetails(
     AppLocalizations l10n,
     CollectionCardEntry entry,
+    String priceCurrency,
   ) {
     final setLabel =
         entry.setName.isNotEmpty ? entry.setName : entry.setCode.toUpperCase();
@@ -2222,7 +2385,41 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
     add(l10n.detailArtist, entry.artist);
+    final normalizedCurrency = priceCurrency.trim().toLowerCase();
+    if (normalizedCurrency == 'usd') {
+      add('Price (USD)', _displayUsdPrice(entry));
+    } else {
+      add('Price (EUR)', _displayEurPrice(entry));
+    }
     return details.where((item) => item.value.isNotEmpty).toList();
+  }
+
+  String _displayEurPrice(CollectionCardEntry entry) {
+    final base = _normalizePriceValue(entry.priceEur);
+    final foil = _normalizePriceValue(entry.priceEurFoil);
+    final selected = entry.foil ? (foil ?? base) : base;
+    if (selected == null) {
+      return '—';
+    }
+    return 'EUR $selected';
+  }
+
+  String _displayUsdPrice(CollectionCardEntry entry) {
+    final base = _normalizePriceValue(entry.priceUsd);
+    final foil = _normalizePriceValue(entry.priceUsdFoil);
+    final selected = entry.foil ? (foil ?? base) : base;
+    if (selected == null) {
+      return '—';
+    }
+    return 'USD $selected';
+  }
+
+  String? _normalizePriceValue(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
   }
 
   String _joinStats(dynamic power, dynamic toughness) {
@@ -2283,7 +2480,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         final quantityController =
             TextEditingController(text: entry.quantity.toString());
         var foil = entry.foil;
-        var altArt = entry.altArt;
+        final altArt = entry.altArt;
         final isFilterCollection = !widget.isAllCards;
         return StatefulBuilder(
           builder: (context, setSheetState) {
@@ -2336,16 +2533,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     title: Text(l10n.foilLabel),
                     contentPadding: EdgeInsets.zero,
                   ),
-                  CheckboxListTile(
-                    value: altArt,
-                    onChanged: (value) {
-                      setSheetState(() {
-                        altArt = value ?? false;
-                      });
-                    },
-                    title: Text(l10n.altArtLabel),
-                    contentPadding: EdgeInsets.zero,
-                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -2368,6 +2555,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           if (!context.mounted) {
                             return;
                           }
+                          await _refreshCardEntryInPlace(entry.cardId);
                           Navigator.of(context).pop();
                           if (!mounted) {
                             return;
@@ -2397,6 +2585,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           if (!context.mounted) {
                             return;
                           }
+                          await _refreshCardEntryInPlace(entry.cardId);
                           Navigator.of(context).pop();
                           if (!mounted) {
                             return;
@@ -2584,7 +2773,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     padding: const EdgeInsets.all(20),
                     itemCount:
                         visibleCards.length + (_loadingMore ? 1 : 0),
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 18),
                     itemBuilder: (context, index) {
                       if (index >= visibleCards.length) {
                         return _buildLoadMoreIndicator();
@@ -2609,10 +2798,54 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           _showCardActions(entry);
                         },
                         child: Stack(
+                          clipBehavior: Clip.none,
                           children: [
+                              if (_showPrices)
+                              Positioned(
+                                left: 16,
+                                right: (_isFilterCollection || widget.isAllCards)
+                                    ? 132
+                                    : 122,
+                                bottom: -6,
+                                child: Opacity(
+                                  opacity: isMissing ? 0.6 : 1.0,
+                                  child: Container(
+                                    padding: const EdgeInsets.fromLTRB(14, 11, 14, 2),
+                                    decoration: _priceBadgeDecoration(
+                                      context,
+                                      entry,
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.bottomLeft,
+                                      child: Builder(
+                                        builder: (context) {
+                                          final labels = _listPriceLabels(entry);
+                                          final accentStyle = Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: const Color(0xFFE9C46A),
+                                              );
+                                          final valueStyle = accentStyle?.copyWith(
+                                            color: const Color(0xFFEFE7D8),
+                                            fontWeight: FontWeight.w500,
+                                          );
+                                          return Text(
+                                            '${l10n.priceLabel(labels.$1)} • ${l10n.foilLabel} ${labels.$2}',
+                                            style: valueStyle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                               Opacity(
                                 opacity: isMissing ? 0.6 : 1.0,
                                 child: Container(
+                                margin: const EdgeInsets.only(bottom: 18),
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                 decoration: _cardTintDecoration(context, entry),
@@ -2633,7 +2866,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                                              MainAxisAlignment.start,
                                           children: [
                                             Text(
                                               entry.name,
@@ -2643,7 +2876,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                                   .textTheme
                                                   .titleMedium,
                                             ),
-                                            const SizedBox(height: 4),
+                                            const Spacer(),
                                             Builder(
                                               builder: (context) {
                                                 final setLabel =
@@ -2706,7 +2939,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                 Positioned(
                                   right: 12,
                                   top: 0,
-                                  bottom: 0,
+                                  bottom: 16,
                                   child: Center(
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -2837,10 +3070,61 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           _showCardActions(entry);
                         },
                         child: Stack(
+                          clipBehavior: Clip.none,
                           children: [
+                              if (_showPrices)
+                                Positioned(
+                                  left: 10,
+                                  right: 10,
+                                  bottom: -6,
+                                  child: Opacity(
+                                    opacity: isMissing ? 0.6 : 1.0,
+                                    child: Container(
+                                      padding:
+                                          const EdgeInsets.fromLTRB(14, 9, 14, 3),
+                                      decoration: _priceBadgeDecoration(
+                                        context,
+                                        entry,
+                                      ),
+                                      child: Align(
+                                        alignment: Alignment.bottomCenter,
+                                        child: Builder(
+                                          builder: (context) {
+                                            final labels = _listPriceLabels(entry);
+                                            final accentStyle = Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.copyWith(
+                                                  color: const Color(0xFFE9C46A),
+                                                );
+                                            final valueStyle =
+                                                accentStyle?.copyWith(
+                                              color: const Color(0xFFEFE7D8),
+                                              fontWeight: FontWeight.w500,
+                                            );
+                                            final selectedPrice =
+                                                entry.foil ? labels.$2 : labels.$1;
+                                            return SizedBox(
+                                              width: double.infinity,
+                                              child: Text(
+                                                l10n.priceLabel(selectedPrice),
+                                                style: valueStyle,
+                                                textAlign: TextAlign.center,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               Opacity(
                                 opacity: isMissing ? 0.6 : 1.0,
                                 child: Container(
+                                margin:
+                                    EdgeInsets.only(bottom: _showPrices ? 18 : 0),
                                 decoration: _cardTintDecoration(context, entry),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2895,87 +3179,51 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                     Padding(
                                       padding:
                                           const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                                      child: Stack(
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
+                                          SizedBox(
+                                            height: 38,
+                                            child: Text(
+                                              entry.name,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodyMedium,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
                                             children: [
-                                              SizedBox(
-                                                height: 38,
+                                              _buildSetIcon(
+                                                entry.setCode,
+                                                size: 22,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
                                                 child: Text(
-                                                  entry.name,
-                                                  maxLines: 2,
+                                                  _setLabelForEntry(entry),
+                                                  maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                   style: Theme.of(context)
                                                       .textTheme
-                                                      .bodyMedium,
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: const Color(
+                                                            0xFFBFAE95),
+                                                      ),
                                                 ),
                                               ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                _setLabelForEntry(entry),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: const Color(
-                                                          0xFFBFAE95),
-                                                    ),
-                                              ),
-                                              const SizedBox(height: 22),
+                                              if (entry.rarity
+                                                  .trim()
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(width: 6),
+                                                _raritySquare(entry.rarity),
+                                              ],
                                             ],
-                                          ),
-                                          Positioned(
-                                            left: 0,
-                                            bottom: 0,
-                                            child: _buildSetIcon(
-                                              entry.setCode,
-                                              size: 22,
-                                            ),
-                                          ),
-                                          Positioned(
-                                            right: 0,
-                                            bottom: 0,
-                                            child: Builder(
-                                              builder: (context) {
-                                                final progress =
-                                                    _collectorProgressLabel(
-                                                        entry);
-                                                final hasRarity = entry
-                                                    .rarity
-                                                    .trim()
-                                                    .isNotEmpty;
-                                                if (!hasRarity &&
-                                                    progress.isEmpty) {
-                                                  return const SizedBox.shrink();
-                                                }
-                                                return Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    if (progress.isNotEmpty)
-                                                      Text(
-                                                        progress,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              color: const Color(
-                                                                  0xFFBFAE95),
-                                                            ),
-                                                      ),
-                                                    if (hasRarity) ...[
-                                                      const SizedBox(width: 6),
-                                                      _raritySquare(
-                                                          entry.rarity),
-                                                    ],
-                                                  ],
-                                                );
-                                              },
-                                            ),
                                           ),
                                         ],
                                       ),
@@ -2995,55 +3243,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                     ),
                                   ),
                               ),
-                              if ((_isFilterCollection || widget.isAllCards) &&
-                                  !_selectionMode)
-                                Positioned(
-                                  top: 24,
-                                  left: 12,
-                                  child: Builder(
-                                    builder: (buttonContext) {
-                                      final isAnimating =
-                                          _quickAddAnimating.contains(
-                                        entry.cardId,
-                                      );
-                                      return IconButton(
-                                        tooltip: l10n.addOne,
-                                        iconSize: 36,
-                                        onPressed: () => _quickAddCard(
-                                          entry,
-                                          anchorContext: buttonContext,
-                                        ),
-                                        icon: AnimatedSwitcher(
-                                          duration: const Duration(
-                                            milliseconds: 250,
-                                          ),
-                                          transitionBuilder:
-                                              (child, animation) =>
-                                                  ScaleTransition(
-                                            scale: animation,
-                                            child: FadeTransition(
-                                              opacity: animation,
-                                              child: child,
-                                            ),
-                                          ),
-                                          child: isAnimating
-                                              ? const Icon(
-                                                  Icons.check_circle,
-                                                  key: ValueKey('check'),
-                                                  size: 36,
-                                                  color: Color(0xFFE9C46A),
-                                                )
-                                              : const Icon(
-                                                  Icons.add_circle_outline,
-                                                  key: ValueKey('add'),
-                                                  size: 36,
-                                                  color: Color(0xFFE9C46A),
-                                                ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
                               if (_selectionMode || _isSelected(entry))
                                 Positioned(
                                   top: 8,

@@ -958,15 +958,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await showDialog<void>(
       context: context,
       builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
-          title: const Text('Daily scan limit reached'),
-          content: const Text(
-            'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.',
+          title: Text(l10n.dailyScanLimitReachedTitle),
+          content: Text(
+            l10n.freePlan20ScansUpgradePlusBody,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Not now'),
+              child: Text(l10n.notNow),
             ),
             FilledButton(
               onPressed: () {
@@ -977,7 +978,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   ),
                 );
               },
-              child: const Text('Discover Plus'),
+              child: Text(l10n.discoverPlus),
             ),
           ],
         );
@@ -1063,6 +1064,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
         final maxHeight = MediaQuery.of(context).size.height * 0.88;
         return Container(
           margin: const EdgeInsets.all(16),
@@ -1129,7 +1131,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         onPressed: () =>
                             Navigator.of(context).pop(_ScanPreviewAction.retry),
                         icon: const Icon(Icons.replay),
-                        label: const Text('Riprova'),
+                        label: Text(l10n.retry),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1138,7 +1140,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         onPressed: () =>
                             Navigator.of(context).pop(_ScanPreviewAction.add),
                         icon: const Icon(Icons.add),
-                        label: const Text('Aggiungi'),
+                        label: Text(l10n.addLabel),
                       ),
                     ),
                   ],
@@ -1416,7 +1418,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return null;
       }
@@ -1454,8 +1460,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final namedUri = Uri.parse(
         'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(name)}',
       );
-      final namedResponse =
-          await http.get(namedUri).timeout(const Duration(seconds: 2));
+      final namedResponse = await ScryfallApiClient.instance.get(
+        namedUri,
+        timeout: const Duration(seconds: 2),
+        maxRetries: 2,
+      );
       String? oracleId;
       if (namedResponse.statusCode == 200) {
         final namedPayload = jsonDecode(namedResponse.body);
@@ -1498,7 +1507,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (DateTime.now().isAfter(deadline)) {
         return;
       }
-      final response = await http.get(nextUri).timeout(const Duration(seconds: 2));
+      final response = await ScryfallApiClient.instance.get(
+        nextUri,
+        timeout: const Duration(seconds: 2),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return;
       }
@@ -1547,7 +1560,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent(query)}',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return null;
       }
@@ -1614,7 +1631,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/$setCode/${Uri.encodeComponent(collector)}',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return null;
       }
@@ -2000,19 +2021,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<bool> _askScanAnotherCard() async {
+    final l10n = AppLocalizations.of(context)!;
     final again = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Carta aggiunta'),
-        content: const Text('Vuoi scansionare un\'altra carta?'),
+        title: Text(l10n.cardAddedTitle),
+        content: Text(l10n.scanAnotherCardQuestion),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('No'),
+            child: Text(l10n.no),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Si'),
+            child: Text(l10n.yes),
           ),
         ],
       ),
@@ -2816,8 +2838,8 @@ class _HomeAddSheet extends StatelessWidget {
           const SizedBox(height: 12),
           ListTile(
             leading: const Icon(Icons.document_scanner_outlined),
-            title: const Text('Aggiungi tramite scan'),
-            subtitle: const Text('Scansiona una carta con OCR live'),
+            title: Text(l10n.addViaScanTitle),
+            subtitle: Text(l10n.scanCardWithLiveOcrSubtitle),
             onTap: () => Navigator.of(context).pop(_HomeAddAction.addByScan),
           ),
           ListTile(
@@ -3866,7 +3888,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
   Set<String> _knownSetCodes = const {};
   bool _torchEnabled = false;
   bool _torchAvailable = true;
-  String _status = 'Allinea la carta nel riquadro.';
+  String _status = '';
+  bool _limitedPrintCoverage = false;
 
   @override
   void initState() {
@@ -3875,8 +3898,27 @@ class _CardScannerPageState extends State<_CardScannerPage>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
+    unawaited(_loadBulkCoverageState());
     unawaited(_loadKnownSetCodesForScanner());
     unawaited(_initializeCamera());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_status.isEmpty) {
+      _status = AppLocalizations.of(context)!.alignCardInFrame;
+    }
+  }
+
+  Future<void> _loadBulkCoverageState() async {
+    final bulkType = await AppSettings.loadBulkType();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _limitedPrintCoverage = _isLimitedPrintCoverage(bulkType);
+    });
   }
 
   Future<void> _loadKnownSetCodesForScanner() async {
@@ -3932,7 +3974,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       }
       setState(() {
         _initializing = false;
-        _status = 'Camera non disponibile. Controlla i permessi.';
+        _status = AppLocalizations.of(context)!.cameraUnavailableCheckPermissions;
       });
     }
   }
@@ -3972,7 +4014,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       setState(() {
         _torchAvailable = false;
       });
-      showAppSnackBar(context, 'Flash non disponibile su questo device.');
+      showAppSnackBar(context, AppLocalizations.of(context)!.flashNotAvailableOnDevice);
     }
   }
 
@@ -4002,7 +4044,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       if (stableKey.isEmpty) {
         if (mounted) {
           setState(() {
-            _status = 'Cerco testo carta...';
+            _status = AppLocalizations.of(context)!.searchingCardTextStatus;
           });
         }
         _stableHits = 0;
@@ -4027,9 +4069,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
       if (mounted) {
         setState(() {
           if (_lockedName.isEmpty) {
-            _status = 'Cerco nome carta...';
+            _status = AppLocalizations.of(context)!.searchingCardNameStatus;
           } else {
-            _status = 'Nome riconosciuto. Apro la ricerca...';
+            _status = AppLocalizations.of(context)!.nameRecognizedOpeningSearchStatus;
           }
         });
       }
@@ -4056,7 +4098,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       _clearSetVotes();
       if (mounted) {
         setState(() {
-          _status = 'OCR instabile, riprovo...';
+          _status = AppLocalizations.of(context)!.ocrUnstableRetryingStatus;
         });
       }
     } finally {
@@ -4357,6 +4399,36 @@ class _CardScannerPageState extends State<_CardScannerPage>
     );
   }
 
+  Widget _buildLimitedCoverageBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xCC3A2412),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE9C46A)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 16,
+            color: Color(0xFFE9C46A),
+          ),
+          SizedBox(width: 6),
+          Text(
+            'Limited coverage - tap All artworks',
+            style: TextStyle(
+              color: Color(0xFFF5EEDA),
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _cameraController;
@@ -4424,6 +4496,18 @@ class _CardScannerPageState extends State<_CardScannerPage>
               },
             ),
           ),
+          if (_limitedPrintCoverage)
+            Positioned(
+              top: 8,
+              left: 16,
+              right: 16,
+              child: SafeArea(
+                bottom: false,
+                child: Center(
+                  child: _buildLimitedCoverageBadge(),
+                ),
+              ),
+            ),
           Positioned(
             left: 16,
             right: 16,
@@ -4434,9 +4518,11 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _ScanFieldStatusBox(
-                    label: 'Nome',
+                    label: AppLocalizations.of(context)!.nameLabel,
                     value: _lockedName.isEmpty
-                        ? (_namePreview.isEmpty ? 'In attesa' : _namePreview)
+                        ? (_namePreview.isEmpty
+                            ? AppLocalizations.of(context)!.waitingStatus
+                            : _namePreview)
                         : _lockedName,
                     locked: _lockedName.isNotEmpty,
                   ),
@@ -4450,7 +4536,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Live OCR attivo',
+                    AppLocalizations.of(context)!.liveOcrActive,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFE9C46A),
                         ),

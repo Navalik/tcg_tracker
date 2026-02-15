@@ -22,7 +22,9 @@ import 'l10n/app_localizations.dart';
 import 'db/app_database.dart';
 import 'models.dart';
 import 'services/app_settings.dart';
+import 'services/price_repository.dart';
 import 'services/purchase_manager.dart';
+import 'services/scryfall_api_client.dart';
 
 part 'parts/home_page.dart';
 part 'parts/collection_detail_page.dart';
@@ -43,8 +45,30 @@ Future<void> main() async {
   runApp(const TCGTracker());
 }
 
-class TCGTracker extends StatelessWidget {
+final ValueNotifier<Locale> _appLocaleNotifier =
+    ValueNotifier<Locale>(const Locale('en'));
+
+class TCGTracker extends StatefulWidget {
   const TCGTracker({super.key});
+
+  @override
+  State<TCGTracker> createState() => _TCGTrackerState();
+}
+
+class _TCGTrackerState extends State<TCGTracker> {
+  @override
+  void initState() {
+    super.initState();
+    _loadAppLocale();
+  }
+
+  Future<void> _loadAppLocale() async {
+    final localeCode = await AppSettings.loadAppLocale();
+    if (!mounted) {
+      return;
+    }
+    _appLocaleNotifier.value = Locale(localeCode);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,45 +96,50 @@ class TCGTracker extends StatelessWidget {
       headlineMedium: textTheme.headlineMedium?.copyWith(fontSize: 28),
     );
 
-    return MaterialApp(
-      onGenerateTitle: (context) =>
-          AppLocalizations.of(context)?.appTitle ?? 'BinderVault',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: colorScheme,
-        textTheme: scaledTextTheme,
-        scaffoldBackgroundColor: scaffoldBackground,
-        cardColor: const Color(0xFF171411),
-        snackBarTheme: SnackBarThemeData(
-          backgroundColor: const Color(0xFFE9C46A),
-          contentTextStyle: scaledTextTheme.bodyMedium?.copyWith(
-            color: const Color(0xFF1C1510),
-            fontWeight: FontWeight.w600,
+    return ValueListenableBuilder<Locale>(
+      valueListenable: _appLocaleNotifier,
+      builder: (context, locale, _) {
+        return MaterialApp(
+          onGenerateTitle: (context) =>
+              AppLocalizations.of(context)?.appTitle ?? 'BinderVault',
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: colorScheme,
+            textTheme: scaledTextTheme,
+            scaffoldBackgroundColor: scaffoldBackground,
+            cardColor: const Color(0xFF171411),
+            snackBarTheme: SnackBarThemeData(
+              backgroundColor: const Color(0xFFE9C46A),
+              contentTextStyle: scaledTextTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF1C1510),
+                fontWeight: FontWeight.w600,
+              ),
+              behavior: SnackBarBehavior.floating,
+              elevation: 6,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: const BorderSide(color: Color(0xFFB07C2A)),
+              ),
+              insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            ),
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              centerTitle: true,
+            ),
           ),
-          behavior: SnackBarBehavior.floating,
-          elevation: 6,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Color(0xFFB07C2A)),
-          ),
-          insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-        ),
-      ),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('en'),
-      themeMode: ThemeMode.dark,
-      home: const _AuthGate(),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: locale,
+          themeMode: ThemeMode.dark,
+          home: const _AuthGate(),
+        );
+      },
     );
   }
 }
@@ -129,14 +158,15 @@ class _AuthGateState extends State<_AuthGate> {
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
 
   String _googleSignInErrorMessage(Object error) {
+    final l10n = AppLocalizations.of(context)!;
     if (error is FirebaseAuthException) {
       if (error.code == 'network-request-failed') {
-        return 'Network error during sign-in. Check connection and retry.';
+        return l10n.authNetworkErrorDuringSignIn;
       }
       if (error.code == 'invalid-credential') {
-        return 'Invalid Google credential. Try again.';
+        return l10n.authInvalidGoogleCredential;
       }
-      return 'Google sign-in failed (${error.code}).';
+      return l10n.authGoogleSignInFailedWithCode(error.code);
     }
     if (error is PlatformException) {
       final code = error.code.toLowerCase();
@@ -144,17 +174,17 @@ class _AuthGateState extends State<_AuthGate> {
       final details = '${error.details ?? ''}'.toLowerCase();
       final blob = '$code $message $details';
       if (blob.contains('10') || blob.contains('developer_error')) {
-        return 'Google sign-in config error (SHA/package/Firebase config).';
+        return l10n.authGoogleSignInConfigError;
       }
       if (blob.contains('network_error')) {
-        return 'Network error during Google sign-in.';
+        return l10n.authNetworkErrorDuringGoogleSignIn;
       }
       if (blob.contains('sign_in_canceled') || blob.contains('cancel')) {
-        return 'Google sign-in cancelled.';
+        return l10n.authGoogleSignInCancelled;
       }
-      return 'Google sign-in failed. ${error.code}';
+      return l10n.authGoogleSignInFailedWithCode(error.code);
     }
-    return 'Google sign-in failed. Try again.';
+    return l10n.authGoogleSignInFailedTryAgain;
   }
 
   Future<void> _signInWithGoogle() async {
@@ -207,6 +237,7 @@ class _AuthGateState extends State<_AuthGate> {
         if (snapshot.data != null) {
           return const CollectionHomePage();
         }
+        final l10n = AppLocalizations.of(context)!;
         return Scaffold(
           backgroundColor: Colors.transparent,
           body: Stack(
@@ -243,13 +274,13 @@ class _AuthGateState extends State<_AuthGate> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Welcome to BinderVault',
+                              l10n.authWelcomeTitle,
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              'Sign in with Google to sync your account.',
+                              l10n.authWelcomeSubtitle,
                               textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: const Color(0xFFBFAE95),
@@ -276,7 +307,7 @@ class _AuthGateState extends State<_AuthGate> {
                                       ),
                                     )
                                   : const Icon(Icons.login_rounded),
-                              label: const Text('Sign in with Google'),
+                              label: Text(l10n.authSignInWithGoogle),
                             ),
                             const SizedBox(height: 8),
                             OutlinedButton(
@@ -291,7 +322,7 @@ class _AuthGateState extends State<_AuthGate> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              child: const Text('Continue as guest'),
+                              child: Text(l10n.authContinueAsGuest),
                             ),
                           ],
                         ),

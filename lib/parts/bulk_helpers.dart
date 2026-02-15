@@ -68,6 +68,12 @@ String _bulkTypeFileName(String type) {
   return 'scryfall_$sanitized.json';
 }
 
+bool _isLimitedPrintCoverage(String? bulkType) {
+  return bulkType != null &&
+      bulkType.isNotEmpty &&
+      bulkType.trim().toLowerCase() != 'default_cards';
+}
+
 Future<String?> _showBulkTypePicker(
   BuildContext context, {
   required bool allowCancel,

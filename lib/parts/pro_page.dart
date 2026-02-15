@@ -18,9 +18,10 @@ class _ProPageState extends State<ProPage> {
   }
 
   void _showPreviewMessage(String planLabel) {
+    final l10n = AppLocalizations.of(context)!;
     showAppSnackBar(
       context,
-      '$planLabel plan selected. Billing will be enabled in a next step.',
+      l10n.planSelectedPreview(planLabel),
     );
   }
 
@@ -90,10 +91,11 @@ class _ProPageState extends State<ProPage> {
       animation: _manager,
       builder: (context, _) {
         final isPro = _manager.isPro;
+        final l10n = AppLocalizations.of(context)!;
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: const Text('BinderVault Plus'),
+            title: Text(l10n.plusPageTitle),
           ),
           body: Stack(
             children: [
@@ -125,7 +127,7 @@ class _ProPageState extends State<ProPage> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            isPro ? 'Plus active' : 'Upgrade to Plus',
+                            isPro ? l10n.plusActive : l10n.upgradeToPlus,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
@@ -168,7 +170,7 @@ class _ProPageState extends State<ProPage> {
                             Expanded(
                               flex: 3,
                               child: Text(
-                                'Free',
+                                l10n.freePlanLabel,
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
@@ -176,7 +178,7 @@ class _ProPageState extends State<ProPage> {
                             Expanded(
                               flex: 3,
                               child: Text(
-                                'Plus',
+                                l10n.plusPlanLabel,
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                                       color: const Color(0xFFE9C46A),
@@ -188,26 +190,26 @@ class _ProPageState extends State<ProPage> {
                         const SizedBox(height: 8),
                         const Divider(height: 1, color: Color(0xFF3A2F24)),
                         _buildFeatureRow(
-                          feature: 'Daily card scans',
-                          freeValue: '20/day',
-                          plusValue: 'Unlimited',
+                          feature: l10n.dailyCardScansFeature,
+                          freeValue: l10n.scansPerDay(20),
+                          plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
                         ),
                         _buildFeatureRow(
-                          feature: 'Collections',
+                          feature: l10n.collectionsFeature,
                           freeValue: '3',
-                          plusValue: 'Unlimited',
+                          plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
                         ),
                         _buildFeatureRow(
-                          feature: 'Card search & add',
-                          freeValue: 'Unlimited',
-                          plusValue: 'Unlimited',
+                          feature: l10n.cardSearchAddFeature,
+                          freeValue: l10n.unlimitedLabel,
+                          plusValue: l10n.unlimitedLabel,
                         ),
                         _buildFeatureRow(
-                          feature: 'Advanced filters',
-                          freeValue: 'Unlimited',
-                          plusValue: 'Unlimited',
+                          feature: l10n.advancedFiltersFeature,
+                          freeValue: l10n.unlimitedLabel,
+                          plusValue: l10n.unlimitedLabel,
                         ),
                       ],
                     ),
@@ -217,7 +219,9 @@ class _ProPageState extends State<ProPage> {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () => _showPreviewMessage('Monthly'),
+                          onPressed: () => _showPreviewMessage(
+                            l10n.monthlyPlanLabel,
+                          ),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             side: const BorderSide(color: Color(0xFFE9C46A)),
@@ -225,7 +229,7 @@ class _ProPageState extends State<ProPage> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
@@ -233,7 +237,7 @@ class _ProPageState extends State<ProPage> {
                                 style: TextStyle(fontWeight: FontWeight.w800),
                               ),
                               SizedBox(height: 2),
-                              Text('1 month'),
+                              Text(l10n.oneMonthLabel),
                             ],
                           ),
                         ),
@@ -241,7 +245,9 @@ class _ProPageState extends State<ProPage> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: FilledButton(
-                          onPressed: () => _showPreviewMessage('Yearly'),
+                          onPressed: () => _showPreviewMessage(
+                            l10n.yearlyPlanLabel,
+                          ),
                           style: FilledButton.styleFrom(
                             backgroundColor: const Color(0xFFE9C46A),
                             foregroundColor: const Color(0xFF1C1510),
@@ -250,7 +256,7 @@ class _ProPageState extends State<ProPage> {
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: const Column(
+                          child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
@@ -258,7 +264,7 @@ class _ProPageState extends State<ProPage> {
                                 style: TextStyle(fontWeight: FontWeight.w800),
                               ),
                               SizedBox(height: 2),
-                              Text('12 months'),
+                              Text(l10n.twelveMonthsLabel),
                             ],
                           ),
                         ),
@@ -268,11 +274,11 @@ class _ProPageState extends State<ProPage> {
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: _manager.restorePurchases,
-                    child: const Text('Already subscribed? Restore'),
+                    child: Text(l10n.alreadySubscribedRestore),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Preview screen: real billing flow will be integrated next.',
+                    l10n.previewBillingNotice,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFF908676),

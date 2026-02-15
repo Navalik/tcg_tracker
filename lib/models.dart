@@ -10,6 +10,10 @@ class CardSearchResult {
     required this.typeLine,
     required this.colors,
     required this.colorIdentity,
+    this.priceUsd,
+    this.priceUsdFoil,
+    this.priceEur,
+    this.priceEurFoil,
     this.imageUri,
   });
 
@@ -23,6 +27,10 @@ class CardSearchResult {
   final String typeLine;
   final String colors;
   final String colorIdentity;
+  final String? priceUsd;
+  final String? priceUsdFoil;
+  final String? priceEur;
+  final String? priceEurFoil;
   final String? imageUri;
 
   String get collectorProgressLabel {
@@ -88,6 +96,13 @@ class CollectionCardEntry {
     required this.quantity,
     required this.foil,
     required this.altArt,
+    this.priceUsd,
+    this.priceUsdFoil,
+    this.priceUsdEtched,
+    this.priceEur,
+    this.priceEurFoil,
+    this.priceTix,
+    this.pricesUpdatedAt,
     this.imageUri,
   });
 
@@ -113,6 +128,13 @@ class CollectionCardEntry {
   final int quantity;
   final bool foil;
   final bool altArt;
+  final String? priceUsd;
+  final String? priceUsdFoil;
+  final String? priceUsdEtched;
+  final String? priceEur;
+  final String? priceEurFoil;
+  final String? priceTix;
+  final int? pricesUpdatedAt;
   final String? imageUri;
 
   String get subtitleLabel {

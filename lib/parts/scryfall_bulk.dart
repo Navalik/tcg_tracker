@@ -258,9 +258,11 @@ class ScryfallBulkChecker {
 
   Future<ScryfallBulkCheckResult> checkAllCardsUpdate(String bulkType) async {
     try {
-      final response = await http
-          .get(Uri.parse(_bulkEndpoint))
-          .timeout(const Duration(seconds: 10));
+      final response = await ScryfallApiClient.instance.get(
+        Uri.parse(_bulkEndpoint),
+        timeout: const Duration(seconds: 10),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return const ScryfallBulkCheckResult(updateAvailable: false);
       }

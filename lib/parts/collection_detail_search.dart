@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class _CardSearchSelection {
   _CardSearchSelection.single(CardSearchResult card)
@@ -16,6 +16,16 @@ class _CardSearchSelection {
   final bool isBulk;
   final int count;
   final List<String> cardIds;
+}
+
+class _SearchPriceData {
+  const _SearchPriceData({
+    required this.base,
+    required this.foil,
+  });
+
+  final String base;
+  final String foil;
 }
 
 class _CardSearchSheet extends StatefulWidget {
@@ -76,6 +86,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _ownedOnlyFilter = false;
   bool _onlineArtworkLoading = false;
   bool _addingFromPreview = false;
+  bool _limitedPrintCoverage = false;
+  bool _showPrices = true;
+  String _priceCurrency = 'eur';
+  final Map<String, _SearchPriceData> _priceDataByCardId = {};
+  final Set<String> _priceRefreshQueued = {};
 
   @override
   void initState() {
@@ -112,7 +127,31 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _controller.text = seedQuery;
       _query = seedQuery;
     }
+    unawaited(_loadBulkCoverageState());
+    unawaited(_loadPricePreferences());
     _loadSearchLanguages();
+  }
+
+  Future<void> _loadBulkCoverageState() async {
+    final bulkType = await AppSettings.loadBulkType();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _limitedPrintCoverage = _isLimitedPrintCoverage(bulkType);
+    });
+  }
+
+  Future<void> _loadPricePreferences() async {
+    final showPrices = await AppSettings.loadShowPrices();
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showPrices = showPrices;
+      _priceCurrency = priceCurrency;
+    });
   }
 
   @override
@@ -167,6 +206,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _onlineArtworkLoading = false;
       _results = [];
       _ownedQuantitiesByCardId = const {};
+      _priceDataByCardId.clear();
     });
 
     final currentQuery = _query;
@@ -355,6 +395,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _offset += rawPageCount;
       _hasMore = hasMorePages && rawPageCount == _pageSize;
     });
+    _refreshSearchResultPrices(page);
   }
 
   Future<List<CardSearchResult>> _fetchOnlinePrintings(String query) async {
@@ -367,9 +408,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       final namedUri = Uri.parse(
         'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(trimmed)}',
       );
-      final namedResponse = await http
-          .get(namedUri)
-          .timeout(const Duration(seconds: 4));
+      final namedResponse = await ScryfallApiClient.instance.get(
+        namedUri,
+        timeout: const Duration(seconds: 4),
+        maxRetries: 2,
+      );
       String? oracleId;
       var resolvedName = '';
       if (namedResponse.statusCode == 200) {
@@ -441,9 +484,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final results = <CardSearchResult>[];
     var page = 0;
     while (page < maxPages) {
-      final response = await http
-          .get(nextUri)
-          .timeout(const Duration(seconds: 10));
+      final response = await ScryfallApiClient.instance.get(
+        nextUri,
+        timeout: const Duration(seconds: 10),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         break;
       }
@@ -493,6 +538,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final typeLine = (raw['type_line'] as String?)?.trim() ?? '';
     final colors = _codesToCsv(raw['colors']);
     final colorIdentity = _codesToCsv(raw['color_identity']);
+    final prices = raw['prices'] as Map<String, dynamic>?;
     final setTotal = _extractSetTotal(raw);
     return CardSearchResult(
       id: id,
@@ -505,8 +551,23 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       typeLine: typeLine,
       colors: colors,
       colorIdentity: colorIdentity,
+      priceUsd: _asPriceString(prices?['usd']),
+      priceUsdFoil: _asPriceString(prices?['usd_foil']),
+      priceEur: _asPriceString(prices?['eur']),
+      priceEurFoil: _asPriceString(prices?['eur_foil']),
       imageUri: _extractScryfallImageUri(raw),
     );
+  }
+
+  String? _asPriceString(dynamic value) {
+    if (value is! String) {
+      return null;
+    }
+    final normalized = value.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
   }
 
   int? _extractSetTotal(Map<String, dynamic> card) {
@@ -1426,6 +1487,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
   }
 
+  Widget _buildLimitedCoverageBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0x332A1E10),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFB07C2A)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: const [
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 15,
+            color: Color(0xFFE9C46A),
+          ),
+          SizedBox(width: 6),
+          Text(
+            'Limited coverage - tap All artworks',
+            style: TextStyle(
+              color: Color(0xFFEFDDBA),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   bool _isMissingCard(CardSearchResult card) {
     if (widget.ownershipCollectionId == null) {
       return false;
@@ -1694,7 +1785,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (progress.isEmpty) {
       return setLabel;
     }
-    return '$setLabel • $progress';
+    return '$setLabel â€¢ $progress';
   }
 
   List<_CardDetail> _parseCardDetails(
@@ -1800,6 +1891,117 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
   }
 
+  Decoration _priceBadgeDecorationForSearch(CardSearchResult card) {
+    final base = Theme.of(context).colorScheme.surface;
+    final accents = _manaAccentColors(
+      _parseColorSet(card.colors, card.colorIdentity),
+    );
+    if (accents.isEmpty) {
+      return BoxDecoration(
+        color: Color.lerp(base, Colors.black, 0.08) ?? base,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0x4A5D4731)),
+      );
+    }
+    final tintStops = accents
+        .map((color) => Color.lerp(base, color, 0.35) ?? base)
+        .toList();
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: tintStops.length == 1 ? [base, tintStops.first] : tintStops,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0x4A5D4731)),
+    );
+  }
+
+  String _normalizePriceOrNa(String? value, String symbol) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return 'N/A';
+    }
+    return '$symbol$normalized';
+  }
+
+  _SearchPriceData _searchPriceDataForCard(CardSearchResult card) {
+    final cached = _priceDataByCardId[card.id];
+    if (cached != null) {
+      return cached;
+    }
+    final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    final symbol = currency == 'usd' ? r'$' : 'â‚¬';
+    return _SearchPriceData(
+      base: _normalizePriceOrNa(currency == 'usd' ? card.priceUsd : card.priceEur, symbol),
+      foil: _normalizePriceOrNa(
+        currency == 'usd' ? card.priceUsdFoil : card.priceEurFoil,
+        symbol,
+      ),
+    );
+  }
+
+  void _refreshSearchResultPrices(List<CardSearchResult> cards) {
+    if (!_showPrices || cards.isEmpty) {
+      return;
+    }
+    final ids = <String>[];
+    for (final card in cards) {
+      if (_priceDataByCardId.containsKey(card.id) || _priceRefreshQueued.contains(card.id)) {
+        continue;
+      }
+      _priceRefreshQueued.add(card.id);
+      ids.add(card.id);
+      if (ids.length >= 20) {
+        break;
+      }
+    }
+    if (ids.isEmpty) {
+      return;
+    }
+    unawaited(_refreshSearchResultPricesInternal(ids));
+  }
+
+  Future<void> _refreshSearchResultPricesInternal(List<String> cardIds) async {
+    final nextData = <String, _SearchPriceData>{};
+    try {
+      for (final cardId in cardIds) {
+        await PriceRepository.instance.ensurePricesFresh(cardId);
+        final entry = await ScryfallDatabase.instance.fetchCardEntryById(
+          cardId,
+          collectionId: widget.ownershipCollectionId,
+        );
+        if (entry == null) {
+          continue;
+        }
+        final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+        final symbol = currency == 'usd' ? r'$' : 'â‚¬';
+        nextData[cardId] = _SearchPriceData(
+          base: _normalizePriceOrNa(
+            currency == 'usd' ? entry.priceUsd : entry.priceEur,
+            symbol,
+          ),
+          foil: _normalizePriceOrNa(
+            currency == 'usd' ? entry.priceUsdFoil : entry.priceEurFoil,
+            symbol,
+          ),
+        );
+      }
+      if (!mounted || nextData.isEmpty) {
+        return;
+      }
+      setState(() {
+        _priceDataByCardId.addAll(nextData);
+      });
+    } catch (_) {
+      // Ignore price badge refresh failures.
+    } finally {
+      for (final cardId in cardIds) {
+        _priceRefreshQueued.remove(cardId);
+      }
+    }
+  }
+
   String _setLabelForSearch(CardSearchResult card) {
     final name = card.setName.trim();
     if (name.isNotEmpty) {
@@ -1818,7 +2020,33 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     final showRightActions = showAdd || canSelectCards || isMissing;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
+        if (_showPrices)
+          Positioned(
+            left: 16,
+            right: showRightActions ? 64 : 16,
+            bottom: -6,
+            child: Opacity(
+              opacity: isMissing ? 0.6 : 1.0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 9, 14, 3),
+                decoration: _priceBadgeDecorationForSearch(card),
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Text(
+                    '${l10n.priceLabel(_searchPriceDataForCard(card).base)} • ${l10n.foilLabel} ${_searchPriceDataForCard(card).foil}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFEFE7D8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ),
         Opacity(
           opacity: isMissing ? 0.6 : 1.0,
           child: InkWell(
@@ -1826,6 +2054,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             onLongPress: () => _showPreview(card),
             borderRadius: BorderRadius.circular(16),
             child: Container(
+              margin: EdgeInsets.only(bottom: _showPrices ? 18 : 0),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: _cardTintDecorationForSearch(card),
               child: SizedBox(
@@ -1934,14 +2163,51 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Widget _buildGalleryCard(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
-    final canSelectCards = widget.selectionEnabled;
     final imageUrl = card.imageUri?.trim() ?? '';
     final setLabel = _setLabelForSearch(card);
-    final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
-    final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     return Stack(
+      clipBehavior: Clip.none,
       children: [
+        if (_showPrices)
+          Positioned(
+            left: 10,
+            right: 10,
+            bottom: -6,
+            child: Opacity(
+              opacity: isMissing ? 0.6 : 1.0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 9, 14, 3),
+                decoration: _priceBadgeDecorationForSearch(card),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Builder(
+                    builder: (context) {
+                      final priceData = _searchPriceDataForCard(card);
+                      final accentStyle =
+                          Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFFE9C46A),
+                              );
+                      final valueStyle = accentStyle?.copyWith(
+                        color: const Color(0xFFEFE7D8),
+                        fontWeight: FontWeight.w500,
+                      );
+                      return SizedBox(
+                        width: double.infinity,
+                        child: Text(
+                          l10n.priceLabel(priceData.base),
+                          style: valueStyle,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
         Opacity(
           opacity: isMissing ? 0.6 : 1.0,
           child: InkWell(
@@ -1949,6 +2215,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             onLongPress: () => _showPreview(card),
             borderRadius: BorderRadius.circular(16),
             child: Container(
+              margin: EdgeInsets.only(bottom: _showPrices ? 18 : 0),
               decoration: _cardTintDecorationForSearch(card),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1987,66 +2254,38 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
-                    child: Stack(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        SizedBox(
+                          height: 38,
+                          child: Text(
+                            card.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
                           children: [
-                            SizedBox(
-                              height: 38,
+                            _buildSetIcon(card.setCode, size: 22),
+                            const SizedBox(width: 8),
+                            Expanded(
                               child: Text(
-                                card.name,
-                                maxLines: 2,
+                                setLabel,
+                                maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodyMedium,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFFBFAE95)),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              setLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFBFAE95)),
-                            ),
-                            const SizedBox(height: 22),
+                            if (hasRarity) ...[
+                              const SizedBox(width: 6),
+                              _raritySquare(card.rarity),
+                            ],
                           ],
-                        ),
-                        Positioned(
-                          left: 0,
-                          bottom: 0,
-                          child: _buildSetIcon(card.setCode, size: 22),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Builder(
-                            builder: (context) {
-                              if (collectorNumber.isEmpty && !hasRarity) {
-                                return const SizedBox.shrink();
-                              }
-                              return Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (collectorNumber.isNotEmpty)
-                                    Text(
-                                      collectorNumber,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFFBFAE95),
-                                          ),
-                                    ),
-                                  if (hasRarity) ...[
-                                    const SizedBox(width: 6),
-                                    _raritySquare(card.rarity),
-                                  ],
-                                ],
-                              );
-                            },
-                          ),
                         ),
                       ],
                     ),
@@ -2062,33 +2301,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             child: Padding(
               padding: const EdgeInsets.only(right: 8),
               child: _buildBadge(l10n.missingLabel, inverted: true),
-            ),
-          ),
-        if (showAdd)
-          Positioned(
-            top: 24,
-            left: 12,
-            child: IconButton(
-              tooltip: l10n.addOne,
-              iconSize: 36,
-              icon: const Icon(
-                Icons.add_circle_outline,
-                size: 36,
-                color: Color(0xFFE9C46A),
-              ),
-              onPressed: _addingFromPreview
-                  ? null
-                  : () => _addCardFromPreview(card),
-            ),
-          )
-        else if (canSelectCards)
-          const Positioned(
-            top: 24,
-            left: 12,
-            child: Icon(
-              Icons.add_circle_outline,
-              size: 36,
-              color: Color(0xFFE9C46A),
             ),
           ),
       ],
@@ -2158,6 +2370,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ],
                       ),
                     ),
+                    if (_limitedPrintCoverage)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildLimitedCoverageBadge(),
+                        ),
+                      ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: TextField(
@@ -2199,10 +2419,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 }
                               },
                               avatar: const Icon(
-                                Icons.style_outlined,
+                                Icons.star_outline_rounded,
                                 size: 18,
                               ),
-                              label: const Text('Artwork (online)'),
+                              label: Text(l10n.allArtworks),
                             ),
                             if (widget.ownershipCollectionId != null)
                               FilterChip(
@@ -2217,7 +2437,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   Icons.inventory_2_outlined,
                                   size: 18,
                                 ),
-                                label: const Text('Owned'),
+                                label: Text(l10n.ownedLabel),
                               ),
                           ],
                         ),
@@ -2234,7 +2454,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Searching online printings...',
+                              l10n.searchingOnlinePrintings,
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: const Color(0xFFBFAE95)),
                             ),
@@ -2424,8 +2644,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                               visibleResults.isNotEmpty))
                                       ? 1
                                       : 0),
-                              separatorBuilder: (_, _) =>
-                                  const SizedBox(height: 12),
+                              separatorBuilder: (_, _) => SizedBox(
+                                height: _showPrices ? 18 : 12,
+                              ),
                               itemBuilder: (context, index) {
                                 if (index >= visibleResults.length) {
                                   if (_loadingMore) {
@@ -2585,7 +2806,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                           ? null
                                           : () => _addCardFromPreview(card),
                                       icon: const Icon(Icons.add),
-                                      label: const Text('Add to collection'),
+                                      label: Text(
+                                        AppLocalizations.of(context)!.addToCollection,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2598,7 +2821,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               color: const Color(0xB314110F),
                               shape: const CircleBorder(),
                               child: IconButton(
-                                tooltip: 'Close preview',
+                                tooltip: AppLocalizations.of(context)!.closePreview,
                                 onPressed: () => _hidePreview(immediate: false),
                                 icon: const Icon(Icons.close),
                               ),
@@ -2778,7 +3001,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Future<bool> _fetchAndUpsertCardById(String cardId) async {
     try {
       final uri = Uri.parse('https://api.scryfall.com/cards/$cardId');
-      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      final response = await ScryfallApiClient.instance.get(
+        uri,
+        timeout: const Duration(seconds: 6),
+        maxRetries: 2,
+      );
       if (response.statusCode != 200) {
         return false;
       }
@@ -2823,3 +3050,4 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         .toList(growable: false);
   }
 }
+

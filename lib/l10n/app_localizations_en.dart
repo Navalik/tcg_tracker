@@ -22,20 +22,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bulkAllPrintingsDescription =>
-      'All printings and languages. Heaviest.';
+      'All printings (best for full scan coverage).';
 
   @override
   String get bulkOracleCardsTitle => 'Oracle cards';
 
   @override
   String get bulkOracleCardsDescription =>
-      'One entry per card. Fewer variants.';
+      'Oracle-level (not all printings/variants).';
 
   @override
   String get bulkUniqueArtworkTitle => 'Unique artwork';
 
   @override
-  String get bulkUniqueArtworkDescription => 'One entry per artwork. Lightest.';
+  String get bulkUniqueArtworkDescription =>
+      'One per artwork (not full print coverage).';
 
   @override
   String get gamePokemonDescription => 'Pokemon TCG collections.';
@@ -853,4 +854,264 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get viewMoreResults => 'View more results';
+
+  @override
+  String get priceSourceTitle => 'Price source';
+
+  @override
+  String get dailySnapshot => 'Daily snapshot';
+
+  @override
+  String get unableToSignOutTryAgain => 'Unable to sign out. Try again.';
+
+  @override
+  String get signOut => 'Sign out';
+
+  @override
+  String get guestLabel => 'Guest';
+
+  @override
+  String get googleUserLabel => 'Google User';
+
+  @override
+  String get localProfileLabel => 'Local profile';
+
+  @override
+  String get signedInWithGoogle => 'Signed in with Google';
+
+  @override
+  String get profile => 'Profile';
+
+  @override
+  String get proCardSubtitle =>
+      'Unlock higher limits and upcoming premium features.';
+
+  @override
+  String get needMoreThanFreeTitle => 'Need more than Free?';
+
+  @override
+  String get needMoreThanFreeBody =>
+      'See plans, compare limits, and choose the best option for your collection workflow.';
+
+  @override
+  String get discoverPlus => 'Discover Plus';
+
+  @override
+  String get pricesTitle => 'Prices';
+
+  @override
+  String get pricesSubtitle => 'Price data provider and visible currencies.';
+
+  @override
+  String get showPricesLabel => 'Show prices';
+
+  @override
+  String get scryfallDailySnapshot => 'Scryfall daily snapshot';
+
+  @override
+  String get availableCurrenciesHint =>
+      'Available in app: EUR and USD (foil uses foil value when available).';
+
+  @override
+  String get appInfo => 'App info';
+
+  @override
+  String get versionLabel => 'Version';
+
+  @override
+  String get addByNameTitle => 'By name';
+
+  @override
+  String get addByNameSubtitle => 'Search and add manually';
+
+  @override
+  String get addByScanTitle => 'By scan';
+
+  @override
+  String get addByScanSubtitle => 'Live OCR card recognition';
+
+  @override
+  String get noCardTextRecognizedTryLightFocus =>
+      'No card text recognized. Try better light and focus.';
+
+  @override
+  String get dailyScanLimitReachedTitle => 'Daily scan limit reached';
+
+  @override
+  String get freePlan20ScansUpgradePlusBody =>
+      'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.';
+
+  @override
+  String get allArtworks => 'All artworks';
+
+  @override
+  String get ownedLabel => 'Owned';
+
+  @override
+  String get searchingOnlinePrintings => 'Searching online printings...';
+
+  @override
+  String get addToCollection => 'Add to collection';
+
+  @override
+  String get closePreview => 'Close preview';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get addLabel => 'Add';
+
+  @override
+  String get cardAddedTitle => 'Card added';
+
+  @override
+  String get scanAnotherCardQuestion => 'Do you want to scan another card?';
+
+  @override
+  String get no => 'No';
+
+  @override
+  String get addViaScanTitle => 'Add via scan';
+
+  @override
+  String get scanCardWithLiveOcrSubtitle => 'Scan a card with live OCR';
+
+  @override
+  String get alignCardInFrame => 'Align the card in the frame.';
+
+  @override
+  String get cameraUnavailableCheckPermissions =>
+      'Camera unavailable. Check permissions.';
+
+  @override
+  String get flashNotAvailableOnDevice =>
+      'Flash is not available on this device.';
+
+  @override
+  String get searchingCardTextStatus => 'Searching card text...';
+
+  @override
+  String get searchingCardNameStatus => 'Searching card name...';
+
+  @override
+  String get nameRecognizedOpeningSearchStatus =>
+      'Name recognized. Opening search...';
+
+  @override
+  String get ocrUnstableRetryingStatus => 'OCR unstable, retrying...';
+
+  @override
+  String get nameLabel => 'Name';
+
+  @override
+  String get waitingStatus => 'Waiting';
+
+  @override
+  String get liveOcrActive => 'Live OCR active';
+
+  @override
+  String get uiLanguageTitle => 'UI language';
+
+  @override
+  String get uiLanguageSubtitle => 'Choose the app interface language.';
+
+  @override
+  String get plusPageTitle => 'BinderVault Plus';
+
+  @override
+  String get plusActive => 'Plus active';
+
+  @override
+  String get upgradeToPlus => 'Upgrade to Plus';
+
+  @override
+  String get freePlanLabel => 'Free';
+
+  @override
+  String get plusPlanLabel => 'Plus';
+
+  @override
+  String get dailyCardScansFeature => 'Daily card scans';
+
+  @override
+  String get collectionsFeature => 'Collections';
+
+  @override
+  String get cardSearchAddFeature => 'Card search and add';
+
+  @override
+  String get advancedFiltersFeature => 'Advanced filters';
+
+  @override
+  String scansPerDay(int count) {
+    return '$count/day';
+  }
+
+  @override
+  String get unlimitedLabel => 'Unlimited';
+
+  @override
+  String get monthlyPlanLabel => 'Monthly';
+
+  @override
+  String get yearlyPlanLabel => 'Yearly';
+
+  @override
+  String get oneMonthLabel => '1 month';
+
+  @override
+  String get twelveMonthsLabel => '12 months';
+
+  @override
+  String get alreadySubscribedRestore => 'Already subscribed? Restore';
+
+  @override
+  String get previewBillingNotice =>
+      'Preview screen: real billing flow will be integrated next.';
+
+  @override
+  String planSelectedPreview(Object plan) {
+    return '$plan plan selected. Billing will be enabled in a next step.';
+  }
+
+  @override
+  String get authNetworkErrorDuringSignIn =>
+      'Network error during sign-in. Check connection and retry.';
+
+  @override
+  String get authInvalidGoogleCredential =>
+      'Invalid Google credential. Try again.';
+
+  @override
+  String authGoogleSignInFailedWithCode(Object code) {
+    return 'Google sign-in failed ($code).';
+  }
+
+  @override
+  String get authGoogleSignInConfigError =>
+      'Google sign-in config error (SHA/package/Firebase config).';
+
+  @override
+  String get authNetworkErrorDuringGoogleSignIn =>
+      'Network error during Google sign-in.';
+
+  @override
+  String get authGoogleSignInCancelled => 'Google sign-in cancelled.';
+
+  @override
+  String get authGoogleSignInFailedTryAgain =>
+      'Google sign-in failed. Try again.';
+
+  @override
+  String get authWelcomeTitle => 'Welcome to BinderVault';
+
+  @override
+  String get authWelcomeSubtitle => 'Sign in with Google to sync your account.';
+
+  @override
+  String get authSignInWithGoogle => 'Sign in with Google';
+
+  @override
+  String get authContinueAsGuest => 'Continue as guest';
 }

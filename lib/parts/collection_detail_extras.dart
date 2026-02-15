@@ -166,6 +166,32 @@ Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) 
   );
 }
 
+Decoration _priceBadgeDecoration(BuildContext context, CollectionCardEntry entry) {
+  final base = Theme.of(context).colorScheme.surface;
+  final accents = _manaAccentColors(
+    _parseColorSet(entry.colors, entry.colorIdentity),
+  );
+  if (accents.isEmpty) {
+    return BoxDecoration(
+      color: Color.lerp(base, Colors.black, 0.08) ?? base,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0x4A5D4731)),
+    );
+  }
+  final tintStops = accents
+      .map((color) => Color.lerp(base, color, 0.35) ?? base)
+      .toList();
+  return BoxDecoration(
+    gradient: LinearGradient(
+      colors: tintStops.length == 1 ? [base, tintStops.first] : tintStops,
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    borderRadius: BorderRadius.circular(10),
+    border: Border.all(color: const Color(0x4A5D4731)),
+  );
+}
+
 Color _rarityColor(String raw) {
   switch (raw.trim().toLowerCase()) {
     case 'common':

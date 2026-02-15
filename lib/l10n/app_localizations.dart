@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_it.dart';
 
 // ignore_for_file: type=lint
 
@@ -92,7 +93,10 @@ abstract class AppLocalizations {
       ];
 
   /// A list of this localizations delegate's supported locales.
-  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('en'),
+    Locale('it'),
+  ];
 
   /// No description provided for @appTitle.
   ///
@@ -121,7 +125,7 @@ abstract class AppLocalizations {
   /// No description provided for @bulkAllPrintingsDescription.
   ///
   /// In en, this message translates to:
-  /// **'All printings and languages. Heaviest.'**
+  /// **'All printings (best for full scan coverage).'**
   String get bulkAllPrintingsDescription;
 
   /// No description provided for @bulkOracleCardsTitle.
@@ -133,7 +137,7 @@ abstract class AppLocalizations {
   /// No description provided for @bulkOracleCardsDescription.
   ///
   /// In en, this message translates to:
-  /// **'One entry per card. Fewer variants.'**
+  /// **'Oracle-level (not all printings/variants).'**
   String get bulkOracleCardsDescription;
 
   /// No description provided for @bulkUniqueArtworkTitle.
@@ -145,7 +149,7 @@ abstract class AppLocalizations {
   /// No description provided for @bulkUniqueArtworkDescription.
   ///
   /// In en, this message translates to:
-  /// **'One entry per artwork. Lightest.'**
+  /// **'One per artwork (not full print coverage).'**
   String get bulkUniqueArtworkDescription;
 
   /// No description provided for @gamePokemonDescription.
@@ -1575,6 +1579,486 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'View more results'**
   String get viewMoreResults;
+
+  /// No description provided for @priceSourceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Price source'**
+  String get priceSourceTitle;
+
+  /// No description provided for @dailySnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily snapshot'**
+  String get dailySnapshot;
+
+  /// No description provided for @unableToSignOutTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to sign out. Try again.'**
+  String get unableToSignOutTryAgain;
+
+  /// No description provided for @signOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get signOut;
+
+  /// No description provided for @guestLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest'**
+  String get guestLabel;
+
+  /// No description provided for @googleUserLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Google User'**
+  String get googleUserLabel;
+
+  /// No description provided for @localProfileLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Local profile'**
+  String get localProfileLabel;
+
+  /// No description provided for @signedInWithGoogle.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with Google'**
+  String get signedInWithGoogle;
+
+  /// No description provided for @profile.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get profile;
+
+  /// No description provided for @proCardSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock higher limits and upcoming premium features.'**
+  String get proCardSubtitle;
+
+  /// No description provided for @needMoreThanFreeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Need more than Free?'**
+  String get needMoreThanFreeTitle;
+
+  /// No description provided for @needMoreThanFreeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'See plans, compare limits, and choose the best option for your collection workflow.'**
+  String get needMoreThanFreeBody;
+
+  /// No description provided for @discoverPlus.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover Plus'**
+  String get discoverPlus;
+
+  /// No description provided for @pricesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Prices'**
+  String get pricesTitle;
+
+  /// No description provided for @pricesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Price data provider and visible currencies.'**
+  String get pricesSubtitle;
+
+  /// No description provided for @showPricesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Show prices'**
+  String get showPricesLabel;
+
+  /// No description provided for @scryfallDailySnapshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Scryfall daily snapshot'**
+  String get scryfallDailySnapshot;
+
+  /// No description provided for @availableCurrenciesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Available in app: EUR and USD (foil uses foil value when available).'**
+  String get availableCurrenciesHint;
+
+  /// No description provided for @appInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'App info'**
+  String get appInfo;
+
+  /// No description provided for @versionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get versionLabel;
+
+  /// No description provided for @addByNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'By name'**
+  String get addByNameTitle;
+
+  /// No description provided for @addByNameSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Search and add manually'**
+  String get addByNameSubtitle;
+
+  /// No description provided for @addByScanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'By scan'**
+  String get addByScanTitle;
+
+  /// No description provided for @addByScanSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Live OCR card recognition'**
+  String get addByScanSubtitle;
+
+  /// No description provided for @noCardTextRecognizedTryLightFocus.
+  ///
+  /// In en, this message translates to:
+  /// **'No card text recognized. Try better light and focus.'**
+  String get noCardTextRecognizedTryLightFocus;
+
+  /// No description provided for @dailyScanLimitReachedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily scan limit reached'**
+  String get dailyScanLimitReachedTitle;
+
+  /// No description provided for @freePlan20ScansUpgradePlusBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.'**
+  String get freePlan20ScansUpgradePlusBody;
+
+  /// No description provided for @allArtworks.
+  ///
+  /// In en, this message translates to:
+  /// **'All artworks'**
+  String get allArtworks;
+
+  /// No description provided for @ownedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Owned'**
+  String get ownedLabel;
+
+  /// No description provided for @searchingOnlinePrintings.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching online printings...'**
+  String get searchingOnlinePrintings;
+
+  /// No description provided for @addToCollection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to collection'**
+  String get addToCollection;
+
+  /// No description provided for @closePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Close preview'**
+  String get closePreview;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @addLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addLabel;
+
+  /// No description provided for @cardAddedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Card added'**
+  String get cardAddedTitle;
+
+  /// No description provided for @scanAnotherCardQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Do you want to scan another card?'**
+  String get scanAnotherCardQuestion;
+
+  /// No description provided for @no.
+  ///
+  /// In en, this message translates to:
+  /// **'No'**
+  String get no;
+
+  /// No description provided for @addViaScanTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add via scan'**
+  String get addViaScanTitle;
+
+  /// No description provided for @scanCardWithLiveOcrSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan a card with live OCR'**
+  String get scanCardWithLiveOcrSubtitle;
+
+  /// No description provided for @alignCardInFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Align the card in the frame.'**
+  String get alignCardInFrame;
+
+  /// No description provided for @cameraUnavailableCheckPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable. Check permissions.'**
+  String get cameraUnavailableCheckPermissions;
+
+  /// No description provided for @flashNotAvailableOnDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Flash is not available on this device.'**
+  String get flashNotAvailableOnDevice;
+
+  /// No description provided for @searchingCardTextStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching card text...'**
+  String get searchingCardTextStatus;
+
+  /// No description provided for @searchingCardNameStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching card name...'**
+  String get searchingCardNameStatus;
+
+  /// No description provided for @nameRecognizedOpeningSearchStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Name recognized. Opening search...'**
+  String get nameRecognizedOpeningSearchStatus;
+
+  /// No description provided for @ocrUnstableRetryingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'OCR unstable, retrying...'**
+  String get ocrUnstableRetryingStatus;
+
+  /// No description provided for @nameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get nameLabel;
+
+  /// No description provided for @waitingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get waitingStatus;
+
+  /// No description provided for @liveOcrActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Live OCR active'**
+  String get liveOcrActive;
+
+  /// No description provided for @uiLanguageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'UI language'**
+  String get uiLanguageTitle;
+
+  /// No description provided for @uiLanguageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the app interface language.'**
+  String get uiLanguageSubtitle;
+
+  /// No description provided for @plusPageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'BinderVault Plus'**
+  String get plusPageTitle;
+
+  /// No description provided for @plusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Plus active'**
+  String get plusActive;
+
+  /// No description provided for @upgradeToPlus.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to Plus'**
+  String get upgradeToPlus;
+
+  /// No description provided for @freePlanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get freePlanLabel;
+
+  /// No description provided for @plusPlanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Plus'**
+  String get plusPlanLabel;
+
+  /// No description provided for @dailyCardScansFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily card scans'**
+  String get dailyCardScansFeature;
+
+  /// No description provided for @collectionsFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Collections'**
+  String get collectionsFeature;
+
+  /// No description provided for @cardSearchAddFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Card search and add'**
+  String get cardSearchAddFeature;
+
+  /// No description provided for @advancedFiltersFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced filters'**
+  String get advancedFiltersFeature;
+
+  /// No description provided for @scansPerDay.
+  ///
+  /// In en, this message translates to:
+  /// **'{count}/day'**
+  String scansPerDay(int count);
+
+  /// No description provided for @unlimitedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get unlimitedLabel;
+
+  /// No description provided for @monthlyPlanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get monthlyPlanLabel;
+
+  /// No description provided for @yearlyPlanLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get yearlyPlanLabel;
+
+  /// No description provided for @oneMonthLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'1 month'**
+  String get oneMonthLabel;
+
+  /// No description provided for @twelveMonthsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'12 months'**
+  String get twelveMonthsLabel;
+
+  /// No description provided for @alreadySubscribedRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Already subscribed? Restore'**
+  String get alreadySubscribedRestore;
+
+  /// No description provided for @previewBillingNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview screen: real billing flow will be integrated next.'**
+  String get previewBillingNotice;
+
+  /// No description provided for @planSelectedPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'{plan} plan selected. Billing will be enabled in a next step.'**
+  String planSelectedPreview(Object plan);
+
+  /// No description provided for @authNetworkErrorDuringSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error during sign-in. Check connection and retry.'**
+  String get authNetworkErrorDuringSignIn;
+
+  /// No description provided for @authInvalidGoogleCredential.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid Google credential. Try again.'**
+  String get authInvalidGoogleCredential;
+
+  /// No description provided for @authGoogleSignInFailedWithCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Google sign-in failed ({code}).'**
+  String authGoogleSignInFailedWithCode(Object code);
+
+  /// No description provided for @authGoogleSignInConfigError.
+  ///
+  /// In en, this message translates to:
+  /// **'Google sign-in config error (SHA/package/Firebase config).'**
+  String get authGoogleSignInConfigError;
+
+  /// No description provided for @authNetworkErrorDuringGoogleSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Network error during Google sign-in.'**
+  String get authNetworkErrorDuringGoogleSignIn;
+
+  /// No description provided for @authGoogleSignInCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Google sign-in cancelled.'**
+  String get authGoogleSignInCancelled;
+
+  /// No description provided for @authGoogleSignInFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Google sign-in failed. Try again.'**
+  String get authGoogleSignInFailedTryAgain;
+
+  /// No description provided for @authWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to BinderVault'**
+  String get authWelcomeTitle;
+
+  /// No description provided for @authWelcomeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Google to sync your account.'**
+  String get authWelcomeSubtitle;
+
+  /// No description provided for @authSignInWithGoogle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with Google'**
+  String get authSignInWithGoogle;
+
+  /// No description provided for @authContinueAsGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue as guest'**
+  String get authContinueAsGuest;
 }
 
 class _AppLocalizationsDelegate
@@ -1588,7 +2072,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en'].contains(locale.languageCode);
+      <String>['en', 'it'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -1599,6 +2083,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'it':
+      return AppLocalizationsIt();
   }
 
   throw FlutterError(

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
 import '../models.dart';
+import '../services/price_provider.dart';
 
 part 'app_database.g.dart';
 
@@ -37,6 +38,13 @@ class Cards extends Table {
   TextColumn get imageUris => text().nullable()();
   TextColumn get cardFaces => text().nullable()();
   TextColumn get cardJson => text().nullable()();
+  TextColumn get priceUsd => text().nullable()();
+  TextColumn get priceUsdFoil => text().nullable()();
+  TextColumn get priceUsdEtched => text().nullable()();
+  TextColumn get priceEur => text().nullable()();
+  TextColumn get priceEurFoil => text().nullable()();
+  TextColumn get priceTix => text().nullable()();
+  IntColumn get pricesUpdatedAt => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -81,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -137,6 +145,29 @@ class AppDatabase extends _$AppDatabase {
               'ALTER TABLE cards ADD COLUMN loyalty TEXT',
             );
           }
+          if (from < 4) {
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_usd TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_usd_foil TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_usd_etched TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_eur TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_eur_foil TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN price_tix TEXT',
+            );
+            await customStatement(
+              'ALTER TABLE cards ADD COLUMN prices_updated_at INTEGER',
+            );
+          }
         },
         beforeOpen: (details) async {},
       );
@@ -170,6 +201,16 @@ class _FilterQuery {
 
   final List<String> whereClauses;
   final List<Variable> variables;
+}
+
+class CardPriceSnapshot {
+  const CardPriceSnapshot({
+    required this.cardId,
+    required this.pricesUpdatedAt,
+  });
+
+  final String cardId;
+  final int? pricesUpdatedAt;
 }
 
 class ScryfallDatabase {
@@ -219,13 +260,13 @@ class ScryfallDatabase {
   Future<void> hardReset() async {
     await close();
     final prefs = await SharedPreferences.getInstance();
-    final directory = await getApplicationDocumentsDirectory();
-    final dbFile = File(path.join(directory.path, 'scryfall.db'));
-    if (await dbFile.exists()) {
-      await dbFile.delete();
-    }
+    await prefs.setBool(_prefsKeyRegenerated, true);
+    final db = await open();
+    await db.transaction(() async {
+      await deleteAllCards(db);
+    });
+    await db.rebuildFts();
     await prefs.remove(_prefsKeyAvailableLanguages);
-    await prefs.setBool(_prefsKeyRegenerated, false);
   }
 
   Future<void> _ensureRegenerated() async {
@@ -234,12 +275,7 @@ class ScryfallDatabase {
     if (regenerated) {
       return;
     }
-    final directory = await getApplicationDocumentsDirectory();
-    final dbFile = File(path.join(directory.path, 'scryfall.db'));
-    if (await dbFile.exists()) {
-      await dbFile.delete();
-    }
-    await prefs.remove(_prefsKeyAvailableLanguages);
+    // Legacy safety flag migration: never delete the full DB here.
     await prefs.setBool(_prefsKeyRegenerated, true);
   }
 
@@ -547,6 +583,13 @@ class ScryfallDatabase {
         cards.loyalty AS loyalty,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_usd_etched AS price_usd_etched,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.price_tix AS price_tix,
+        cards.prices_updated_at AS prices_updated_at,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM collection_cards
@@ -593,6 +636,13 @@ class ScryfallDatabase {
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceUsdEtched: _readOptionalPrice(row, 'price_usd_etched'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+            priceTix: _readOptionalPrice(row, 'price_tix'),
+            pricesUpdatedAt: row.readNullable<int>('prices_updated_at'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -750,6 +800,13 @@ class ScryfallDatabase {
         cards.loyalty AS loyalty,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_usd_etched AS price_usd_etched,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.price_tix AS price_tix,
+        cards.prices_updated_at AS prices_updated_at,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -798,6 +855,13 @@ class ScryfallDatabase {
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceUsdEtched: _readOptionalPrice(row, 'price_usd_etched'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+            priceTix: _readOptionalPrice(row, 'price_tix'),
+            pricesUpdatedAt: row.readNullable<int>('prices_updated_at'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -873,6 +937,13 @@ class ScryfallDatabase {
         cards.loyalty AS loyalty,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_usd_etched AS price_usd_etched,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.price_tix AS price_tix,
+        cards.prices_updated_at AS prices_updated_at,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -921,6 +992,13 @@ class ScryfallDatabase {
             quantity: row.read<int>('quantity'),
             foil: row.read<int>('foil') == 1,
             altArt: row.read<int>('alt_art') == 1,
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceUsdEtched: _readOptionalPrice(row, 'price_usd_etched'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+            priceTix: _readOptionalPrice(row, 'price_tix'),
+            pricesUpdatedAt: row.readNullable<int>('prices_updated_at'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -1081,6 +1159,10 @@ class ScryfallDatabase {
         cards.type_line AS type_line,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -1111,6 +1193,10 @@ class ScryfallDatabase {
             typeLine: row.readNullable<String>('type_line') ?? '',
             colors: row.readNullable<String>('colors') ?? '',
             colorIdentity: row.readNullable<String>('color_identity') ?? '',
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -1312,6 +1398,13 @@ class ScryfallDatabase {
         cards.loyalty AS loyalty,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_usd_etched AS price_usd_etched,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.price_tix AS price_tix,
+        cards.prices_updated_at AS prices_updated_at,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -1354,11 +1447,68 @@ class ScryfallDatabase {
       quantity: row.read<int>('quantity'),
       foil: row.read<int>('foil') == 1,
       altArt: row.read<int>('alt_art') == 1,
+      priceUsd: _readOptionalPrice(row, 'price_usd'),
+      priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+      priceUsdEtched: _readOptionalPrice(row, 'price_usd_etched'),
+      priceEur: _readOptionalPrice(row, 'price_eur'),
+      priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+      priceTix: _readOptionalPrice(row, 'price_tix'),
+      pricesUpdatedAt: row.readNullable<int>('prices_updated_at'),
       imageUri: _extractImageUrl(
         row.readNullable<String>('image_uris'),
         row.readNullable<String>('card_faces'),
       ),
     );
+  }
+
+  Future<CardPriceSnapshot?> fetchCardPriceSnapshot(String cardId) async {
+    final normalizedId = cardId.trim();
+    if (normalizedId.isEmpty) {
+      return null;
+    }
+    final db = await open();
+    final row = await db.customSelect(
+      '''
+      SELECT id AS card_id, prices_updated_at AS prices_updated_at
+      FROM cards
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      variables: [Variable.withString(normalizedId)],
+    ).getSingleOrNull();
+    if (row == null) {
+      return null;
+    }
+    return CardPriceSnapshot(
+      cardId: row.read<String>('card_id'),
+      pricesUpdatedAt: row.readNullable<int>('prices_updated_at'),
+    );
+  }
+
+  Future<void> updateCardPrices(
+    String cardId,
+    CardPrices prices, {
+    required int updatedAt,
+  }) async {
+    final normalizedId = cardId.trim();
+    if (normalizedId.isEmpty) {
+      return;
+    }
+    final db = await open();
+    await db.transaction(() async {
+      await (db.update(db.cards)..where((tbl) => tbl.id.equals(normalizedId)))
+          .write(
+        CardsCompanion(
+          priceUsd: Value(prices.usd),
+          priceUsdFoil: Value(prices.usdFoil),
+          priceUsdEtched: Value(prices.usdEtched),
+          priceEur: Value(prices.eur),
+          priceEurFoil: Value(prices.eurFoil),
+          priceTix: Value(prices.tix),
+          pricesUpdatedAt: Value(updatedAt),
+        ),
+      );
+    });
   }
 
   Future<Map<String, List<int>>> fetchCollectionIdsForCardIds(
@@ -1596,6 +1746,10 @@ class ScryfallDatabase {
         cards.type_line AS type_line,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards_fts
@@ -1628,6 +1782,10 @@ class ScryfallDatabase {
               typeLine: row.readNullable<String>('type_line') ?? '',
               colors: row.readNullable<String>('colors') ?? '',
               colorIdentity: row.readNullable<String>('color_identity') ?? '',
+              priceUsd: _readOptionalPrice(row, 'price_usd'),
+              priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+              priceEur: _readOptionalPrice(row, 'price_eur'),
+              priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
               imageUri: _extractImageUrl(
                 row.readNullable<String>('image_uris'),
                 row.readNullable<String>('card_faces'),
@@ -1666,6 +1824,10 @@ class ScryfallDatabase {
         cards.type_line AS type_line,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -1695,6 +1857,10 @@ class ScryfallDatabase {
             typeLine: row.readNullable<String>('type_line') ?? '',
             colors: row.readNullable<String>('colors') ?? '',
             colorIdentity: row.readNullable<String>('color_identity') ?? '',
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -1798,6 +1964,10 @@ class ScryfallDatabase {
         cards.type_line AS type_line,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -1829,6 +1999,10 @@ class ScryfallDatabase {
             typeLine: row.readNullable<String>('type_line') ?? '',
             colors: row.readNullable<String>('colors') ?? '',
             colorIdentity: row.readNullable<String>('color_identity') ?? '',
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -1890,6 +2064,10 @@ class ScryfallDatabase {
         cards.type_line AS type_line,
         cards.colors AS colors,
         cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
       FROM cards
@@ -1921,6 +2099,10 @@ class ScryfallDatabase {
             typeLine: row.readNullable<String>('type_line') ?? '',
             colors: row.readNullable<String>('colors') ?? '',
             colorIdentity: row.readNullable<String>('color_identity') ?? '',
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
             imageUri: _extractImageUrl(
               row.readNullable<String>('image_uris'),
               row.readNullable<String>('card_faces'),
@@ -1961,6 +2143,7 @@ class ScryfallDatabase {
   CardsCompanion _mapCardCompanion(Map<String, dynamic> card) {
     final colors = _extractColorList(card, 'colors');
     final colorIdentity = _extractColorList(card, 'color_identity');
+    final prices = _extractPrices(card);
     return CardsCompanion.insert(
       id: card['id'] as String? ?? '',
       name: card['name'] as String? ?? '',
@@ -1984,6 +2167,17 @@ class ScryfallDatabase {
       releasedAt: Value(card['released_at'] as String?),
       imageUris: Value(_encodeJsonField(card['image_uris'])),
       cardFaces: Value(_encodeJsonField(card['card_faces'])),
+      priceUsd: Value(prices?.usd),
+      priceUsdFoil: Value(prices?.usdFoil),
+      priceUsdEtched: Value(prices?.usdEtched),
+      priceEur: Value(prices?.eur),
+      priceEurFoil: Value(prices?.eurFoil),
+      priceTix: Value(prices?.tix),
+      pricesUpdatedAt: Value(
+        prices?.hasAnyValue == true
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
+      ),
       cardJson: const Value(null),
     );
   }
@@ -2015,6 +2209,40 @@ String? _encodeJsonField(dynamic value) {
     return value;
   }
   return jsonEncode(value);
+}
+
+String? _readOptionalPrice(QueryRow row, String column) {
+  final value = row.readNullable<String>(column)?.trim();
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return value;
+}
+
+CardPrices? _extractPrices(Map<String, dynamic> card) {
+  final prices = card['prices'];
+  if (prices is! Map<String, dynamic>) {
+    return null;
+  }
+  return CardPrices(
+    usd: _asPriceString(prices['usd']),
+    usdFoil: _asPriceString(prices['usd_foil']),
+    usdEtched: _asPriceString(prices['usd_etched']),
+    eur: _asPriceString(prices['eur']),
+    eurFoil: _asPriceString(prices['eur_foil']),
+    tix: _asPriceString(prices['tix']),
+  );
+}
+
+String? _asPriceString(dynamic value) {
+  if (value is! String) {
+    return null;
+  }
+  final normalized = value.trim();
+  if (normalized.isEmpty) {
+    return null;
+  }
+  return normalized;
 }
 
 List<String> _extractColorList(Map<String, dynamic> card, String key) {
