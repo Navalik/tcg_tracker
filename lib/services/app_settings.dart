@@ -16,6 +16,8 @@ class AppSettings {
   static const _prefsKeyProUnlocked = 'pro_unlocked';
   static const _prefsKeyFreeScanDate = 'free_scan_date';
   static const _prefsKeyFreeScanCount = 'free_scan_count';
+  static const _prefsKeyFreeScanLastSeenEpochMs = 'free_scan_last_seen_epoch_ms';
+  static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
 
   static const List<String> languageCodes = [
     'en',
@@ -167,8 +169,7 @@ class AppSettings {
     if (stored == 'free') {
       return 'free';
     }
-    final legacyPro = prefs.getBool(_prefsKeyProUnlocked) ?? false;
-    final fallback = legacyPro ? 'plus' : 'free';
+    const fallback = 'free';
     await prefs.setString(_prefsKeyUserTier, fallback);
     return fallback;
   }
@@ -207,8 +208,33 @@ class AppSettings {
     return '$yyyy-$mm-$dd';
   }
 
+  static Future<bool> _detectClockRollback(
+    SharedPreferences prefs, {
+    DateTime? now,
+  }) async {
+    final currentMs = (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch;
+    final lastSeenMs = prefs.getInt(_prefsKeyFreeScanLastSeenEpochMs);
+    final alreadyTampered = prefs.getBool(_prefsKeyFreeScanClockTampered) ?? false;
+
+    // Small tolerance to avoid false positives due to skew.
+    const rollbackToleranceMs = 5 * 60 * 1000;
+    final rollbackDetected = lastSeenMs != null && currentMs + rollbackToleranceMs < lastSeenMs;
+    final tampered = alreadyTampered || rollbackDetected;
+
+    if (tampered != alreadyTampered) {
+      await prefs.setBool(_prefsKeyFreeScanClockTampered, tampered);
+    }
+    if (lastSeenMs == null || currentMs > lastSeenMs) {
+      await prefs.setInt(_prefsKeyFreeScanLastSeenEpochMs, currentMs);
+    }
+    return tampered;
+  }
+
   static Future<int> loadTodayFreeScans({DateTime? now}) async {
     final prefs = await SharedPreferences.getInstance();
+    if (await _detectClockRollback(prefs, now: now)) {
+      return 999999;
+    }
     final today = _todayKey(now);
     final storedDate = prefs.getString(_prefsKeyFreeScanDate);
     if (storedDate != today) {
@@ -233,6 +259,9 @@ class AppSettings {
     DateTime? now,
   }) async {
     final prefs = await SharedPreferences.getInstance();
+    if (await _detectClockRollback(prefs, now: now)) {
+      return false;
+    }
     final today = _todayKey(now);
     final storedDate = prefs.getString(_prefsKeyFreeScanDate);
     var used = prefs.getInt(_prefsKeyFreeScanCount) ?? 0;
@@ -263,6 +292,8 @@ class AppSettings {
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
+    await prefs.remove(_prefsKeyFreeScanLastSeenEpochMs);
+    await prefs.remove(_prefsKeyFreeScanClockTampered);
   }
 
   static Future<CollectionViewMode> loadCollectionViewMode() async {

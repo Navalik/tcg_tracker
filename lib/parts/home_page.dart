@@ -551,10 +551,37 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (_bulkDownloadUri == null) {
       return;
     }
+    if (!_isAllowedBulkDownloadUri(_bulkDownloadUri!)) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bulkDownloadError = AppLocalizations.of(context)!.downloadFailedGeneric;
+      });
+      return;
+    }
     if (!_cardsMissing && !_bulkUpdateAvailable) {
       return;
     }
     await _downloadBulkFile(_bulkDownloadUri!);
+  }
+
+  bool _isAllowedBulkDownloadUri(String rawUri) {
+    final uri = Uri.tryParse(rawUri.trim());
+    if (uri == null) {
+      return false;
+    }
+    if (uri.scheme.toLowerCase() != 'https') {
+      return false;
+    }
+    if (uri.userInfo.isNotEmpty || uri.host.trim().isEmpty) {
+      return false;
+    }
+    final host = uri.host.toLowerCase();
+    return host == 'api.scryfall.com' ||
+        host == 'data.scryfall.io' ||
+        host.endsWith('.scryfall.com') ||
+        host.endsWith('.scryfall.io');
   }
 
   Future<void> _addCollection(BuildContext context) async {
@@ -636,13 +663,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         type: CollectionType.custom,
         filter: filter,
       );
-    } catch (error) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
       showAppSnackBar(
         context,
-        AppLocalizations.of(context)!.failedToAddCollection(error.toString()),
+        AppLocalizations.of(context)!.failedToAddCollection('operation_failed'),
       );
       return;
     }
@@ -767,13 +794,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         type: CollectionType.set,
         filter: filter,
       );
-    } catch (error) {
+    } catch (_) {
       if (!context.mounted) {
         return;
       }
       showAppSnackBar(
         context,
-        AppLocalizations.of(context)!.failedToAddCollection(error.toString()),
+        AppLocalizations.of(context)!.failedToAddCollection('operation_failed'),
       );
       return;
     }
@@ -2300,6 +2327,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _downloadBulkFile(String downloadUri) async {
+    if (!_isAllowedBulkDownloadUri(downloadUri)) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bulkDownloadError = AppLocalizations.of(context)!.downloadFailedGeneric;
+      });
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.downloadFailedGeneric,
+      );
+      return;
+    }
     final bulkType = _selectedBulkType;
     if (bulkType == null) {
       return;
@@ -2444,7 +2484,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         context,
         AppLocalizations.of(context)!.importComplete,
       );
-    } catch (error) {
+    } catch (_) {
       if (!mounted) {
         return;
       }
@@ -2453,7 +2493,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       });
       showAppSnackBar(
         context,
-        AppLocalizations.of(context)!.importFailed(error.toString()),
+        AppLocalizations.of(context)!.importFailed('import_failed'),
       );
     }
   }

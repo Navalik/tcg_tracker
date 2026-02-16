@@ -37,6 +37,10 @@ class PurchaseManager extends ChangeNotifier {
   static const String plusProductId = 'bindervault_plus';
   static const String _billingMonthlyPeriod = 'P1M';
   static const String _billingYearlyPeriod = 'P1Y';
+  static const bool _requireServerEntitlementVerification = bool.fromEnvironment(
+    'REQUIRE_SERVER_ENTITLEMENT_VERIFICATION',
+    defaultValue: false,
+  );
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -69,7 +73,11 @@ class PurchaseManager extends ChangeNotifier {
     if (_initialized) {
       return;
     }
-    _userTier = _tierFromStored(await AppSettings.loadUserTier());
+    // On store-supported platforms entitlement must come from store state,
+    // not from locally editable preferences.
+    _userTier = _supportsStore()
+        ? UserTier.free
+        : _tierFromStored(await AppSettings.loadUserTier());
     _ownedTcgs = await AppSettings.loadOwnedTcgs();
 
     if (_supportsStore()) {
@@ -109,7 +117,7 @@ class PurchaseManager extends ChangeNotifier {
       }
       final response = await _inAppPurchase.queryProductDetails({plusProductId});
       if (response.error != null) {
-        _lastError = response.error!.message;
+        _lastError = 'plans_unavailable';
         _monthlyPlan = null;
         _yearlyPlan = null;
       } else {
@@ -118,8 +126,8 @@ class PurchaseManager extends ChangeNotifier {
           _lastError = 'plans_unavailable';
         }
       }
-    } catch (error) {
-      _lastError = error.toString();
+    } catch (_) {
+      _lastError = 'catalog_load_failed';
       _monthlyPlan = null;
       _yearlyPlan = null;
     } finally {
@@ -155,8 +163,8 @@ class PurchaseManager extends ChangeNotifier {
         param = PurchaseParam(productDetails: selected.productDetails);
       }
       await _inAppPurchase.buyNonConsumable(purchaseParam: param);
-    } catch (error) {
-      _lastError = error.toString();
+    } catch (_) {
+      _lastError = 'purchase_start_failed';
       _purchasePending = false;
       notifyListeners();
     }
@@ -172,8 +180,8 @@ class PurchaseManager extends ChangeNotifier {
     try {
       await _inAppPurchase.restorePurchases();
       await refreshEntitlementFromStore();
-    } catch (error) {
-      _lastError = error.toString();
+    } catch (_) {
+      _lastError = 'restore_failed';
     } finally {
       _restoringPurchases = false;
       notifyListeners();
@@ -197,9 +205,17 @@ class PurchaseManager extends ChangeNotifier {
           break;
         }
       }
+      if (plusActive && _requireServerEntitlementVerification) {
+        plusActive = await _verifyReceiptWithServer(response.pastPurchases);
+        if (!plusActive) {
+          _lastError = 'server_entitlement_unverified';
+        }
+      }
       await _setTier(plusActive ? UserTier.plus : UserTier.free);
     } catch (_) {
-      // Keep local entitlement when store-side query is unavailable.
+      _lastError = 'entitlement_refresh_failed';
+      await _setTier(UserTier.free);
+      notifyListeners();
     }
   }
 
@@ -219,7 +235,7 @@ class PurchaseManager extends ChangeNotifier {
       }
 
       if (purchase.status == PurchaseStatus.error) {
-        _lastError = purchase.error?.message ?? purchase.error?.code;
+        _lastError = 'purchase_failed';
         _purchasePending = false;
         notifyListeners();
       }
@@ -231,7 +247,10 @@ class PurchaseManager extends ChangeNotifier {
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        await _setTier(UserTier.plus);
+        await refreshEntitlementFromStore();
+        if (_userTier != UserTier.plus) {
+          _lastError = 'entitlement_verification_failed';
+        }
         _purchasePending = false;
         notifyListeners();
       }
@@ -357,6 +376,12 @@ class PurchaseManager extends ChangeNotifier {
     _userTier = tier;
     await AppSettings.saveUserTier(_tierToStorage(tier));
     notifyListeners();
+  }
+
+  Future<bool> _verifyReceiptWithServer(List<PurchaseDetails> purchases) async {
+    // Hook for Firebase/Cloud Functions receipt validation.
+    // Intentionally disabled unless REQUIRE_SERVER_ENTITLEMENT_VERIFICATION=true.
+    return false;
   }
 
   Future<void> setOwnedTcgs(Set<String> values) async {

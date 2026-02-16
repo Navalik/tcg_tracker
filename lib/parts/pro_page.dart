@@ -24,10 +24,18 @@ class _ProPageState extends State<ProPage> {
     if (error == 'store_unavailable') {
       return l10n.billingStoreUnavailable;
     }
-    if (error == 'plans_unavailable' || error == 'missing_offer_token') {
+    if (error == 'plans_unavailable' ||
+        error == 'missing_offer_token' ||
+        error == 'catalog_load_failed' ||
+        error == 'purchase_start_failed' ||
+        error == 'purchase_failed' ||
+        error == 'restore_failed' ||
+        error == 'entitlement_refresh_failed' ||
+        error == 'entitlement_verification_failed' ||
+        error == 'server_entitlement_unverified') {
       return l10n.billingPlansUnavailable;
     }
-    return error;
+    return l10n.billingPlansUnavailable;
   }
 
   Widget _buildPlanCell({

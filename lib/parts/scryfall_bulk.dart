@@ -2,6 +2,27 @@ part of 'package:tcg_tracker/main.dart';
 
 typedef ImportProgressCallback = void Function(int count, double progress);
 
+bool _isAllowedScryfallDownloadUri(String? rawUri) {
+  if (rawUri == null || rawUri.trim().isEmpty) {
+    return false;
+  }
+  final uri = Uri.tryParse(rawUri.trim());
+  if (uri == null) {
+    return false;
+  }
+  if (uri.scheme.toLowerCase() != 'https') {
+    return false;
+  }
+  if (uri.userInfo.isNotEmpty || uri.host.trim().isEmpty) {
+    return false;
+  }
+  final host = uri.host.toLowerCase();
+  return host == 'api.scryfall.com' ||
+      host == 'data.scryfall.io' ||
+      host.endsWith('.scryfall.com') ||
+      host.endsWith('.scryfall.io');
+}
+
 class ScryfallBulkImporter {
   static const _batchSize = 200;
 
@@ -223,10 +244,10 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
       'type': 'done',
       'count': count,
     });
-  } catch (error) {
+  } catch (_) {
     config.sendPort.send({
       'type': 'error',
-      'message': error.toString(),
+      'message': 'parse_failed',
     });
   }
 }
@@ -282,7 +303,10 @@ class ScryfallBulkChecker {
       }
 
       final updatedAtRaw = entry['updated_at'] as String?;
-      final downloadUri = entry['download_uri'] as String?;
+      final downloadUriRaw = entry['download_uri'] as String?;
+      final downloadUri = _isAllowedScryfallDownloadUri(downloadUriRaw)
+          ? downloadUriRaw
+          : null;
       final updatedAt =
           updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw) : null;
 

@@ -295,9 +295,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       });
       _refreshListPrices(cards);
       _maybePrefetchIfShort();
-    } catch (error, stackTrace) {
-      debugPrint('CollectionDetailPage _loadMoreCards failed: $error');
-      debugPrint('$stackTrace');
+    } catch (_) {
+      debugPrint('CollectionDetailPage _loadMoreCards failed');
       if (!mounted) {
         return;
       }

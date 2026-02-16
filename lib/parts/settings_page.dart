@@ -18,6 +18,36 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
 
+  String _googleSignInErrorMessage(Object error) {
+    final l10n = AppLocalizations.of(context)!;
+    if (error is FirebaseAuthException) {
+      if (error.code == 'network-request-failed') {
+        return l10n.authNetworkErrorDuringSignIn;
+      }
+      if (error.code == 'invalid-credential') {
+        return l10n.authInvalidGoogleCredential;
+      }
+      return l10n.authGoogleSignInFailedWithCode(error.code);
+    }
+    if (error is PlatformException) {
+      final code = error.code.toLowerCase();
+      final message = (error.message ?? '').toLowerCase();
+      final details = '${error.details ?? ''}'.toLowerCase();
+      final blob = '$code $message $details';
+      if (blob.contains('10') || blob.contains('developer_error')) {
+        return l10n.authGoogleSignInConfigError;
+      }
+      if (blob.contains('network_error')) {
+        return l10n.authNetworkErrorDuringGoogleSignIn;
+      }
+      if (blob.contains('sign_in_canceled') || blob.contains('cancel')) {
+        return l10n.authGoogleSignInCancelled;
+      }
+      return l10n.authGoogleSignInFailedWithCode(error.code);
+    }
+    return l10n.authGoogleSignInFailedTryAgain;
+  }
+
   List<Widget> _maybeWidget(Widget? widget) {
     if (widget == null) {
       return const <Widget>[];
@@ -294,9 +324,8 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
-      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.authGoogleSignInFailedTryAgain)),
+        SnackBar(content: Text(_googleSignInErrorMessage(error))),
       );
     }
   }
