@@ -78,6 +78,8 @@ Future<String?> _showBulkTypePicker(
   BuildContext context, {
   required bool allowCancel,
   String? selectedType,
+  bool requireConfirmation = true,
+  String? confirmLabel,
 }) {
   return showDialog<String>(
     context: context,
@@ -85,79 +87,116 @@ Future<String?> _showBulkTypePicker(
     builder: (context) {
       final l10n = AppLocalizations.of(context)!;
       final theme = Theme.of(context);
-      return Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF171411),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF3A2F24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 22,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.storage_rounded, color: Color(0xFFE9C46A)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      l10n.chooseCardDatabaseTitle,
-                      style: theme.textTheme.titleMedium,
-                    ),
+      String currentSelection =
+          selectedType ?? (_bulkOptions.isNotEmpty ? _bulkOptions.first.type : '');
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF171411),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF3A2F24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              Text(
-                l10n.cardDatabaseSubtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFFBFAE95),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Flexible(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: _bulkOptions
-                        .map(
-                          (option) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildBulkOptionTile(
-                              context: context,
-                              l10n: l10n,
-                              option: option,
-                              selected: option.type == selectedType,
-                              onTap: () =>
-                                  Navigator.of(context).pop(option.type),
-                            ),
-                          ),
-                        )
-                        .toList(),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.storage_rounded,
+                        color: Color(0xFFE9C46A),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          l10n.chooseCardDatabaseTitle,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ),
-              if (allowCancel)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: Text(l10n.cancel),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.cardDatabaseSubtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFFBFAE95),
+                    ),
                   ),
-                ),
-            ],
-          ),
-        ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: _bulkOptions
+                            .map(
+                              (option) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildBulkOptionTile(
+                                  context: context,
+                                  l10n: l10n,
+                                  option: option,
+                                  selected: option.type == currentSelection,
+                                  onTap: () {
+                                    setModalState(() {
+                                      currentSelection = option.type;
+                                    });
+                                    if (!requireConfirmation) {
+                                      Navigator.of(context).pop(option.type);
+                                    }
+                                  },
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ),
+                  if (requireConfirmation) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE9C46A),
+                          foregroundColor: const Color(0xFF1C1510),
+                        ),
+                        onPressed: currentSelection.isEmpty
+                            ? null
+                            : () => Navigator.of(context).pop(currentSelection),
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: Text(confirmLabel ?? l10n.downloadUpdate),
+                      ),
+                    ),
+                  ],
+                  if (allowCancel) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(l10n.cancel),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
       );
     },
   );

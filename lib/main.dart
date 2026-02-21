@@ -17,6 +17,7 @@ import 'package:http/http.dart' as http;
 import 'package:in_app_update/in_app_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'l10n/app_localizations.dart';
@@ -24,6 +25,8 @@ import 'l10n/app_localizations.dart';
 import 'db/app_database.dart';
 import 'models.dart';
 import 'services/app_settings.dart';
+import 'services/analytics_service.dart';
+import 'services/local_backup_service.dart';
 import 'services/price_repository.dart';
 import 'services/purchase_manager.dart';
 import 'services/scryfall_api_client.dart';
@@ -39,16 +42,26 @@ part 'parts/bulk_helpers.dart';
 part 'parts/scryfall_bulk.dart';
 part 'parts/ui_helpers.dart';
 
+bool _firebaseReady = false;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (Platform.isAndroid || Platform.isIOS) {
-    await Firebase.initializeApp();
+    try {
+      await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+      _firebaseReady = true;
+      await AnalyticsService.instance.init().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      _firebaseReady = false;
+    }
   }
   runApp(const TCGTracker());
 }
 
-final ValueNotifier<Locale> _appLocaleNotifier =
-    ValueNotifier<Locale>(const Locale('en'));
+final ValueNotifier<Locale> _appLocaleNotifier = ValueNotifier<Locale>(
+  const Locale('en'),
+);
+final ValueNotifier<int> _collectionsRefreshNotifier = ValueNotifier<int>(0);
 
 class TCGTracker extends StatefulWidget {
   const TCGTracker({super.key});
@@ -157,7 +170,8 @@ class _AuthGateState extends State<_AuthGate> {
   bool _continueAsGuest = false;
   bool _isSigningIn = false;
 
-  bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
+  bool get _supportsFirebaseAuth =>
+      (Platform.isAndroid || Platform.isIOS) && _firebaseReady;
 
   String _googleSignInErrorMessage(Object error) {
     final l10n = AppLocalizations.of(context)!;
@@ -211,9 +225,9 @@ class _AuthGateState extends State<_AuthGate> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_googleSignInErrorMessage(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_googleSignInErrorMessage(error))));
     } finally {
       if (mounted) {
         setState(() {
@@ -254,7 +268,9 @@ class _AuthGateState extends State<_AuthGate> {
                       child: Container(
                         padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF171411).withValues(alpha: 0.92),
+                          color: const Color(
+                            0xFF171411,
+                          ).withValues(alpha: 0.92),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: const Color(0xFF3A2D20)),
                           boxShadow: const [
@@ -284,13 +300,14 @@ class _AuthGateState extends State<_AuthGate> {
                             Text(
                               l10n.authWelcomeSubtitle,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: const Color(0xFFBFAE95),
-                              ),
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(color: const Color(0xFFBFAE95)),
                             ),
                             const SizedBox(height: 20),
                             FilledButton.icon(
-                              onPressed: _isSigningIn ? null : _signInWithGoogle,
+                              onPressed: _isSigningIn
+                                  ? null
+                                  : _signInWithGoogle,
                               style: FilledButton.styleFrom(
                                 backgroundColor: const Color(0xFFC9A043),
                                 foregroundColor: const Color(0xFF1C1510),
@@ -315,11 +332,14 @@ class _AuthGateState extends State<_AuthGate> {
                             OutlinedButton(
                               onPressed: _isSigningIn
                                   ? null
-                                  : () => setState(() => _continueAsGuest = true),
+                                  : () =>
+                                        setState(() => _continueAsGuest = true),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFFEFE7D8),
                                 minimumSize: const Size.fromHeight(46),
-                                side: const BorderSide(color: Color(0xFF5D4731)),
+                                side: const BorderSide(
+                                  color: Color(0xFF5D4731),
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),

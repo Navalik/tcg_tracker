@@ -431,7 +431,7 @@ abstract class AppLocalizations {
   /// No description provided for @unlockProRemoveLimit.
   ///
   /// In en, this message translates to:
-  /// **'Unlock Pro to remove the 5-collection limit.'**
+  /// **'Unlock Pro to remove the 7-collection limit.'**
   String get unlockProRemoveLimit;
 
   /// No description provided for @priceLabel.
@@ -713,7 +713,7 @@ abstract class AppLocalizations {
   /// No description provided for @addCollection.
   ///
   /// In en, this message translates to:
-  /// **'Add a collection'**
+  /// **'Add collection/set'**
   String get addCollection;
 
   /// No description provided for @addCollectionSubtitle.
@@ -721,6 +721,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Create set-based or custom.'**
   String get addCollectionSubtitle;
+
+  /// No description provided for @addWishlist.
+  ///
+  /// In en, this message translates to:
+  /// **'Add wishlist'**
+  String get addWishlist;
+
+  /// No description provided for @addWishlistSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a wishlist for missing cards.'**
+  String get addWishlistSubtitle;
 
   /// No description provided for @chooseCollection.
   ///
@@ -794,6 +806,48 @@ abstract class AppLocalizations {
   /// **'Tap to create your first collection.'**
   String get buildYourCollectionsSubtitle;
 
+  /// No description provided for @createYourCustomCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your custom collection'**
+  String get createYourCustomCollectionTitle;
+
+  /// No description provided for @createYourCustomCollectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add cards manually.'**
+  String get createYourCustomCollectionSubtitle;
+
+  /// No description provided for @createYourSetCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your set collection'**
+  String get createYourSetCollectionTitle;
+
+  /// No description provided for @createYourSetCollectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Track missing cards by set.'**
+  String get createYourSetCollectionSubtitle;
+
+  /// No description provided for @createYourDeckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your deck'**
+  String get createYourDeckTitle;
+
+  /// No description provided for @createYourWishlistTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your wishlist'**
+  String get createYourWishlistTitle;
+
+  /// No description provided for @createYourWishlistSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add missing cards you want.'**
+  String get createYourWishlistSubtitle;
+
   /// No description provided for @addCardsNowTitle.
   ///
   /// In en, this message translates to:
@@ -842,6 +896,12 @@ abstract class AppLocalizations {
   /// **'New collection'**
   String get newCollectionTitle;
 
+  /// No description provided for @newDeckTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New deck'**
+  String get newDeckTitle;
+
   /// No description provided for @create.
   ///
   /// In en, this message translates to:
@@ -853,6 +913,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Collection name'**
   String get collectionNameHint;
+
+  /// No description provided for @deckNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck name'**
+  String get deckNameHint;
+
+  /// No description provided for @deckFormatOptionalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Format (optional)'**
+  String get deckFormatOptionalLabel;
+
+  /// No description provided for @noFormatOption.
+  ///
+  /// In en, this message translates to:
+  /// **'No format'**
+  String get noFormatOption;
 
   /// No description provided for @createCustomCollectionFirst.
   ///
@@ -1460,6 +1538,36 @@ abstract class AppLocalizations {
   /// **'Tracks missing cards by set.'**
   String get setCollectionSubtitle;
 
+  /// No description provided for @wishlistCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wishlist'**
+  String get wishlistCollectionTitle;
+
+  /// No description provided for @wishlistCollectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add missing cards you want.'**
+  String get wishlistCollectionSubtitle;
+
+  /// No description provided for @wishlistDefaultName.
+  ///
+  /// In en, this message translates to:
+  /// **'Wishlist'**
+  String get wishlistDefaultName;
+
+  /// No description provided for @wishlistLimitReachedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Wishlist limit reached'**
+  String get wishlistLimitReachedTitle;
+
+  /// No description provided for @wishlistLimitReachedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Free plan supports up to {limit} wishlist.'**
+  String wishlistLimitReachedBody(int limit);
+
   /// No description provided for @customCollectionTitle.
   ///
   /// In en, this message translates to:
@@ -1469,8 +1577,20 @@ abstract class AppLocalizations {
   /// No description provided for @customCollectionSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Add cards manually.'**
+  /// **'Create a custom collection.'**
   String get customCollectionSubtitle;
+
+  /// No description provided for @deckCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck'**
+  String get deckCollectionTitle;
+
+  /// No description provided for @deckCollectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Container for playing (optional format).'**
+  String get deckCollectionSubtitle;
 
   /// No description provided for @details.
   ///
@@ -1525,6 +1645,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artist'**
   String get detailArtist;
+
+  /// No description provided for @detailFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Format'**
+  String get detailFormat;
 
   /// No description provided for @sortBy.
   ///
@@ -1946,6 +2072,36 @@ abstract class AppLocalizations {
   /// **'Collections'**
   String get collectionsFeature;
 
+  /// No description provided for @setCollectionsFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Set collections'**
+  String get setCollectionsFeature;
+
+  /// No description provided for @customCollectionsFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom collections'**
+  String get customCollectionsFeature;
+
+  /// No description provided for @decksFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Decks'**
+  String get decksFeature;
+
+  /// No description provided for @wishlistFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Wishlist'**
+  String get wishlistFeature;
+
+  /// No description provided for @freeCollectionsBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'2 set, 2 custom, 2 decks, 1 wishlist'**
+  String get freeCollectionsBreakdown;
+
   /// No description provided for @cardSearchAddFeature.
   ///
   /// In en, this message translates to:
@@ -2131,6 +2287,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue as guest'**
   String get authContinueAsGuest;
+
+  /// No description provided for @backupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get backupTitle;
+
+  /// No description provided for @backupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export or import your full local collections backup.'**
+  String get backupSubtitle;
+
+  /// No description provided for @backupExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get backupExport;
+
+  /// No description provided for @backupImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get backupImport;
+
+  /// No description provided for @backupNoFilesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No local backup files found.'**
+  String get backupNoFilesFound;
+
+  /// No description provided for @backupChooseImportFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose backup file'**
+  String get backupChooseImportFile;
+
+  /// No description provided for @backupImportConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import backup?'**
+  String get backupImportConfirmTitle;
+
+  /// No description provided for @backupImportConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This will replace current collections and owned entries.'**
+  String get backupImportConfirmBody;
+
+  /// No description provided for @backupExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup exported: {fileName}'**
+  String backupExported(Object fileName);
+
+  /// No description provided for @backupImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup imported. Collections: {collections}, entries: {entries}'**
+  String backupImported(int collections, int entries);
+
+  /// No description provided for @share.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get share;
+
+  /// No description provided for @backupShareNowTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share backup now?'**
+  String get backupShareNowTitle;
+
+  /// No description provided for @backupShareNowBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can send the exported file via email, messaging apps, or cloud drives.'**
+  String get backupShareNowBody;
+
+  /// No description provided for @backupShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to share backup: {error}'**
+  String backupShareFailed(Object error);
 }
 
 class _AppLocalizationsDelegate

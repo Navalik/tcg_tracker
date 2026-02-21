@@ -196,7 +196,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unlockProRemoveLimit =>
-      'Unlock Pro to remove the 5-collection limit.';
+      'Unlock Pro to remove the 7-collection limit.';
 
   @override
   String priceLabel(Object price) {
@@ -360,10 +360,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addCardsToCollectionSubtitle => 'Choose a custom collection.';
 
   @override
-  String get addCollection => 'Add a collection';
+  String get addCollection => 'Add collection/set';
 
   @override
   String get addCollectionSubtitle => 'Create set-based or custom.';
+
+  @override
+  String get addWishlist => 'Add wishlist';
+
+  @override
+  String get addWishlistSubtitle => 'Create a wishlist for missing cards.';
 
   @override
   String get chooseCollection => 'Choose collection';
@@ -408,6 +414,27 @@ class AppLocalizationsEn extends AppLocalizations {
       'Tap to create your first collection.';
 
   @override
+  String get createYourCustomCollectionTitle => 'Create your custom collection';
+
+  @override
+  String get createYourCustomCollectionSubtitle => 'Add cards manually.';
+
+  @override
+  String get createYourSetCollectionTitle => 'Create your set collection';
+
+  @override
+  String get createYourSetCollectionSubtitle => 'Track missing cards by set.';
+
+  @override
+  String get createYourDeckTitle => 'Create your deck';
+
+  @override
+  String get createYourWishlistTitle => 'Create your wishlist';
+
+  @override
+  String get createYourWishlistSubtitle => 'Add missing cards you want.';
+
+  @override
   String get addCardsNowTitle => 'Add cards now?';
 
   @override
@@ -434,10 +461,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get newCollectionTitle => 'New collection';
 
   @override
+  String get newDeckTitle => 'New deck';
+
+  @override
   String get create => 'Create';
 
   @override
   String get collectionNameHint => 'Collection name';
+
+  @override
+  String get deckNameHint => 'Deck name';
+
+  @override
+  String get deckFormatOptionalLabel => 'Format (optional)';
+
+  @override
+  String get noFormatOption => 'No format';
 
   @override
   String get createCustomCollectionFirst => 'Create a custom collection first.';
@@ -774,10 +813,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setCollectionSubtitle => 'Tracks missing cards by set.';
 
   @override
+  String get wishlistCollectionTitle => 'Wishlist';
+
+  @override
+  String get wishlistCollectionSubtitle => 'Add missing cards you want.';
+
+  @override
+  String get wishlistDefaultName => 'Wishlist';
+
+  @override
+  String get wishlistLimitReachedTitle => 'Wishlist limit reached';
+
+  @override
+  String wishlistLimitReachedBody(int limit) {
+    return 'Free plan supports up to $limit wishlist.';
+  }
+
+  @override
   String get customCollectionTitle => 'Custom collection';
 
   @override
-  String get customCollectionSubtitle => 'Add cards manually.';
+  String get customCollectionSubtitle => 'Create a custom collection.';
+
+  @override
+  String get deckCollectionTitle => 'Deck';
+
+  @override
+  String get deckCollectionSubtitle =>
+      'Container for playing (optional format).';
 
   @override
   String get details => 'Details';
@@ -807,6 +870,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get detailArtist => 'Artist';
+
+  @override
+  String get detailFormat => 'Format';
 
   @override
   String get sortBy => 'Sort by';
@@ -1047,6 +1113,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get collectionsFeature => 'Collections';
 
   @override
+  String get setCollectionsFeature => 'Set collections';
+
+  @override
+  String get customCollectionsFeature => 'Custom collections';
+
+  @override
+  String get decksFeature => 'Decks';
+
+  @override
+  String get wishlistFeature => 'Wishlist';
+
+  @override
+  String get freeCollectionsBreakdown => '2 set, 2 custom, 2 decks, 1 wishlist';
+
+  @override
   String get cardSearchAddFeature => 'Card search and add';
 
   @override
@@ -1153,4 +1234,55 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get authContinueAsGuest => 'Continue as guest';
+
+  @override
+  String get backupTitle => 'Backup';
+
+  @override
+  String get backupSubtitle =>
+      'Export or import your full local collections backup.';
+
+  @override
+  String get backupExport => 'Export';
+
+  @override
+  String get backupImport => 'Import';
+
+  @override
+  String get backupNoFilesFound => 'No local backup files found.';
+
+  @override
+  String get backupChooseImportFile => 'Choose backup file';
+
+  @override
+  String get backupImportConfirmTitle => 'Import backup?';
+
+  @override
+  String get backupImportConfirmBody =>
+      'This will replace current collections and owned entries.';
+
+  @override
+  String backupExported(Object fileName) {
+    return 'Backup exported: $fileName';
+  }
+
+  @override
+  String backupImported(int collections, int entries) {
+    return 'Backup imported. Collections: $collections, entries: $entries';
+  }
+
+  @override
+  String get share => 'Share';
+
+  @override
+  String get backupShareNowTitle => 'Share backup now?';
+
+  @override
+  String get backupShareNowBody =>
+      'You can send the exported file via email, messaging apps, or cloud drives.';
+
+  @override
+  String backupShareFailed(Object error) {
+    return 'Unable to share backup: $error';
+  }
 }

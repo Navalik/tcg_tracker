@@ -1,4 +1,4 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 class CollectionHomePage extends StatefulWidget {
   const CollectionHomePage({super.key});
@@ -11,7 +11,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     with TickerProviderStateMixin {
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
-  static const int _freeCollectionLimit = 3;
+  static const int _freeCollectionLimit = 7;
+  static const int _freeSetCollectionLimit = 2;
+  static const int _freeCustomCollectionLimit = 2;
+  static const int _freeDeckCollectionLimit = 2;
+  static const int _freeWishlistLimit = 1;
   static const int _freeDailyScanLimit = 20;
   bool _isProUnlocked = false;
   late final PurchaseManager _purchaseManager;
@@ -31,9 +35,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   String? _bulkUpdatedAtRaw;
   bool _cardsMissing = false;
   bool _initialCollectionsLoading = true;
+  bool _collectionsLoadInProgress = false;
   int _totalCardCount = 0;
   late final AnimationController _snakeController;
   Map<String, String> _setNameLookup = {};
+
+  void _onCollectionsRefreshRequested() {
+    unawaited(_loadCollections());
+  }
 
   @override
   void initState() {
@@ -58,6 +67,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     unawaited(_checkForAppUpdateOnStartup());
     _initializeStartup();
     _loadCollections();
+    _collectionsRefreshNotifier.addListener(_onCollectionsRefreshRequested);
   }
 
   Future<void> _checkForAppUpdateOnStartup() async {
@@ -82,6 +92,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   @override
   void dispose() {
+    _collectionsRefreshNotifier.removeListener(_onCollectionsRefreshRequested);
     _snakeController.dispose();
     _purchaseManager.removeListener(_purchaseListener);
     super.dispose();
@@ -130,11 +141,51 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return _isProUnlocked || _userCollectionCount() < _freeCollectionLimit;
   }
 
+  int _setCollectionCount() {
+    return _collections.where(_isSetCollection).length;
+  }
+
+  bool _canCreateSetCollection() {
+    return _isProUnlocked || _setCollectionCount() < _freeSetCollectionLimit;
+  }
+
+  int _wishlistCollectionCount() {
+    return _collections
+        .where((item) => item.type == CollectionType.wishlist)
+        .length;
+  }
+
+  bool _canCreateWishlist() {
+    return _isProUnlocked || _wishlistCollectionCount() < _freeWishlistLimit;
+  }
+
+  int _customCollectionCount() {
+    return _collections
+        .where((item) => item.type == CollectionType.custom)
+        .length;
+  }
+
+  bool _canCreateCustomCollection() {
+    return _isProUnlocked ||
+        _customCollectionCount() < _freeCustomCollectionLimit;
+  }
+
+  int _deckCollectionCount() {
+    return _collections
+        .where((item) => item.type == CollectionType.deck)
+        .length;
+  }
+
+  bool _canCreateDeckCollection() {
+    return _isProUnlocked || _deckCollectionCount() < _freeDeckCollectionLimit;
+  }
+
   bool _filterHasCriteria(CollectionFilter filter) {
     return (filter.name?.trim().isNotEmpty ?? false) ||
         (filter.artist?.trim().isNotEmpty ?? false) ||
         filter.manaMin != null ||
         filter.manaMax != null ||
+        (filter.format?.trim().isNotEmpty ?? false) ||
         filter.sets.isNotEmpty ||
         filter.rarities.isNotEmpty ||
         filter.colors.isNotEmpty ||
@@ -148,9 +199,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
           title: Text(l10n.collectionLimitReachedTitle),
-          content: Text(
-            l10n.collectionLimitReachedBody(_freeCollectionLimit),
-          ),
+          content: Text(l10n.collectionLimitReachedBody(_freeCollectionLimit)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -159,11 +208,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProPage(),
-                  ),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
               },
               child: Text(l10n.upgrade),
             ),
@@ -173,22 +220,117 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
+  Future<void> _showWishlistLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.wishlistLimitReachedTitle),
+          content: Text(l10n.wishlistLimitReachedBody(_freeWishlistLimit)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+              },
+              child: Text(l10n.upgrade),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showSetCollectionLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.collectionLimitReachedTitle),
+          content: Text(
+            l10n.collectionLimitReachedBody(_freeSetCollectionLimit),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+              },
+              child: Text(l10n.upgrade),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showCustomCollectionLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.collectionLimitReachedTitle),
+          content: Text(
+            l10n.collectionLimitReachedBody(_freeCustomCollectionLimit),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+              },
+              child: Text(l10n.upgrade),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   Future<void> _loadCollections() async {
+    if (_collectionsLoadInProgress) {
+      return;
+    }
+    _collectionsLoadInProgress = true;
     try {
-      final collections = await ScryfallDatabase.instance.fetchCollections();
-      final owned = await ScryfallDatabase.instance.countOwnedCards();
+      final collections = await ScryfallDatabase.instance
+          .fetchCollections()
+          .timeout(const Duration(seconds: 15));
+      final owned = await ScryfallDatabase.instance
+          .countOwnedCards()
+          .timeout(const Duration(seconds: 15));
       if (!mounted) {
         return;
       }
-      final hasAllCards = collections
-          .any((collection) => collection.name == _allCardsCollectionName);
+      final hasAllCards = collections.any(
+        (collection) => collection.name == _allCardsCollectionName,
+      );
       if (!hasAllCards) {
-        final id =
-            await ScryfallDatabase.instance.addCollection(
-              _allCardsCollectionName,
-              type: CollectionType.all,
-            );
+        final id = await ScryfallDatabase.instance.addCollection(
+          _allCardsCollectionName,
+          type: CollectionType.all,
+        );
         if (!mounted) {
           return;
         }
@@ -211,24 +353,25 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return;
       }
       if (collections.isEmpty) {
-        final id =
-            await ScryfallDatabase.instance.addCollection(
-              _allCardsCollectionName,
-              type: CollectionType.all,
-            );
+        final id = await ScryfallDatabase.instance.addCollection(
+          _allCardsCollectionName,
+          type: CollectionType.all,
+        );
         if (!mounted) {
           return;
         }
         setState(() {
           _collections
             ..clear()
-            ..add(CollectionInfo(
+            ..add(
+              CollectionInfo(
                 id: id,
                 name: _allCardsCollectionName,
                 cardCount: 0,
                 type: CollectionType.all,
                 filter: null,
-              ));
+              ),
+            );
           _totalCardCount = owned;
         });
         return;
@@ -237,8 +380,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final setCodes = <String>[];
       for (final collection in collections) {
         if (collection.name == _legacyMyCollectionName) {
-          await ScryfallDatabase.instance
-              .renameCollection(collection.id, _allCardsCollectionName);
+          await ScryfallDatabase.instance.renameCollection(
+            collection.id,
+            _allCardsCollectionName,
+          );
           renamed.add(
             CollectionInfo(
               id: collection.id,
@@ -256,8 +401,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           setCodes.add(setCode);
         }
       }
-      final setNames =
-          await ScryfallDatabase.instance.fetchSetNamesForCodes(setCodes);
+      final setNames = await ScryfallDatabase.instance.fetchSetNamesForCodes(
+        setCodes,
+      );
       if (!mounted) {
         return;
       }
@@ -268,7 +414,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _totalCardCount = owned;
         _setNameLookup = setNames;
       });
+    } on TimeoutException {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.downloadFailedGeneric,
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.downloadFailedGeneric,
+        );
+      }
     } finally {
+      _collectionsLoadInProgress = false;
       if (mounted && _initialCollectionsLoading) {
         setState(() {
           _initialCollectionsLoading = false;
@@ -278,10 +439,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   List<Widget> _buildCollectionSections(BuildContext context) {
-    final allCards = _collections
-        .cast<CollectionInfo?>()
-        .firstWhere((item) => item?.name == _allCardsCollectionName,
-            orElse: () => null);
+    final allCards = _collections.cast<CollectionInfo?>().firstWhere(
+      (item) => item?.name == _allCardsCollectionName,
+      orElse: () => null,
+    );
     final userCollections = _collections
         .where((collection) => collection.name != _allCardsCollectionName)
         .toList();
@@ -298,16 +459,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               _showCollectionActions(allCards, position);
             },
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CollectionDetailPage(
-                    collectionId: allCards.id,
-                    name: _collectionDisplayName(allCards),
-                    isAllCards: true,
-                    filter: allCards.filter,
-                  ),
-                ),
-              ).then((_) => _loadCollections());
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => CollectionDetailPage(
+                        collectionId: allCards.id,
+                        name: _collectionDisplayName(allCards),
+                        isAllCards: true,
+                        filter: allCards.filter,
+                      ),
+                    ),
+                  )
+                  .then((_) => _loadCollections());
             },
           ),
         ),
@@ -315,16 +478,76 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     widgets.add(const SizedBox(height: 6));
-    widgets.add(_SectionDivider(label: AppLocalizations.of(context)!.myCollections));
+    widgets.add(
+      _SectionDivider(label: AppLocalizations.of(context)!.myCollections),
+    );
     widgets.add(const SizedBox(height: 12));
 
+    final hasSetCollection = userCollections.any(_isSetCollection);
+    final hasCustomCollection = userCollections.any(
+      (item) => item.type == CollectionType.custom,
+    );
+    final hasDeckCollection = userCollections.any(
+      (item) => item.type == CollectionType.deck,
+    );
+    final hasWishlistCollection = userCollections.any(
+      (item) => item.type == CollectionType.wishlist,
+    );
+    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
+    final canCreateCustom =
+        _canCreateCollection() && _canCreateCustomCollection();
+    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
+    final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
+
+    void addCreateCards() {
+      if (!hasCustomCollection) {
+        widgets.add(
+          _buildCreateCollectionCard(
+            context,
+            icon: Icons.tune,
+            title: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            enabled: canCreateCustom,
+            onTap: () => _addCustomCollection(context),
+          ),
+        );
+      }
+      if (!hasSetCollection) {
+        widgets.add(
+          _buildCreateCollectionCard(
+            context,
+            icon: Icons.auto_awesome_mosaic,
+            title: AppLocalizations.of(context)!.createYourSetCollectionTitle,
+            enabled: canCreateSet,
+            onTap: () => _addSetCollection(context),
+          ),
+        );
+      }
+      if (!hasDeckCollection) {
+        widgets.add(
+          _buildCreateCollectionCard(
+            context,
+            icon: Icons.style,
+            title: AppLocalizations.of(context)!.createYourDeckTitle,
+            enabled: canCreateDeck,
+            onTap: () => _addDeckCollection(context),
+          ),
+        );
+      }
+      if (!hasWishlistCollection) {
+        widgets.add(
+          _buildCreateCollectionCard(
+            context,
+            icon: Icons.collections_bookmark,
+            title: AppLocalizations.of(context)!.createYourWishlistTitle,
+            enabled: canCreateWishlist,
+            onTap: () => _addWishlistCollection(context),
+          ),
+        );
+      }
+    }
+
     if (userCollections.isEmpty) {
-      widgets.add(_buildCreateCollectionCard(
-        context,
-        title: AppLocalizations.of(context)!.buildYourCollectionsTitle,
-        subtitle: AppLocalizations.of(context)!.buildYourCollectionsSubtitle,
-        onTap: () => _showCreateCollectionOptions(context),
-      ));
+      addCreateCards();
       return widgets;
     }
 
@@ -340,77 +563,125 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               _showCollectionActions(collection, position);
             },
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => CollectionDetailPage(
-                    collectionId: collection.id,
-                    name: _collectionDisplayName(collection),
-                    isSetCollection: setCode != null,
-                    setCode: setCode,
-                    filter: collection.filter,
-                  ),
-                ),
-              ).then((_) => _loadCollections());
+              Navigator.of(context)
+                  .push(
+                    MaterialPageRoute(
+                      builder: (_) => CollectionDetailPage(
+                        collectionId: collection.id,
+                        name: _collectionDisplayName(collection),
+                        isSetCollection: setCode != null,
+                        isDeckCollection: collection.type == CollectionType.deck,
+                        isWishlistCollection:
+                            collection.type == CollectionType.wishlist,
+                        setCode: setCode,
+                        filter: collection.filter,
+                      ),
+                    ),
+                  )
+                  .then((_) => _loadCollections());
             },
           ),
         ),
       );
     }
 
+    addCreateCards();
+
     return widgets;
+  }
+
+  Future<void> _showDeckCollectionLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.collectionLimitReachedTitle),
+          content: Text(
+            l10n.collectionLimitReachedBody(_freeDeckCollectionLimit),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+              },
+              child: Text(l10n.upgrade),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildCreateCollectionCard(
     BuildContext context, {
+    required IconData icon,
     required String title,
-    required String subtitle,
+    required bool enabled,
     required VoidCallback onTap,
   }) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.7),
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.55,
+        child: CustomPaint(
+          painter: _DashedRoundedRectPainter(
+            color: const Color(0xFF8A6A3A),
+            radius: 16,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF3A2F24)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.add_box, color: Color(0xFFE9C46A)),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+              onTap: enabled ? onTap : null,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                child: Row(
+                  children: [
+                    Icon(icon, color: const Color(0xFFE9C46A), size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
                         title,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFBFAE95),
-                            ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE9C46A)),
                       ),
-                    ],
-                  ),
+                      child: const Icon(
+                        Icons.add,
+                        size: 18,
+                        color: Color(0xFFE9C46A),
+                      ),
+                    ),
+                    if (!enabled)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 10),
+                        child: Text(
+                          l10n.upgradeToPro,
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: const Color(0xFFE9C46A),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                  ],
                 ),
-                const Icon(Icons.chevron_right, color: Color(0xFFBFAE95)),
-              ],
+              ),
             ),
           ),
         ),
@@ -437,13 +708,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
+    var forceBootstrapDownload = false;
     if (_cardsMissing && _selectedBulkType == null) {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) {
         return;
       }
-      final selected =
-          await _showBulkTypePicker(context, allowCancel: false);
+      final selected = await _showBulkTypePicker(
+        context,
+        allowCancel: false,
+        selectedType: _selectedBulkType,
+        requireConfirmation: true,
+        confirmLabel: AppLocalizations.of(context)!.downloadUpdate,
+      );
       if (!mounted) {
         return;
       }
@@ -455,15 +732,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         setState(() {
           _selectedBulkType = selected;
         });
+        forceBootstrapDownload = true;
       }
     }
 
     if (_selectedBulkType != null) {
-      await _checkScryfallBulk();
+      await _checkScryfallBulk(
+        forceDownload: forceBootstrapDownload || _cardsMissing,
+        restartAfterImport: forceBootstrapDownload || _cardsMissing,
+      );
     }
   }
 
-  Future<void> _checkScryfallBulk() async {
+  Future<void> _checkScryfallBulk({
+    bool forceDownload = false,
+    bool restartAfterImport = false,
+  }) async {
     if (_checkingBulk) {
       return;
     }
@@ -494,7 +778,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         AppLocalizations.of(context)!.scryfallBulkUpdateAvailable,
       );
     }
-    await _maybeStartBulkDownload();
+    await _maybeStartBulkDownload(
+      forceDownload: forceDownload,
+      restartAfterImport: restartAfterImport,
+    );
   }
 
   Future<void> _checkCardsInstalled() async {
@@ -504,8 +791,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (count > 0) {
-      final needsReimport =
-          await ScryfallDatabase.instance.needsLightReimport();
+      final needsReimport = await ScryfallDatabase.instance
+          .needsLightReimport();
       if (!mounted) {
         return;
       }
@@ -544,7 +831,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _maybeStartBulkDownload();
   }
 
-  Future<void> _maybeStartBulkDownload() async {
+  Future<void> _maybeStartBulkDownload({
+    bool forceDownload = false,
+    bool restartAfterImport = false,
+  }) async {
     if (_bulkDownloading || _bulkImporting) {
       return;
     }
@@ -556,14 +846,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return;
       }
       setState(() {
-        _bulkDownloadError = AppLocalizations.of(context)!.downloadFailedGeneric;
+        _bulkDownloadError = AppLocalizations.of(
+          context,
+        )!.downloadFailedGeneric;
       });
       return;
     }
-    if (!_cardsMissing && !_bulkUpdateAvailable) {
+    if (!forceDownload && !_cardsMissing && !_bulkUpdateAvailable) {
       return;
     }
-    await _downloadBulkFile(_bulkDownloadUri!);
+    await _downloadBulkFile(
+      _bulkDownloadUri!,
+      restartAfterImport: restartAfterImport,
+    );
   }
 
   bool _isAllowedBulkDownloadUri(String rawUri) {
@@ -584,9 +879,89 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         host.endsWith('.scryfall.io');
   }
 
-  Future<void> _addCollection(BuildContext context) async {
+  Future<void> _addWishlistCollection(BuildContext context) async {
     if (!_canCreateCollection()) {
       await _showCollectionLimitDialog();
+      return;
+    }
+    if (!_canCreateWishlist()) {
+      await _showWishlistLimitDialog();
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController(text: l10n.wishlistDefaultName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.wishlistCollectionTitle),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(hintText: l10n.collectionNameHint),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                Navigator.of(
+                  context,
+                ).pop(value.isEmpty ? l10n.wishlistDefaultName : value);
+              },
+              child: Text(l10n.create),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (name == null) {
+      return;
+    }
+    int id;
+    try {
+      id = await ScryfallDatabase.instance.addCollection(
+        name,
+        type: CollectionType.wishlist,
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedToAddCollection('operation_failed'),
+      );
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _collections.add(
+        CollectionInfo(
+          id: id,
+          name: name,
+          cardCount: 0,
+          type: CollectionType.wishlist,
+          filter: null,
+        ),
+      );
+    });
+    await _loadCollections();
+  }
+
+  Future<void> _addCustomCollection(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
+    if (!_canCreateCustomCollection()) {
+      await _showCustomCollectionLimitDialog();
       return;
     }
     final controller = TextEditingController();
@@ -599,9 +974,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: InputDecoration(
-              hintText: l10n.collectionNameHint,
-            ),
+            decoration: InputDecoration(hintText: l10n.collectionNameHint),
           ),
           actions: [
             TextButton(
@@ -633,16 +1006,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       ),
     );
     if (filter == null) {
-      return;
-    }
-    if (!_filterHasCriteria(filter)) {
-      if (!context.mounted) {
-        return;
-      }
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.selectFiltersFirst,
-      );
       return;
     }
     if (!_filterHasCriteria(filter)) {
@@ -695,6 +1058,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _showCollectionLimitDialog();
       return;
     }
+    if (!_canCreateSetCollection()) {
+      await _showSetCollectionLimitDialog();
+      return;
+    }
     final sets = await ScryfallDatabase.instance.fetchAvailableSets();
     if (!context.mounted) {
       return;
@@ -715,9 +1082,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           builder: (context, setState) {
             final l10n = AppLocalizations.of(context)!;
             final filtered = sets
-                .where((set) =>
-                    set.name.toLowerCase().contains(query.toLowerCase()) ||
-                    set.code.toLowerCase().contains(query.toLowerCase()))
+                .where(
+                  (set) =>
+                      set.name.toLowerCase().contains(query.toLowerCase()) ||
+                      set.code.toLowerCase().contains(query.toLowerCase()),
+                )
                 .toList();
             return AlertDialog(
               title: Text(l10n.newSetCollectionTitle),
@@ -728,9 +1097,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   children: [
                     TextField(
                       autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: l10n.searchSetHint,
-                      ),
+                      decoration: InputDecoration(hintText: l10n.searchSetHint),
                       onChanged: (value) {
                         setState(() {
                           query = value.trim();
@@ -785,9 +1152,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     int id;
-    final filter = CollectionFilter(
-      sets: {selected.code.toLowerCase()},
-    );
+    final filter = CollectionFilter(sets: {selected.code.toLowerCase()});
     try {
       id = await ScryfallDatabase.instance.addCollection(
         resolvedName,
@@ -817,41 +1182,170 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           filter: filter,
         ),
       );
-      _setNameLookup = {
-        ..._setNameLookup,
-        selected.code: selected.name,
-      };
+      _setNameLookup = {..._setNameLookup, selected.code: selected.name};
+    });
+    await _loadCollections();
+  }
+
+  Future<void> _addDeckCollection(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
+    if (!_canCreateDeckCollection()) {
+      await _showDeckCollectionLimitDialog();
+      return;
+    }
+    final controller = TextEditingController();
+    String? selectedFormat;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(l10n.newDeckTitle),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: InputDecoration(hintText: l10n.deckNameHint),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String?>(
+                    initialValue: selectedFormat,
+                    decoration: InputDecoration(
+                      labelText: l10n.deckFormatOptionalLabel,
+                    ),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(l10n.noFormatOption),
+                      ),
+                      ...kSupportedDeckFormats.map(
+                        (value) => DropdownMenuItem<String?>(
+                          value: value,
+                          child: Text(deckFormatLabel(value)),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        selectedFormat = value;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final value = controller.text.trim();
+                    Navigator.of(context).pop(value.isEmpty ? null : value);
+                  },
+                  child: Text(l10n.create),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (name == null) {
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+
+    if (_collections.any((item) => item.name == name)) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
+      );
+      return;
+    }
+
+    final normalizedFormat = selectedFormat?.trim().toLowerCase();
+    final filter = (normalizedFormat == null || normalizedFormat.isEmpty)
+        ? null
+        : CollectionFilter(format: normalizedFormat);
+    int id;
+    try {
+      id = await ScryfallDatabase.instance.addCollection(
+        name,
+        type: CollectionType.deck,
+        filter: filter,
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedToAddCollection('operation_failed'),
+      );
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _collections.add(
+        CollectionInfo(
+          id: id,
+          name: name,
+          cardCount: 0,
+          type: CollectionType.deck,
+          filter: filter,
+        ),
+      );
     });
     await _loadCollections();
   }
 
   Future<void> _showCreateCollectionOptions(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
+    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
+    final canCreateCustom =
+        _canCreateCollection() && _canCreateCustomCollection();
+    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
     final selection = await showModalBottomSheet<_CollectionCreateAction>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return _CreateCollectionSheet();
+        return _CreateCollectionSheet(
+          canCreateSet: canCreateSet,
+          canCreateCustom: canCreateCustom,
+          canCreateDeck: canCreateDeck,
+        );
       },
     );
     if (!context.mounted) {
       return;
     }
     if (selection == _CollectionCreateAction.custom) {
-      await _addCollection(context);
+      await _addCustomCollection(context);
     } else if (selection == _CollectionCreateAction.setBased) {
       await _addSetCollection(context);
+    } else if (selection == _CollectionCreateAction.deck) {
+      await _addDeckCollection(context);
     }
   }
 
   Future<void> _showHomeAddOptions(BuildContext context) async {
+    final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
     final selection = await showModalBottomSheet<_HomeAddAction>(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => const _HomeAddSheet(),
+      builder: (context) => _HomeAddSheet(canCreateWishlist: canCreateWishlist),
     );
     if (!context.mounted) {
       return;
@@ -862,6 +1356,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _openAddCardsForAllCards(context);
     } else if (selection == _HomeAddAction.addCollection) {
       await _showCreateCollectionOptions(context);
+    } else if (selection == _HomeAddAction.addWishlist) {
+      await _addWishlistCollection(context);
     }
   }
 
@@ -904,9 +1400,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final navigator = Navigator.of(context);
       final recognizedText = await navigator.push<String>(
-        MaterialPageRoute(
-          builder: (_) => const _CardScannerPage(),
-        ),
+        MaterialPageRoute(builder: (_) => const _CardScannerPage()),
       );
       if (!mounted || recognizedText == null) {
         return;
@@ -1009,9 +1503,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
           title: Text(l10n.dailyScanLimitReachedTitle),
-          content: Text(
-            l10n.freePlan20ScansUpgradePlusBody,
-          ),
+          content: Text(l10n.freePlan20ScansUpgradePlusBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -1020,11 +1512,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             FilledButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const ProPage(),
-                  ),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
               },
               child: Text(l10n.discoverPlus),
             ),
@@ -1034,25 +1524,32 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(_OcrSearchSeed seed) async {
+  Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(
+    _OcrSearchSeed seed,
+  ) async {
     final cardName = seed.cardName?.trim();
     if (cardName == null || cardName.isEmpty) {
       return _ResolvedScanSelection(seed: seed);
     }
-    final localBeforeSync =
-        await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
-      CollectionFilter(name: cardName),
-      languages: const ['en'],
-      limit: 250,
-    );
+    final localBeforeSync = await ScryfallDatabase.instance
+        .fetchCardsForAdvancedFilters(
+          CollectionFilter(name: cardName),
+          languages: const ['en'],
+          limit: 250,
+        );
     final normalizedName = _normalizeCardNameForMatch(cardName);
     final localBeforeSyncKeys = localBeforeSync
-        .where((card) => _normalizeCardNameForMatch(card.name) == normalizedName)
+        .where(
+          (card) => _normalizeCardNameForMatch(card.name) == normalizedName,
+        )
         .map(_printingKeyForCard)
         .toSet();
     // Keep scan flow snappy: avoid long blocking sync for cards with many printings.
     if (localBeforeSyncKeys.length < 4) {
-      await _syncOnlinePrintsByName(cardName, timeBudget: const Duration(seconds: 2));
+      await _syncOnlinePrintsByName(
+        cardName,
+        timeBudget: const Duration(seconds: 2),
+      );
     }
     if (!mounted) {
       return _ResolvedScanSelection(seed: seed);
@@ -1097,7 +1594,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       seed: _OcrSearchSeed(
         query: picked.name,
         cardName: picked.name,
-        setCode: picked.setCode.trim().isEmpty ? null : picked.setCode.trim().toLowerCase(),
+        setCode: picked.setCode.trim().isEmpty
+            ? null
+            : picked.setCode.trim().toLowerCase(),
         collectorNumber: picked.collectorNumber.trim().isEmpty
             ? null
             : picked.collectorNumber.trim().toLowerCase(),
@@ -1143,8 +1642,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   card.subtitleLabel,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFFBFAE95),
-                      ),
+                    color: const Color(0xFFBFAE95),
+                  ),
                 ),
                 const SizedBox(height: 12),
                 ConstrainedBox(
@@ -1153,7 +1652,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     aspectRatio: 63.5 / 88.9,
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: card.imageUri != null && card.imageUri!.trim().isNotEmpty
+                      child:
+                          card.imageUri != null &&
+                              card.imageUri!.trim().isNotEmpty
                           ? Image.network(
                               card.imageUri!.trim(),
                               fit: BoxFit.cover,
@@ -1220,10 +1721,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!mounted) {
       return false;
     }
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.addedCards(1),
-    );
+    showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
     await _loadCollections();
     return true;
   }
@@ -1300,7 +1798,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       knownSetCodes: knownSetCodes,
     );
     setCode = setAndCollector.$1 ?? setCode;
-    collectorNumber = _pickBetterCollectorNumber(collectorNumber, setAndCollector.$2);
+    collectorNumber = _pickBetterCollectorNumber(
+      collectorNumber,
+      setAndCollector.$2,
+    );
 
     for (final rawLine in bottomLines.reversed) {
       if (setCode != null && collectorNumber != null) {
@@ -1329,13 +1830,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (setCode != null) {
           final next = (i + 1 < tokens.length) ? tokens[i + 1] : null;
           final fromNext = _normalizeCollectorNumber(next ?? '');
-          collectorNumber = _pickBetterCollectorNumber(collectorNumber, fromNext);
+          collectorNumber = _pickBetterCollectorNumber(
+            collectorNumber,
+            fromNext,
+          );
         }
 
         if (token.contains('/')) {
           final part = token.split('/').first;
           final normalized = _normalizeCollectorNumber(part);
-          collectorNumber = _pickBetterCollectorNumber(collectorNumber, normalized);
+          collectorNumber = _pickBetterCollectorNumber(
+            collectorNumber,
+            normalized,
+          );
         }
 
         collectorNumber = _pickBetterCollectorNumber(
@@ -1343,17 +1850,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _normalizeCollectorNumber(token),
         );
       }
-
     }
 
-    if (bestName.isEmpty &&
-        setCode == null &&
-        collectorNumber == null) {
+    if (bestName.isEmpty && setCode == null && collectorNumber == null) {
       return null;
     }
 
     final fallbackQuery = bestName.isEmpty ? lines.first : bestName;
-    final useCollectorQuery = collectorNumber != null &&
+    final useCollectorQuery =
+        collectorNumber != null &&
         collectorNumber.isNotEmpty &&
         setCode != null &&
         setCode.isNotEmpty &&
@@ -1399,18 +1904,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return onlineByNameAndSet;
       }
     }
-    final strictCount = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
-      CollectionFilter(sets: {setCode}),
-      searchQuery: query,
-    );
+    final strictCount = await ScryfallDatabase.instance
+        .countCardsForFilterWithSearch(
+          CollectionFilter(sets: {setCode}),
+          searchQuery: query,
+        );
     if (strictCount > 0) {
       // Guard against false positives when collector OCR is wrong but exists in same set.
       if (fallbackName != null && fallbackName.isNotEmpty) {
-        final nameInSetCount =
-            await ScryfallDatabase.instance.countCardsForFilterWithSearch(
-          CollectionFilter(sets: {setCode}),
-          searchQuery: fallbackName,
-        );
+        final nameInSetCount = await ScryfallDatabase.instance
+            .countCardsForFilterWithSearch(
+              CollectionFilter(sets: {setCode}),
+              searchQuery: fallbackName,
+            );
         if (nameInSetCount > 0) {
           return seed;
         }
@@ -1429,11 +1935,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     if (fallbackName != null && fallbackName.isNotEmpty) {
-      final nameInSetCount =
-          await ScryfallDatabase.instance.countCardsForFilterWithSearch(
-        CollectionFilter(sets: {setCode}),
-        searchQuery: fallbackName,
-      );
+      final nameInSetCount = await ScryfallDatabase.instance
+          .countCardsForFilterWithSearch(
+            CollectionFilter(sets: {setCode}),
+            searchQuery: fallbackName,
+          );
       if (nameInSetCount > 0) {
         return _OcrSearchSeed(
           query: fallbackName,
@@ -1481,14 +1987,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
       final fetchedName = (payload['name'] as String?)?.trim();
       final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
-      final fetchedCollector =
-          (payload['collector_number'] as String?)?.trim().toLowerCase();
+      final fetchedCollector = (payload['collector_number'] as String?)
+          ?.trim()
+          .toLowerCase();
       return _OcrSearchSeed(
-        query: (fetchedName != null && fetchedName.isNotEmpty) ? fetchedName : name,
+        query: (fetchedName != null && fetchedName.isNotEmpty)
+            ? fetchedName
+            : name,
         cardName: fetchedName ?? name,
         setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : null,
-        collectorNumber:
-            fetchedCollector?.isNotEmpty == true ? fetchedCollector : null,
+        collectorNumber: fetchedCollector?.isNotEmpty == true
+            ? fetchedCollector
+            : null,
       );
     } catch (_) {
       return null;
@@ -1518,7 +2028,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final namedPayload = jsonDecode(namedResponse.body);
         if (namedPayload is Map<String, dynamic>) {
           await ScryfallDatabase.instance.upsertCardFromScryfall(namedPayload);
-          oracleId = (namedPayload['oracle_id'] as String?)?.trim().toLowerCase();
+          oracleId = (namedPayload['oracle_id'] as String?)
+              ?.trim()
+              .toLowerCase();
         }
       }
       Uri searchUri;
@@ -1625,20 +2137,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return null;
       }
       CardSearchResult? bestLocal;
-      final preferredCollector =
-          _normalizeCollectorForComparison(preferredCollectorNumber ?? '');
+      final preferredCollector = _normalizeCollectorForComparison(
+        preferredCollectorNumber ?? '',
+      );
       for (final item in data) {
         if (item is! Map<String, dynamic>) {
           continue;
         }
         await ScryfallDatabase.instance.upsertCardFromScryfall(item);
       }
-      final localCandidates =
-          await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
-        CollectionFilter(name: name, sets: {set}),
-        languages: const ['en'],
-        limit: 100,
-      );
+      final localCandidates = await ScryfallDatabase.instance
+          .fetchCardsForAdvancedFilters(
+            CollectionFilter(name: name, sets: {set}),
+            languages: const ['en'],
+            limit: 100,
+          );
       if (localCandidates.isNotEmpty) {
         if (preferredCollector.isNotEmpty) {
           for (final card in localCandidates) {
@@ -1694,8 +2207,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
       final fetchedName = (payload['name'] as String?)?.trim();
       final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
-      final fetchedCollector =
-          (payload['collector_number'] as String?)?.trim().toLowerCase();
+      final fetchedCollector = (payload['collector_number'] as String?)
+          ?.trim()
+          .toLowerCase();
       return _OcrSearchSeed(
         query: (fetchedName != null && fetchedName.isNotEmpty)
             ? fetchedName
@@ -1732,8 +2246,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     var best = '';
     var bestScore = -1;
     for (var i = 0; i < lines.length && i < 8; i++) {
-      final normalized =
-          _trimToNameSegment(_normalizePotentialCardName(lines[i]));
+      final normalized = _trimToNameSegment(
+        _normalizePotentialCardName(lines[i]),
+      );
       if (normalized.length < 3) {
         continue;
       }
@@ -1747,8 +2262,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final lower = normalized.toLowerCase();
       final wordsList = lower.split(' ').where((w) => w.isNotEmpty).toList();
-      final oracleHits =
-          wordsList.where((w) => oracleLikeWords.contains(w)).length;
+      final oracleHits = wordsList
+          .where((w) => oracleLikeWords.contains(w))
+          .length;
       final digits = RegExp(r'\d').allMatches(normalized).length;
       if (digits > normalized.length * 0.25) {
         continue;
@@ -1757,7 +2273,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final oraclePenalty = oracleHits * 5;
       final longSentencePenalty = wordsList.length >= 6 ? 4 : 0;
       final topBonus = (8 - i);
-      final score = (normalized.length.clamp(0, 30)) +
+      final score =
+          (normalized.length.clamp(0, 30)) +
           topBonus -
           digitPenalty -
           oraclePenalty -
@@ -1812,8 +2329,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     List<String> lines, {
     required Set<String> knownSetCodes,
   }) {
-    final setCollectorRegex = RegExp(r'\b([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)\b');
-    final collectorSlashRegex = RegExp(r'\b([0-9]{1,5}[A-Z]?)\s*/\s*[0-9]{1,5}\b');
+    final setCollectorRegex = RegExp(
+      r'\b([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)\b',
+    );
+    final collectorSlashRegex = RegExp(
+      r'\b([0-9]{1,5}[A-Z]?)\s*/\s*[0-9]{1,5}\b',
+    );
     String? setCode;
     String? collectorNumber;
     for (var i = lines.length - 1; i >= 0; i--) {
@@ -1852,14 +2373,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (upper.isEmpty) {
       return (null, null);
     }
-    final direct = RegExp(r'^([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)$')
-        .firstMatch(upper);
+    final direct = RegExp(
+      r'^([A-Z0-9]{2,5})\s+([0-9]{1,5}[A-Z]?)$',
+    ).firstMatch(upper);
     if (direct != null) {
       final rawSet = (direct.group(1) ?? '').trim().toLowerCase();
-      final setCode = _detectSetCodeFromToken(
-            rawSet,
-            knownSetCodes: knownSetCodes,
-          ) ??
+      final setCode =
+          _detectSetCodeFromToken(rawSet, knownSetCodes: knownSetCodes) ??
           (RegExp(r'^[a-z]{2,5}$').hasMatch(rawSet) ? rawSet : null);
       final collector = _normalizeCollectorNumber(direct.group(2) ?? '');
       return (setCode, collector);
@@ -1912,10 +2432,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (RegExp(r'^\d+$').hasMatch(token)) {
         continue;
       }
-      final set = _detectSetCodeFromToken(
-        token,
-        knownSetCodes: knownSetCodes,
-      );
+      final set = _detectSetCodeFromToken(token, knownSetCodes: knownSetCodes);
       if (set != null) {
         return set;
       }
@@ -1931,10 +2448,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (raw.isEmpty) {
       return null;
     }
-    final candidates = <String>{
-      raw,
-      _normalizeSetCodeCandidate(raw),
-    };
+    final candidates = <String>{raw, _normalizeSetCodeCandidate(raw)};
     for (final candidate in candidates) {
       if (candidate.isNotEmpty && knownSetCodes.contains(candidate)) {
         return candidate;
@@ -2137,6 +2651,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final isSetCollection = _isSetCollection(collection);
+    final isDeckCollection = collection.type == CollectionType.deck;
+    final isWishlistCollection = collection.type == CollectionType.wishlist;
     final menuItems = <PopupMenuEntry<_CollectionAction>>[];
     if (!isSetCollection) {
       menuItems.add(
@@ -2151,18 +2667,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         ),
       );
-      menuItems.add(
-        PopupMenuItem(
-          value: _CollectionAction.editFilters,
-          child: Row(
-            children: [
-              Icon(Icons.tune, size: 18),
-              SizedBox(width: 8),
-              Text(AppLocalizations.of(context)!.filters),
-            ],
+      if (!isWishlistCollection && !isDeckCollection) {
+        menuItems.add(
+          PopupMenuItem(
+            value: _CollectionAction.editFilters,
+            child: Row(
+              children: [
+                Icon(Icons.tune, size: 18),
+                SizedBox(width: 8),
+                Text(AppLocalizations.of(context)!.filters),
+              ],
+            ),
           ),
-        ),
-      );
+        );
+      }
     }
     menuItems.add(
       PopupMenuItem(
@@ -2195,7 +2713,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _editCollectionFilters(CollectionInfo collection) async {
-    if (_isSetCollection(collection)) {
+    if (_isSetCollection(collection) ||
+        collection.type == CollectionType.wishlist) {
       return;
     }
     final filter = await Navigator.of(context).push<CollectionFilter>(
@@ -2223,8 +2742,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (_isSetCollection(collection)) {
       return;
     }
-    final controller =
-        TextEditingController(text: _collectionDisplayName(collection));
+    final controller = TextEditingController(
+      text: _collectionDisplayName(collection),
+    );
     final name = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -2234,9 +2754,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           content: TextField(
             controller: controller,
             autofocus: true,
-            decoration: InputDecoration(
-              hintText: l10n.collectionNameHint,
-            ),
+            decoration: InputDecoration(hintText: l10n.collectionNameHint),
           ),
           actions: [
             TextButton(
@@ -2271,8 +2789,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     setState(() {
-      final index =
-          _collections.indexWhere((item) => item.id == collection.id);
+      final index = _collections.indexWhere((item) => item.id == collection.id);
       if (index != -1) {
         _collections[index] = CollectionInfo(
           id: collection.id,
@@ -2320,19 +2837,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _collections.removeWhere((item) => item.id == collection.id);
     });
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.collectionDeleted,
-    );
+    showAppSnackBar(context, AppLocalizations.of(context)!.collectionDeleted);
   }
 
-  Future<void> _downloadBulkFile(String downloadUri) async {
+  Future<void> _downloadBulkFile(
+    String downloadUri, {
+    bool restartAfterImport = false,
+  }) async {
     if (!_isAllowedBulkDownloadUri(downloadUri)) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _bulkDownloadError = AppLocalizations.of(context)!.downloadFailedGeneric;
+        _bulkDownloadError = AppLocalizations.of(
+          context,
+        )!.downloadFailedGeneric;
       });
       showAppSnackBar(
         context,
@@ -2362,8 +2881,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         }
 
         final directory = await getApplicationDocumentsDirectory();
-        final targetPath =
-            '${directory.path}/${_bulkTypeFileName(bulkType)}';
+        final targetPath = '${directory.path}/${_bulkTypeFileName(bulkType)}';
         final tempPath = '$targetPath.download';
         final file = File(tempPath);
         final sink = file.openWrite();
@@ -2380,7 +2898,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         await for (final chunk in response.stream) {
           received += chunk.length;
           sink.add(chunk);
-          final shouldReport = progressThrottle.elapsed >= minProgressInterval ||
+          final shouldReport =
+              progressThrottle.elapsed >= minProgressInterval ||
               (totalBytes > 0 && received >= totalBytes);
           if (shouldReport && mounted) {
             progressThrottle.reset();
@@ -2408,7 +2927,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _bulkDownloading = false;
           _bulkDownloadProgress = 1;
         });
-        await _importBulkFile(targetPath);
+        await _importBulkFile(
+          targetPath,
+          restartAfterImport: restartAfterImport,
+        );
       } finally {
         client.close();
       }
@@ -2428,13 +2950,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  Future<void> _importBulkFile(String filePath) async {
+  Future<void> _importBulkFile(
+    String filePath, {
+    bool restartAfterImport = false,
+  }) async {
     if (_bulkImporting) {
       return;
     }
     if (!mounted) {
       return;
     }
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = AppLocalizations.of(context)!;
     const allowedLanguages = {'en'};
     setState(() {
       _bulkImporting = true;
@@ -2480,10 +3007,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _cardsMissing = false;
         _totalCardCount = total;
       });
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.importComplete,
-      );
+      await _loadCollections();
+      if (!mounted) {
+        return;
+      }
+      if (restartAfterImport) {
+        await _softRestartAfterDatabaseBootstrap();
+      }
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n.importComplete)));
     } catch (_) {
       if (!mounted) {
         return;
@@ -2491,10 +3024,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       setState(() {
         _bulkImporting = false;
       });
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.importFailed('import_failed'),
-      );
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(l10n.importFailed('import_failed'))),
+        );
     }
   }
 
@@ -2515,9 +3049,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
               const SizedBox(width: 12),
               Expanded(
-                  child: Text(
-                    l10n.requiredAfterLargeUpdates,
-                    style: Theme.of(context).textTheme.bodySmall,
+                child: Text(
+                  l10n.requiredAfterLargeUpdates,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
             ],
@@ -2534,16 +3068,32 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
+  Future<void> _softRestartAfterDatabaseBootstrap() async {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _initialCollectionsLoading = true;
+    });
+    await _loadCollections();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _initialCollectionsLoading = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isBlockingSync = _bulkDownloading || _bulkImporting;
     final blockingLabel = _bulkDownloading
         ? (_bulkDownloadTotal > 0
-            ? l10n.downloadingWithPercent(
-                (_bulkDownloadProgress * 100).clamp(0, 100).round(),
-              )
-            : l10n.downloading)
+              ? l10n.downloadingWithPercent(
+                  (_bulkDownloadProgress * 100).clamp(0, 100).round(),
+                )
+              : l10n.downloading)
         : l10n.importingCardsWithCount(
             (_bulkImportProgress * 100).clamp(0, 100).round(),
             _bulkImportedCount,
@@ -2565,26 +3115,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       Row(
                         children: [
                           const SizedBox(width: 40),
-                          Expanded(
-                            child: Column(
-                              children: [
-                                _TitleLockup(),
-                              ],
-                            ),
-                          ),
+                          Expanded(child: Column(children: [_TitleLockup()])),
                           IconButton(
                             tooltip: l10n.settings,
                             icon: const Icon(Icons.settings),
                             onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const SettingsPage(),
-                                ),
-                              ).then((_) {
-                                if (mounted) {
-                                  _initializeStartup();
-                                }
-                              });
+                              Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SettingsPage(),
+                                    ),
+                                  )
+                                  .then((_) {
+                                    if (mounted) {
+                                      _initializeStartup();
+                                    }
+                                  });
                             },
                           ),
                         ],
@@ -2616,9 +3162,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               : l10n.downloadingUpdateNoTotal(
                                   _formatBytes(_bulkDownloadReceived),
                                 ),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE3B55C),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFE3B55C)),
                         )
                       else if (_bulkImporting)
                         Text(
@@ -2626,25 +3171,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                             (_bulkImportProgress * 100).clamp(0, 100).round(),
                             _bulkImportedCount,
                           ),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE3B55C),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFE3B55C)),
                         )
                       else if (_bulkDownloadError != null)
                         Text(
                           l10n.downloadFailedTapUpdate,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE38B5C),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFE38B5C)),
                         )
                       else if (_cardsMissing)
                         Text(
                           _selectedBulkType == null
                               ? l10n.selectDatabaseToDownload
                               : l10n.databaseMissingDownloadRequired(bulkLabel),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE38B5C),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFE38B5C)),
                         )
                       else if (_bulkUpdateAvailable)
                         Text(
@@ -2656,16 +3198,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                     .first ??
                                 l10n.unknownDate,
                           ),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE3B55C),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFE3B55C)),
                         )
                       else
                         Text(
                           l10n.upToDate,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF908676),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFF908676)),
                         ),
                       if (_bulkDownloading || _bulkImporting)
                         Padding(
@@ -2682,24 +3222,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 ),
                 Expanded(
                   child: _initialCollectionsLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(),
-                        )
+                      ? const Center(child: CircularProgressIndicator())
                       : ListView(
                           padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
-                          children: [
-                            ..._buildCollectionSections(context),
-                          ],
+                          children: [..._buildCollectionSections(context)],
                         ),
                 ),
               ],
             ),
           ),
           if (isBlockingSync) ...[
-            const ModalBarrier(
-              dismissible: false,
-              color: Color(0x880E0A08),
-            ),
+            const ModalBarrier(dismissible: false, color: Color(0x880E0A08)),
             Center(
               child: Chip(
                 avatar: const SizedBox(
@@ -2710,9 +3243,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 label: Text('$blockingLabel ${l10n.pleaseWait}'),
                 backgroundColor: const Color(0xFFE9C46A),
                 labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: const Color(0xFF1C1510),
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: const Color(0xFF1C1510),
+                  fontWeight: FontWeight.w700,
+                ),
                 side: BorderSide.none,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -2738,7 +3271,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
               FloatingActionButton(
                 heroTag: 'home_add_fab',
-                onPressed: isBlockingSync ? null : () => _showHomeAddOptions(context),
+                onPressed: isBlockingSync
+                    ? null
+                    : () => _showHomeAddOptions(context),
                 child: const Icon(Icons.add),
               ),
             ],
@@ -2746,6 +3281,43 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         ),
       ),
     );
+  }
+}
+
+class _DashedRoundedRectPainter extends CustomPainter {
+  const _DashedRoundedRectPainter({
+    required this.color,
+    required this.radius,
+  });
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(rect, Radius.circular(radius));
+    final borderPath = Path()..addRRect(rrect);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = color;
+
+    const dashWidth = 7.0;
+    const dashSpace = 5.0;
+    for (final metric in borderPath.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = (distance + dashWidth).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, next), paint);
+        distance += dashWidth + dashSpace;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRoundedRectPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
   }
 }
 
@@ -2789,7 +3361,10 @@ class _CollectionCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.collections_bookmark, color: Color(0xFFE9C46A)),
+                const Icon(
+                  Icons.collections_bookmark,
+                  color: Color(0xFFE9C46A),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -2803,8 +3378,8 @@ class _CollectionCard extends StatelessWidget {
                       Text(
                         l10n.cardCount(count),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFBFAE95),
-                            ),
+                          color: const Color(0xFFBFAE95),
+                        ),
                       ),
                     ],
                   ),
@@ -2828,21 +3403,17 @@ class _SectionDivider extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Expanded(
-          child: _DividerGlow(),
-        ),
+        const Expanded(child: _DividerGlow()),
         const SizedBox(width: 12),
         Text(
           label,
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: const Color(0xFFC9BDA4),
-                letterSpacing: 0.6,
-              ),
+            color: const Color(0xFFC9BDA4),
+            letterSpacing: 0.6,
+          ),
         ),
         const SizedBox(width: 12),
-        const Expanded(
-          child: _DividerGlow(),
-        ),
+        const Expanded(child: _DividerGlow()),
       ],
     );
   }
@@ -2870,7 +3441,9 @@ class _DividerGlow extends StatelessWidget {
 }
 
 class _HomeAddSheet extends StatelessWidget {
-  const _HomeAddSheet();
+  const _HomeAddSheet({required this.canCreateWishlist});
+
+  final bool canCreateWishlist;
 
   @override
   Widget build(BuildContext context) {
@@ -2892,10 +3465,7 @@ class _HomeAddSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            l10n.addTitle,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
+          Text(l10n.addTitle, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           ListTile(
             leading: const Icon(Icons.document_scanner_outlined),
@@ -2913,7 +3483,34 @@ class _HomeAddSheet extends StatelessWidget {
             leading: const Icon(Icons.collections_bookmark),
             title: Text(l10n.addCollection),
             subtitle: Text(l10n.addCollectionSubtitle),
-            onTap: () => Navigator.of(context).pop(_HomeAddAction.addCollection),
+            onTap: () =>
+                Navigator.of(context).pop(_HomeAddAction.addCollection),
+          ),
+          Opacity(
+            opacity: canCreateWishlist ? 1.0 : 0.55,
+            child: ListTile(
+              leading: const Icon(Icons.bookmark_add_outlined),
+              title: Text(l10n.addWishlist),
+              subtitle: canCreateWishlist
+                  ? Text(l10n.addWishlistSubtitle)
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.upgradeToPro,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: const Color(0xFFE9C46A),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        Text(l10n.addWishlistSubtitle),
+                      ],
+                    ),
+              onTap: canCreateWishlist
+                  ? () => Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                  : null,
+            ),
           ),
         ],
       ),
@@ -2922,10 +3519,7 @@ class _HomeAddSheet extends StatelessWidget {
 }
 
 class _CollectionFilterBuilderPage extends StatefulWidget {
-  const _CollectionFilterBuilderPage({
-    required this.name,
-    this.initialFilter,
-  });
+  const _CollectionFilterBuilderPage({required this.name, this.initialFilter});
 
   final String name;
   final CollectionFilter? initialFilter;
@@ -3046,8 +3640,9 @@ class _CollectionFilterBuilderPageState
       setState(() {
         _loadingArtists = true;
       });
-      final results =
-          await ScryfallDatabase.instance.fetchAvailableArtists(query: query);
+      final results = await ScryfallDatabase.instance.fetchAvailableArtists(
+        query: query,
+      );
       if (!mounted) {
         return;
       }
@@ -3105,8 +3700,7 @@ class _CollectionFilterBuilderPageState
     setState(() {
       _previewLoading = true;
     });
-    final total =
-        await ScryfallDatabase.instance.countCardsForFilter(filter);
+    final total = await ScryfallDatabase.instance.countCardsForFilter(filter);
     final cards = await ScryfallDatabase.instance.fetchFilteredCardPreviews(
       filter,
       limit: 30,
@@ -3150,18 +3744,21 @@ class _CollectionFilterBuilderPageState
     final filteredSets = _setQuery.isEmpty
         ? <SetInfo>[]
         : _availableSets
-            .where(
-              (set) =>
-                  set.name.toLowerCase().contains(_setQuery.toLowerCase()) ||
-                  set.code.toLowerCase().contains(_setQuery.toLowerCase()),
-            )
-            .toList();
-    final filteredTypes = _typeQuery.isEmpty
-        ? <String>[]
-        : _knownTypes
-            .where((type) =>
-                type.toLowerCase().contains(_typeQuery.toLowerCase()))
-            .toList()
+              .where(
+                (set) =>
+                    set.name.toLowerCase().contains(_setQuery.toLowerCase()) ||
+                    set.code.toLowerCase().contains(_setQuery.toLowerCase()),
+              )
+              .toList();
+    final filteredTypes =
+        _typeQuery.isEmpty
+              ? <String>[]
+              : _knownTypes
+                    .where(
+                      (type) =>
+                          type.toLowerCase().contains(_typeQuery.toLowerCase()),
+                    )
+                    .toList()
           ..sort();
     final sortedRarities = _rarityOrder;
     final sortedColors = _colorOrder;
@@ -3206,9 +3803,7 @@ class _CollectionFilterBuilderPageState
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.name),
-      ),
+      appBar: AppBar(title: Text(widget.name)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         children: [
@@ -3231,19 +3826,13 @@ class _CollectionFilterBuilderPageState
             onChanged: (_) => _schedulePreviewUpdate(),
           ),
           const SizedBox(height: 16),
-          Text(
-            l10n.setLabel,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text(l10n.setLabel, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           if (_selectedSets.isNotEmpty) ...[
-            buildSelectedChips(
-              _selectedSets,
-              (value) {
-                _selectedSets.remove(value);
-                _schedulePreviewUpdate();
-              },
-            ),
+            buildSelectedChips(_selectedSets, (value) {
+              _selectedSets.remove(value);
+              _schedulePreviewUpdate();
+            }),
             const SizedBox(height: 8),
           ],
           TextField(
@@ -3288,10 +3877,7 @@ class _CollectionFilterBuilderPageState
               ),
           ],
           const SizedBox(height: 16),
-          Text(
-            l10n.rarity,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text(l10n.rarity, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           buildChipRow<String>(
             sortedRarities,
@@ -3305,10 +3891,7 @@ class _CollectionFilterBuilderPageState
             (value) => _formatRarity(value),
           ),
           const SizedBox(height: 16),
-          Text(
-            l10n.colorLabel,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text(l10n.colorLabel, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           buildChipRow<String>(
             sortedColors,
@@ -3322,19 +3905,13 @@ class _CollectionFilterBuilderPageState
             (value) => _colorLabel(value),
           ),
           const SizedBox(height: 16),
-          Text(
-            l10n.typeLabel,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text(l10n.typeLabel, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           if (_selectedTypes.isNotEmpty) ...[
-            buildSelectedChips(
-              _selectedTypes,
-              (value) {
-                _selectedTypes.remove(value);
-                _schedulePreviewUpdate();
-              },
-            ),
+            buildSelectedChips(_selectedTypes, (value) {
+              _selectedTypes.remove(value);
+              _schedulePreviewUpdate();
+            }),
             const SizedBox(height: 8),
           ],
           TextField(
@@ -3376,10 +3953,7 @@ class _CollectionFilterBuilderPageState
               ),
           ],
           const SizedBox(height: 16),
-          Text(
-            l10n.manaValue,
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
+          Text(l10n.manaValue, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -3387,9 +3961,7 @@ class _CollectionFilterBuilderPageState
                 child: TextField(
                   controller: _manaMinController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: l10n.minLabel,
-                  ),
+                  decoration: InputDecoration(hintText: l10n.minLabel),
                   onChanged: (_) => _schedulePreviewUpdate(),
                 ),
               ),
@@ -3398,9 +3970,7 @@ class _CollectionFilterBuilderPageState
                 child: TextField(
                   controller: _manaMaxController,
                   keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: l10n.maxLabel,
-                  ),
+                  decoration: InputDecoration(hintText: l10n.maxLabel),
                   onChanged: (_) => _schedulePreviewUpdate(),
                 ),
               ),
@@ -3438,8 +4008,9 @@ class _CollectionFilterBuilderPageState
                       onTap: () {
                         setState(() {
                           _artistController.text = artist;
-                          _artistController.selection =
-                              TextSelection.collapsed(offset: artist.length);
+                          _artistController.selection = TextSelection.collapsed(
+                            offset: artist.length,
+                          );
                           _artistSuggestions = [];
                         });
                         _schedulePreviewUpdate();
@@ -3449,6 +4020,20 @@ class _CollectionFilterBuilderPageState
                 ),
               ),
           ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_buildFilter()),
+                child: Text(isEditing ? l10n.save : l10n.create),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(
             l10n.cardCount(_previewTotal ?? 0),
@@ -3476,20 +4061,6 @@ class _CollectionFilterBuilderPageState
                 );
               },
             ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.cancel),
-              ),
-              const Spacer(),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(_buildFilter()),
-                child: Text(isEditing ? l10n.save : l10n.create),
-              ),
-            ],
-          ),
         ],
       ),
     );
@@ -3497,6 +4068,50 @@ class _CollectionFilterBuilderPageState
 }
 
 class _CreateCollectionSheet extends StatelessWidget {
+  const _CreateCollectionSheet({
+    required this.canCreateSet,
+    required this.canCreateCustom,
+    required this.canCreateDeck,
+  });
+
+  final bool canCreateSet;
+  final bool canCreateCustom;
+  final bool canCreateDeck;
+
+  Widget _buildCreateOption(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.55,
+      child: ListTile(
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: enabled
+            ? Text(subtitle)
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.upgradeToPro,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: const Color(0xFFE9C46A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(subtitle),
+                ],
+              ),
+        onTap: enabled ? onTap : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -3522,19 +4137,31 @@ class _CreateCollectionSheet extends StatelessWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
-          ListTile(
-            leading: const Icon(Icons.auto_awesome_mosaic),
-            title: Text(l10n.setCollectionTitle),
-            subtitle: Text(l10n.setCollectionSubtitle),
-            onTap: () => Navigator.of(context)
-                .pop(_CollectionCreateAction.setBased),
+          _buildCreateOption(
+            context,
+            icon: Icons.auto_awesome_mosaic,
+            title: l10n.setCollectionTitle,
+            subtitle: l10n.setCollectionSubtitle,
+            enabled: canCreateSet,
+            onTap: () =>
+                Navigator.of(context).pop(_CollectionCreateAction.setBased),
           ),
-          ListTile(
-            leading: const Icon(Icons.collections_bookmark),
-            title: Text(l10n.customCollectionTitle),
-            subtitle: Text(l10n.customCollectionSubtitle),
+          _buildCreateOption(
+            context,
+            icon: Icons.tune,
+            title: l10n.customCollectionTitle,
+            subtitle: l10n.customCollectionSubtitle,
+            enabled: canCreateCustom,
             onTap: () =>
                 Navigator.of(context).pop(_CollectionCreateAction.custom),
+          ),
+          _buildCreateOption(
+            context,
+            icon: Icons.style,
+            title: l10n.deckCollectionTitle,
+            subtitle: l10n.deckCollectionSubtitle,
+            enabled: canCreateDeck,
+            onTap: () => Navigator.of(context).pop(_CollectionCreateAction.deck),
           ),
         ],
       ),
@@ -3547,9 +4174,9 @@ class _TitleLockup extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = AppLocalizations.of(context)!.appTitle;
     final textStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 2,
-        );
+      fontWeight: FontWeight.w700,
+      letterSpacing: 2,
+    );
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -3569,11 +4196,7 @@ class _TitleLockup extends StatelessWidget {
         ShaderMask(
           shaderCallback: (bounds) {
             return const LinearGradient(
-              colors: [
-                Color(0xFFF5E3A4),
-                Color(0xFFE2C26A),
-                Color(0xFFB85C38),
-              ],
+              colors: [Color(0xFFF5E3A4), Color(0xFFE2C26A), Color(0xFFB85C38)],
             ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height));
           },
           child: Text(
@@ -3602,10 +4225,7 @@ class _OcrSearchSeed {
 }
 
 class _ResolvedScanSelection {
-  const _ResolvedScanSelection({
-    required this.seed,
-    this.pickedCard,
-  });
+  const _ResolvedScanSelection({required this.seed, this.pickedCard});
 
   final _OcrSearchSeed seed;
   final CardSearchResult? pickedCard;
@@ -3615,11 +4235,11 @@ enum _ScanPreviewAction { add, retry }
 
 Future<CardSearchResult?> _pickCardPrintingForName(
   BuildContext context,
-  String cardName,
-  {String? preferredSetCode,
+  String cardName, {
+  String? preferredSetCode,
   String? preferredCollectorNumber,
-  Set<String> localPrintingKeys = const {}}
-) async {
+  Set<String> localPrintingKeys = const {},
+}) async {
   final normalizedTarget = _normalizeCardNameForMatch(cardName);
   if (normalizedTarget.isEmpty) {
     return null;
@@ -3640,12 +4260,15 @@ Future<CardSearchResult?> _pickCardPrintingForName(
     return null;
   }
   final exact = results
-      .where((card) => _normalizeCardNameForMatch(card.name) == normalizedTarget)
+      .where(
+        (card) => _normalizeCardNameForMatch(card.name) == normalizedTarget,
+      )
       .toList(growable: false);
   final candidates = exact.isNotEmpty ? exact : results;
   final byPrinting = <String, CardSearchResult>{};
   for (final card in candidates) {
-    final key = '${card.name.toLowerCase()}|${card.setCode.toLowerCase()}|${card.collectorNumber.toLowerCase()}';
+    final key =
+        '${card.name.toLowerCase()}|${card.setCode.toLowerCase()}|${card.collectorNumber.toLowerCase()}';
     byPrinting.putIfAbsent(key, () => card);
   }
   final unique = byPrinting.values.toList(growable: false);
@@ -3656,13 +4279,13 @@ Future<CardSearchResult?> _pickCardPrintingForName(
   final localCandidates = localKeys.isEmpty
       ? unique
       : unique
-          .where((card) => localKeys.contains(_printingKeyForCard(card)))
-          .toList(growable: false);
+            .where((card) => localKeys.contains(_printingKeyForCard(card)))
+            .toList(growable: false);
   final onlineCandidates = localKeys.isEmpty
       ? <CardSearchResult>[]
       : unique
-          .where((card) => !localKeys.contains(_printingKeyForCard(card)))
-          .toList(growable: false);
+            .where((card) => !localKeys.contains(_printingKeyForCard(card)))
+            .toList(growable: false);
   final preferredSet = preferredSetCode?.trim().toLowerCase();
   var effectivePreferredSet = preferredSet;
   if (effectivePreferredSet != null &&
@@ -3826,9 +4449,9 @@ class _PickPrintingSheet extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               cardName,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFFBFAE95),
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -3851,7 +4474,8 @@ class _PickPrintingSheet extends StatelessWidget {
                       _buildPrintingTile(context, card),
                   ],
                   if (localCandidates.isEmpty && onlineCandidates.isEmpty)
-                    for (final card in candidates) _buildPrintingTile(context, card),
+                    for (final card in candidates)
+                      _buildPrintingTile(context, card),
                 ],
               ),
             ),
@@ -3867,10 +4491,10 @@ class _PickPrintingSheet extends StatelessWidget {
       child: Text(
         title,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: const Color(0xFFE9C46A),
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.6,
-            ),
+          color: const Color(0xFFE9C46A),
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+        ),
       ),
     );
   }
@@ -4036,7 +4660,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
       }
       setState(() {
         _initializing = false;
-        _status = AppLocalizations.of(context)!.cameraUnavailableCheckPermissions;
+        _status = AppLocalizations.of(
+          context,
+        )!.cameraUnavailableCheckPermissions;
       });
     }
   }
@@ -4076,7 +4702,10 @@ class _CardScannerPageState extends State<_CardScannerPage>
       setState(() {
         _torchAvailable = false;
       });
-      showAppSnackBar(context, AppLocalizations.of(context)!.flashNotAvailableOnDevice);
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.flashNotAvailableOnDevice,
+      );
     }
   }
 
@@ -4133,7 +4762,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
           if (_lockedName.isEmpty) {
             _status = AppLocalizations.of(context)!.searchingCardNameStatus;
           } else {
-            _status = AppLocalizations.of(context)!.nameRecognizedOpeningSearchStatus;
+            _status = AppLocalizations.of(
+              context,
+            )!.nameRecognizedOpeningSearchStatus;
           }
         });
       }
@@ -4150,9 +4781,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
           'lockedName': _lockedName,
           'lockedSet': _lockedSet,
         });
-        Navigator.of(context).pop(
-          '__SCAN_PAYLOAD__$payload',
-        );
+        Navigator.of(context).pop('__SCAN_PAYLOAD__$payload');
       }
     } catch (_) {
       _stableHits = 0;
@@ -4184,10 +4813,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
           (line) => line.length >= 3 && RegExp(r'[A-Za-z]').hasMatch(line),
           orElse: () => '',
         );
-    final collector = (lines.reversed
-        .map((line) => line.toLowerCase())
-        .map((line) => RegExp(r'(\d{1,5}[a-z]?)').firstMatch(line)?.group(1))
-        .firstWhere((value) => value != null && value.isNotEmpty, orElse: () => '')) ??
+    final collector =
+        (lines.reversed
+            .map((line) => line.toLowerCase())
+            .map(
+              (line) => RegExp(r'(\d{1,5}[a-z]?)').firstMatch(line)?.group(1),
+            )
+            .firstWhere(
+              (value) => value != null && value.isNotEmpty,
+              orElse: () => '',
+            )) ??
         '';
     final parts = <String>[
       if (name.isNotEmpty) name,
@@ -4218,7 +4853,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
     final votedSetCandidate = _registerSetVote(setCandidate);
     _namePreview = nameCandidate;
 
-      if (nameCandidate.isNotEmpty) {
+    if (nameCandidate.isNotEmpty) {
       if (nameCandidate.toLowerCase() == _lastNameCandidate.toLowerCase()) {
         _nameHits += 1;
       } else {
@@ -4234,8 +4869,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
     }
 
     if (votedSetCandidate.isNotEmpty) {
-      final hasResolvedSet = RegExp(r'^[A-Z]{2,5}\s+[0-9]{1,5}[A-Z]?$')
-          .hasMatch(votedSetCandidate.trim().toUpperCase());
+      final hasResolvedSet = RegExp(
+        r'^[A-Z]{2,5}\s+[0-9]{1,5}[A-Z]?$',
+      ).hasMatch(votedSetCandidate.trim().toUpperCase());
       if (!hasResolvedSet) {
         _setHits = 0;
         return;
@@ -4284,8 +4920,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
   }
 
   String _normalizeSetCandidateForVote(String value) {
-    final match = RegExp(r'^([A-Z]{2,5})\s+([0-9]{1,5}[A-Z]?)$')
-        .firstMatch(value.trim().toUpperCase());
+    final match = RegExp(
+      r'^([A-Z]{2,5})\s+([0-9]{1,5}[A-Z]?)$',
+    ).firstMatch(value.trim().toUpperCase());
     if (match == null) {
       return '';
     }
@@ -4313,8 +4950,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
         continue;
       }
       final hasLetters = RegExp(r'[A-Za-z]').hasMatch(cleaned);
-      final hasManyDigits = RegExp(r'\d').allMatches(cleaned).length >
-          (cleaned.length * 0.25);
+      final hasManyDigits =
+          RegExp(r'\d').allMatches(cleaned).length > (cleaned.length * 0.25);
       if (!hasLetters || hasManyDigits) {
         continue;
       }
@@ -4435,10 +5072,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
     return null;
   }
 
-  InputImage? _toInputImage(
-    CameraImage image,
-    CameraController controller,
-  ) {
+  InputImage? _toInputImage(CameraImage image, CameraController controller) {
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
     if (format == null) {
       return null;
@@ -4446,7 +5080,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
     final bytes = Uint8List.fromList(
       image.planes.expand((plane) => plane.bytes).toList(growable: false),
     );
-    final rotation = InputImageRotationValue.fromRawValue(
+    final rotation =
+        InputImageRotationValue.fromRawValue(
           controller.description.sensorOrientation,
         ) ??
         InputImageRotation.rotation0deg;
@@ -4502,7 +5137,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
         actions: [
           IconButton(
             tooltip: l10n.torchTooltip,
-            onPressed: (_initializing || !_torchAvailable) ? null : _toggleTorch,
+            onPressed: (_initializing || !_torchAvailable)
+                ? null
+                : _toggleTorch,
             icon: Icon(
               _torchEnabled ? Icons.flash_on : Icons.flash_off,
               color: _torchEnabled ? const Color(0xFFE9C46A) : null,
@@ -4520,8 +5157,10 @@ class _CardScannerPageState extends State<_CardScannerPage>
           IgnorePointer(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final availableWidth = (constraints.maxWidth - 48)
-                    .clamp(110.0, constraints.maxWidth);
+                final availableWidth = (constraints.maxWidth - 48).clamp(
+                  110.0,
+                  constraints.maxWidth,
+                );
                 final mediaPadding = MediaQuery.of(context).padding;
                 final topReserved = mediaPadding.top + 8;
                 final bottomReserved = mediaPadding.bottom + 236;
@@ -4537,10 +5176,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 }
                 final centerY = topReserved + (frameAreaHeight / 2) + 10;
                 final guideRect = Rect.fromCenter(
-                  center: Offset(
-                    constraints.maxWidth / 2,
-                    centerY,
-                  ),
+                  center: Offset(constraints.maxWidth / 2, centerY),
                   width: guideWidth,
                   height: guideHeight,
                 );
@@ -4567,9 +5203,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
               right: 16,
               child: SafeArea(
                 bottom: false,
-                child: Center(
-                  child: _buildLimitedCoverageBadge(),
-                ),
+                child: Center(child: _buildLimitedCoverageBadge()),
               ),
             ),
           Positioned(
@@ -4585,8 +5219,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
                     label: AppLocalizations.of(context)!.nameLabel,
                     value: _lockedName.isEmpty
                         ? (_namePreview.isEmpty
-                            ? AppLocalizations.of(context)!.waitingStatus
-                            : _namePreview)
+                              ? AppLocalizations.of(context)!.waitingStatus
+                              : _namePreview)
                         : _lockedName,
                     locked: _lockedName.isNotEmpty,
                   ),
@@ -4595,15 +5229,15 @@ class _CardScannerPageState extends State<_CardScannerPage>
                     _status,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFEFE7D8),
-                        ),
+                      color: const Color(0xFFEFE7D8),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     AppLocalizations.of(context)!.liveOcrActive,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFE9C46A),
-                        ),
+                      color: const Color(0xFFE9C46A),
+                    ),
                   ),
                 ],
               ),
@@ -4648,10 +5282,16 @@ class _CardGuideOverlayPainter extends CustomPainter {
         ),
     );
 
-    final frameColor = locked ? const Color(0xFF4CAF50) : const Color(0xFFE9C46A);
-    final accentColor = locked ? const Color(0xFFC8FACC) : const Color(0xFFF5E3A4);
+    final frameColor = locked
+        ? const Color(0xFF4CAF50)
+        : const Color(0xFFE9C46A);
+    final accentColor = locked
+        ? const Color(0xFFC8FACC)
+        : const Color(0xFFF5E3A4);
     final glowPaint = Paint()
-      ..color = frameColor.withValues(alpha: locked ? 0.72 : (0.36 + (0.38 * pulse)))
+      ..color = frameColor.withValues(
+        alpha: locked ? 0.72 : (0.36 + (0.38 * pulse)),
+      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
@@ -4665,7 +5305,9 @@ class _CardGuideOverlayPainter extends CustomPainter {
 
     final innerRRect = guideRRect.deflate(6);
     final innerStroke = Paint()
-      ..color = accentColor.withValues(alpha: locked ? 0.55 : (0.32 + (0.30 * pulse)))
+      ..color = accentColor.withValues(
+        alpha: locked ? 0.55 : (0.32 + (0.30 * pulse)),
+      )
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
     canvas.drawRRect(innerRRect, innerStroke);
@@ -4680,10 +5322,26 @@ class _CardGuideOverlayPainter extends CustomPainter {
     final right = guideRect.right - 12;
     final top = guideRect.top + 12;
     final bottom = guideRect.bottom - 12;
-    canvas.drawLine(Offset(left, top), Offset(left + accentLen, top), accentPaint);
-    canvas.drawLine(Offset(left, top), Offset(left, top + accentLen), accentPaint);
-    canvas.drawLine(Offset(right, top), Offset(right - accentLen, top), accentPaint);
-    canvas.drawLine(Offset(right, top), Offset(right, top + accentLen), accentPaint);
+    canvas.drawLine(
+      Offset(left, top),
+      Offset(left + accentLen, top),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(left, top),
+      Offset(left, top + accentLen),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(right, top),
+      Offset(right - accentLen, top),
+      accentPaint,
+    );
+    canvas.drawLine(
+      Offset(right, top),
+      Offset(right, top + accentLen),
+      accentPaint,
+    );
     canvas.drawLine(
       Offset(left, bottom),
       Offset(left + accentLen, bottom),
@@ -4719,7 +5377,10 @@ class _CardGuideOverlayPainter extends CustomPainter {
       guideRect.width - 28,
       guideRect.height * 0.16,
     );
-    final nameRRect = RRect.fromRectAndRadius(nameZone, const Radius.circular(8));
+    final nameRRect = RRect.fromRectAndRadius(
+      nameZone,
+      const Radius.circular(8),
+    );
     canvas.drawRRect(nameRRect, zoneFill);
     canvas.drawRRect(nameRRect, zoneStroke);
 
@@ -4737,12 +5398,8 @@ class _CardGuideOverlayPainter extends CustomPainter {
     )..layout();
     nameTp.paint(
       canvas,
-      Offset(
-        nameZone.left + 8,
-        nameZone.center.dy - (nameTp.height / 2),
-      ),
+      Offset(nameZone.left + 8, nameZone.center.dy - (nameTp.height / 2)),
     );
-
   }
 
   @override
@@ -4767,12 +5424,15 @@ class _ScanFieldStatusBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        locked ? const Color(0xFF4CAF50) : const Color(0x99E9C46A);
-    final fillColor =
-        locked ? const Color(0x334CAF50) : const Color(0x221C1713);
-    final valueColor =
-        locked ? const Color(0xFFC8FACC) : const Color(0xFFEFE7D8);
+    final borderColor = locked
+        ? const Color(0xFF4CAF50)
+        : const Color(0x99E9C46A);
+    final fillColor = locked
+        ? const Color(0x334CAF50)
+        : const Color(0x221C1713);
+    final valueColor = locked
+        ? const Color(0xFFC8FACC)
+        : const Color(0xFFEFE7D8);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -4788,10 +5448,10 @@ class _ScanFieldStatusBox extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: borderColor,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8,
-                ),
+              color: borderColor,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.8,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -4799,9 +5459,9 @@ class _ScanFieldStatusBox extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: valueColor,
-                  fontWeight: FontWeight.w600,
-                ),
+              color: valueColor,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -4811,17 +5471,12 @@ class _ScanFieldStatusBox extends StatelessWidget {
 
 enum _CollectionAction { rename, editFilters, delete }
 
-enum _HomeAddAction { addByScan, addCards, addCollection }
+enum _HomeAddAction { addByScan, addCards, addCollection, addWishlist }
 
-enum _CollectionCreateAction { custom, setBased }
-
-
+enum _CollectionCreateAction { custom, setBased, deck }
 
 class _SnakeProgressBar extends StatelessWidget {
-  const _SnakeProgressBar({
-    required this.animation,
-    required this.value,
-  });
+  const _SnakeProgressBar({required this.animation, required this.value});
 
   final Animation<double> animation;
   final double value;
@@ -4891,4 +5546,3 @@ class _SnakeProgressBar extends StatelessWidget {
     );
   }
 }
-

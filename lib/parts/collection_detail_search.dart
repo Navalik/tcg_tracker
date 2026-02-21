@@ -1,4 +1,4 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 class _CardSearchSelection {
   _CardSearchSelection.single(CardSearchResult card)
@@ -19,10 +19,7 @@ class _CardSearchSelection {
 }
 
 class _SearchPriceData {
-  const _SearchPriceData({
-    required this.base,
-    required this.foil,
-  });
+  const _SearchPriceData({required this.base, required this.foil});
 
   final String base;
   final String foil;
@@ -35,6 +32,8 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialCollectorNumber,
     this.selectionEnabled = true,
     this.ownershipCollectionId,
+    this.addMissingToCollectionId,
+    this.requiredFilter,
     this.showFilterButton = true,
   });
 
@@ -43,6 +42,8 @@ class _CardSearchSheet extends StatefulWidget {
   final String? initialCollectorNumber;
   final bool selectionEnabled;
   final int? ownershipCollectionId;
+  final int? addMissingToCollectionId;
+  final CollectionFilter? requiredFilter;
   final bool showFilterButton;
 
   @override
@@ -175,7 +176,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _debounce = Timer(const Duration(milliseconds: 300), _runSearch);
   }
 
-  Future<void> _runSearch() async {
+  Future<void> _runSearch({bool forceRefresh = false}) async {
     final shouldFetchByFilters =
         _query.isEmpty && _hasActiveAdvancedFilters() && _hasNarrowingFilters();
     if (_query.isEmpty && !shouldFetchByFilters) {
@@ -194,6 +195,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     if (_searching) {
       _pendingQuery = _query;
+      if (forceRefresh) {
+        _pendingFilterRefresh = true;
+      }
       return;
     }
     _hidePreview(immediate: false);
@@ -228,7 +232,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     if (_pendingQuery != null && _pendingQuery != currentQuery) {
       _pendingQuery = null;
-      await _runSearch();
+      await _runSearch(forceRefresh: true);
     } else {
       _pendingQuery = null;
     }
@@ -252,7 +256,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     setState(() {
       _countLoading = true;
     });
-    final filter = _buildAdvancedFilter();
+    final filter = _effectiveAdvancedFilter();
     final total = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
       filter,
       searchQuery: _query.isEmpty ? null : _query,
@@ -331,7 +335,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       page = _mergeUniquePrintings(localResults, onlineResults);
       hasMorePages = false;
     } else if (hasAdvancedFilters) {
-      final filter = _buildAdvancedFilter();
+      final filter = _effectiveAdvancedFilter();
       page = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
         filter,
         searchQuery: query.isEmpty ? null : query,
@@ -405,8 +409,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     try {
       final collected = <CardSearchResult>[];
+      final normalizedTokens = _tokenizeSearch(trimmed);
+      final normalizedQuery = normalizedTokens.join(' ').trim();
+      final namedLookupQuery = normalizedQuery.isNotEmpty
+          ? normalizedQuery
+          : trimmed;
       final namedUri = Uri.parse(
-        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(trimmed)}',
+        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(namedLookupQuery)}',
       );
       final namedResponse = await ScryfallApiClient.instance.get(
         namedUri,
@@ -426,7 +435,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
 
       final rawEscaped = trimmed.replaceAll('"', '\\"');
-      final prefixTokens = _tokenizeSearch(trimmed);
+      final prefixTokens = normalizedTokens;
       final prefixQuery = prefixTokens.map((token) => 'name:$token*').join(' ');
       if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
         final strict = await _fetchScryfallSearchResults(
@@ -441,6 +450,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         queryCandidates.add(prefixQuery);
       }
       queryCandidates.add(rawEscaped);
+      if (normalizedQuery.isNotEmpty &&
+          normalizedQuery.toLowerCase() != trimmed.toLowerCase()) {
+        queryCandidates.add(normalizedQuery.replaceAll('"', '\\"'));
+      }
       if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
         queryCandidates.add(
           '!"$resolvedName" oracleid:$oracleId include:extras',
@@ -692,6 +705,41 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
   }
 
+  CollectionFilter _effectiveAdvancedFilter() {
+    final base = _buildAdvancedFilter();
+    final required = widget.requiredFilter;
+    if (required == null) {
+      return base;
+    }
+    return CollectionFilter(
+      name: base.name ?? required.name,
+      artist: base.artist ?? required.artist,
+      manaMin: base.manaMin ?? required.manaMin,
+      manaMax: base.manaMax ?? required.manaMax,
+      format: required.format ?? base.format,
+      sets: {...required.sets, ...base.sets},
+      rarities: {...required.rarities, ...base.rarities},
+      colors: {...required.colors, ...base.colors},
+      types: {...required.types, ...base.types},
+    );
+  }
+
+  bool _hasRequiredAdvancedFilters() {
+    final required = widget.requiredFilter;
+    if (required == null) {
+      return false;
+    }
+    return (required.name?.trim().isNotEmpty ?? false) ||
+        (required.artist?.trim().isNotEmpty ?? false) ||
+        required.manaMin != null ||
+        required.manaMax != null ||
+        (required.format?.trim().isNotEmpty ?? false) ||
+        required.sets.isNotEmpty ||
+        required.rarities.isNotEmpty ||
+        required.colors.isNotEmpty ||
+        required.types.isNotEmpty;
+  }
+
   Future<Map<String, String>> _getAvailableSetCodes() async {
     final cached = _availableSetCodesCache;
     if (cached != null) {
@@ -800,7 +848,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   bool _hasActiveAdvancedFilters() {
-    return _selectedRarities.isNotEmpty ||
+    return _hasRequiredAdvancedFilters() ||
+        _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
@@ -810,7 +859,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   bool _hasNarrowingFilters() {
-    return _selectedRarities.isNotEmpty ||
+    return _hasRequiredAdvancedFilters() ||
+        _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
@@ -1371,7 +1421,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _loading = true;
     });
     try {
-      final filter = _buildAdvancedFilter();
+      final filter = _effectiveAdvancedFilter();
       final allResults = <CardSearchResult>[];
       const pageSize = 200;
       var offset = 0;
@@ -1574,7 +1624,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     await _showEntryDetails(refreshed);
   }
 
-  Future<void> _showEntryDetails(CollectionCardEntry entry) {
+  Future<void> _showEntryDetails(CollectionCardEntry entry) async {
+    List<String> legalFormats = const [];
+    try {
+      legalFormats = await ScryfallDatabase.instance.fetchCardLegalFormats(
+        entry.cardId,
+      );
+    } catch (_) {
+      legalFormats = const [];
+    }
+    if (!mounted) {
+      return;
+    }
     return showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1583,7 +1644,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         final addButtonKey = GlobalKey();
         var showCheck = false;
         final l10n = AppLocalizations.of(context)!;
-        final details = _parseCardDetails(l10n, entry);
+        final details = _parseCardDetails(l10n, entry, legalFormats);
         final typeLine = entry.typeLine.trim();
         final manaCost = entry.manaCost.trim();
         final oracleText = entry.oracleText.trim();
@@ -1792,6 +1853,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   List<_CardDetail> _parseCardDetails(
     AppLocalizations l10n,
     CollectionCardEntry entry,
+    List<String> legalFormats,
   ) {
     final setLabel = entry.setName.isNotEmpty
         ? entry.setName
@@ -1813,6 +1875,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
     add(l10n.detailArtist, entry.artist);
+    final legalFormatLabels = _normalizeFormatLabels(legalFormats);
+    if (legalFormatLabels.isNotEmpty) {
+      add(l10n.detailFormat, legalFormatLabels.join(', '));
+    } else {
+      final deckFormat = widget.requiredFilter?.format?.trim().toLowerCase();
+      if (deckFormat != null && deckFormat.isNotEmpty) {
+        add(l10n.detailFormat, deckFormatLabel(deckFormat));
+      }
+    }
     return details.where((item) => item.value.isNotEmpty).toList();
   }
 
@@ -1852,6 +1923,32 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         );
       },
     );
+  }
+
+  List<String> _normalizeFormatLabels(List<String> rawFormats) {
+    final normalized = <String>{};
+    for (final item in rawFormats) {
+      final value = item.trim().toLowerCase();
+      if (value.isNotEmpty) {
+        normalized.add(value);
+      }
+    }
+    final values = normalized.toList();
+    values.sort((a, b) {
+      final ai = kSupportedDeckFormats.indexOf(a);
+      final bi = kSupportedDeckFormats.indexOf(b);
+      if (ai == -1 && bi == -1) {
+        return a.compareTo(b);
+      }
+      if (ai == -1) {
+        return 1;
+      }
+      if (bi == -1) {
+        return -1;
+      }
+      return ai.compareTo(bi);
+    });
+    return values.map(deckFormatLabel).toList();
   }
 
   Decoration _cardTintDecorationForSearch(CardSearchResult card) {
@@ -1931,10 +2028,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (cached != null) {
       return cached;
     }
-    final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+    final currency = _priceCurrency.trim().toLowerCase() == 'usd'
+        ? 'usd'
+        : 'eur';
     final symbol = currency == 'usd' ? r'$' : '\u20AC';
     return _SearchPriceData(
-      base: _normalizePriceOrNa(currency == 'usd' ? card.priceUsd : card.priceEur, symbol),
+      base: _normalizePriceOrNa(
+        currency == 'usd' ? card.priceUsd : card.priceEur,
+        symbol,
+      ),
       foil: _normalizePriceOrNa(
         currency == 'usd' ? card.priceUsdFoil : card.priceEurFoil,
         symbol,
@@ -1948,7 +2050,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     final ids = <String>[];
     for (final card in cards) {
-      if (_priceDataByCardId.containsKey(card.id) || _priceRefreshQueued.contains(card.id)) {
+      if (_priceDataByCardId.containsKey(card.id) ||
+          _priceRefreshQueued.contains(card.id)) {
         continue;
       }
       _priceRefreshQueued.add(card.id);
@@ -1975,7 +2078,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         if (entry == null) {
           continue;
         }
-        final currency = _priceCurrency.trim().toLowerCase() == 'usd' ? 'usd' : 'eur';
+        final currency = _priceCurrency.trim().toLowerCase() == 'usd'
+            ? 'usd'
+            : 'eur';
         final symbol = currency == 'usd' ? r'$' : '\u20AC';
         nextData[cardId] = _SearchPriceData(
           base: _normalizePriceOrNa(
@@ -2038,9 +2143,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                   child: Text(
                     '${l10n.priceLabel(_searchPriceDataForCard(card).base)} • ${l10n.foilLabel} ${_searchPriceDataForCard(card).foil}',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFEFE7D8),
-                          fontWeight: FontWeight.w500,
-                        ),
+                      color: const Color(0xFFEFE7D8),
+                      fontWeight: FontWeight.w500,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2119,45 +2224,58 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ],
                       ),
                     ),
+                    if (showRightActions) ...[
+                      const SizedBox(width: 8),
+                      Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (isMissing) ...[
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: _buildBadge(
+                                  l10n.missingLabel,
+                                  inverted: true,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
+                            if (showAdd)
+                              IconButton(
+                                tooltip: l10n.addOne,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 40,
+                                  height: 40,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                iconSize: 32,
+                                icon: const Icon(
+                                  Icons.add_circle_outline,
+                                  size: 32,
+                                ),
+                                color: const Color(0xFFE9C46A),
+                                onPressed: _addingFromPreview
+                                    ? null
+                                    : () => _addCardFromPreview(card),
+                              )
+                            else if (canSelectCards)
+                              const Icon(
+                                Icons.add_circle_outline,
+                                size: 32,
+                                color: Color(0xFFE9C46A),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
         ),
-        if (showRightActions)
-          Positioned(
-            right: 12,
-            top: 0,
-            bottom: 0,
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (isMissing) ...[
-                    _buildBadge(l10n.missingLabel, inverted: true),
-                    const SizedBox(width: 6),
-                  ],
-                  if (showAdd)
-                    IconButton(
-                      tooltip: l10n.addOne,
-                      iconSize: 36,
-                      icon: const Icon(Icons.add_circle_outline, size: 36),
-                      color: const Color(0xFFE9C46A),
-                      onPressed: _addingFromPreview
-                          ? null
-                          : () => _addCardFromPreview(card),
-                    )
-                  else if (canSelectCards)
-                    const Icon(
-                      Icons.add_circle_outline,
-                      size: 36,
-                      color: Color(0xFFE9C46A),
-                    ),
-                ],
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -2185,10 +2303,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                   child: Builder(
                     builder: (context) {
                       final priceData = _searchPriceDataForCard(card);
-                      final accentStyle =
-                          Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFE9C46A),
-                              );
+                      final accentStyle = Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: const Color(0xFFE9C46A));
                       final valueStyle = accentStyle?.copyWith(
                         color: const Color(0xFFEFE7D8),
                         fontWeight: FontWeight.w500,
@@ -2241,13 +2357,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   imageUrl,
                                   fit: BoxFit.cover,
                                   alignment: Alignment.topCenter,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    color: const Color(0xFF201A14),
-                                    child: const Icon(
-                                      Icons.image_not_supported,
-                                      color: Color(0xFFBFAE95),
-                                    ),
-                                  ),
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                        color: const Color(0xFF201A14),
+                                        child: const Icon(
+                                          Icons.image_not_supported,
+                                          color: Color(0xFFBFAE95),
+                                        ),
+                                      ),
                                 ),
                         ],
                       ),
@@ -2416,7 +2533,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   _artworkSearchEnabled = value;
                                 });
                                 if (_query.trim().isNotEmpty) {
-                                  await _runSearch();
+                                  await _runSearch(forceRefresh: true);
                                 }
                               },
                               avatar: const Icon(
@@ -2432,7 +2549,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   setState(() {
                                     _ownedOnlyFilter = value;
                                   });
-                                  await _runSearch();
+                                  await _runSearch(forceRefresh: true);
                                 },
                                 avatar: const Icon(
                                   Icons.inventory_2_outlined,
@@ -2645,9 +2762,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                               visibleResults.isNotEmpty))
                                       ? 1
                                       : 0),
-                              separatorBuilder: (_, _) => SizedBox(
-                                height: _showPrices ? 18 : 12,
-                              ),
+                              separatorBuilder: (_, _) =>
+                                  SizedBox(height: _showPrices ? 18 : 12),
                               itemBuilder: (context, index) {
                                 if (index >= visibleResults.length) {
                                   if (_loadingMore) {
@@ -2808,7 +2924,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                           : () => _addCardFromPreview(card),
                                       icon: const Icon(Icons.add),
                                       label: Text(
-                                        AppLocalizations.of(context)!.addToCollection,
+                                        AppLocalizations.of(
+                                          context,
+                                        )!.addToCollection,
                                       ),
                                     ),
                                   ),
@@ -2822,7 +2940,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               color: const Color(0xB314110F),
                               shape: const CircleBorder(),
                               child: IconButton(
-                                tooltip: AppLocalizations.of(context)!.closePreview,
+                                tooltip: AppLocalizations.of(
+                                  context,
+                                )!.closePreview,
                                 onPressed: () => _hidePreview(immediate: false),
                                 icon: const Icon(Icons.close),
                               ),
@@ -2856,8 +2976,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _addCardFromPreview(CardSearchResult card) async {
-    final collectionId = widget.ownershipCollectionId;
-    if (collectionId == null || _addingFromPreview) {
+    final ownedCollectionId = widget.ownershipCollectionId;
+    final missingCollectionId = widget.addMissingToCollectionId;
+    if ((ownedCollectionId == null && missingCollectionId == null) ||
+        _addingFromPreview) {
       return;
     }
     setState(() {
@@ -2874,20 +2996,29 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         }
         return;
       }
-      await ScryfallDatabase.instance.addCardToCollection(
-        collectionId,
-        card.id,
-      );
+      if (missingCollectionId != null) {
+        await ScryfallDatabase.instance.addCardToCollectionAsMissing(
+          missingCollectionId,
+          card.id,
+        );
+      } else if (ownedCollectionId != null) {
+        await ScryfallDatabase.instance.addCardToCollection(
+          ownedCollectionId,
+          card.id,
+        );
+      }
       if (!mounted) {
         return;
       }
-      final current = _ownedQuantitiesByCardId[card.id] ?? 0;
-      setState(() {
-        _ownedQuantitiesByCardId = {
-          ..._ownedQuantitiesByCardId,
-          card.id: current + 1,
-        };
-      });
+      if (missingCollectionId == null && ownedCollectionId != null) {
+        final current = _ownedQuantitiesByCardId[card.id] ?? 0;
+        setState(() {
+          _ownedQuantitiesByCardId = {
+            ..._ownedQuantitiesByCardId,
+            card.id: current + 1,
+          };
+        });
+      }
       showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
       await _hidePreview(immediate: false);
     } finally {
@@ -2900,28 +3031,40 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _addCardFromDetails(CollectionCardEntry entry) async {
-    final collectionId = widget.ownershipCollectionId;
-    if (collectionId == null || _addingFromPreview) {
+    final ownedCollectionId = widget.ownershipCollectionId;
+    final missingCollectionId = widget.addMissingToCollectionId;
+    if ((ownedCollectionId == null && missingCollectionId == null) ||
+        _addingFromPreview) {
       return;
     }
     setState(() {
       _addingFromPreview = true;
     });
     try {
-      await ScryfallDatabase.instance.addCardToCollection(
-        collectionId,
-        entry.cardId,
-      );
+      if (missingCollectionId != null) {
+        await ScryfallDatabase.instance.addCardToCollectionAsMissing(
+          missingCollectionId,
+          entry.cardId,
+        );
+      } else if (ownedCollectionId != null) {
+        await ScryfallDatabase.instance.addCardToCollection(
+          ownedCollectionId,
+          entry.cardId,
+        );
+      }
       if (!mounted) {
         return;
       }
-      final current = _ownedQuantitiesByCardId[entry.cardId] ?? entry.quantity;
-      setState(() {
-        _ownedQuantitiesByCardId = {
-          ..._ownedQuantitiesByCardId,
-          entry.cardId: current + 1,
-        };
-      });
+      if (missingCollectionId == null && ownedCollectionId != null) {
+        final current =
+            _ownedQuantitiesByCardId[entry.cardId] ?? entry.quantity;
+        setState(() {
+          _ownedQuantitiesByCardId = {
+            ..._ownedQuantitiesByCardId,
+            entry.cardId: current + 1,
+          };
+        });
+      }
       showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
     } finally {
       if (mounted) {
@@ -3051,4 +3194,3 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         .toList(growable: false);
   }
 }
-

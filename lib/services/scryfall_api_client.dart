@@ -12,6 +12,11 @@ class ScryfallApiClient {
 
   static const int _maxRequestsPerSecond = 8;
   static const Duration _rateWindow = Duration(seconds: 1);
+  static const Map<String, String> _defaultHeaders = <String, String>{
+    'Accept': 'application/json',
+    // Scryfall recommends setting a descriptive User-Agent for API clients.
+    'User-Agent': 'tcg-tracker/1.0 (Flutter; contact: local-app)',
+  };
 
   final Random _random = Random();
   final List<DateTime> _recentRequests = <DateTime>[];
@@ -27,11 +32,7 @@ class ScryfallApiClient {
     bool dedupe = true,
   }) {
     if (!dedupe) {
-      return _executeWithRetry(
-        uri,
-        timeout: timeout,
-        maxRetries: maxRetries,
-      );
+      return _executeWithRetry(uri, timeout: timeout, maxRetries: maxRetries);
     }
     final key = uri.toString();
     final existing = _inFlightGets[key];
@@ -62,7 +63,9 @@ class ScryfallApiClient {
     for (var attempt = 0; attempt <= maxRetries; attempt += 1) {
       await _waitForPermit();
       try {
-        final response = await http.get(uri).timeout(timeout);
+        final response = await http
+            .get(uri, headers: _defaultHeaders)
+            .timeout(timeout);
         if (!_shouldRetryStatus(response.statusCode)) {
           return response;
         }

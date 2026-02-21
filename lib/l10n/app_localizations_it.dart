@@ -195,7 +195,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get unlockProRemoveLimit =>
-      'Sblocca Pro per rimuovere il limite di 5 collezioni.';
+      'Sblocca Pro per rimuovere il limite di 7 collezioni.';
 
   @override
   String priceLabel(Object price) {
@@ -365,10 +365,16 @@ class AppLocalizationsIt extends AppLocalizations {
       'Scegli una collezione personalizzata.';
 
   @override
-  String get addCollection => 'Aggiungi una collezione';
+  String get addCollection => 'Aggiungi collezione/set';
 
   @override
   String get addCollectionSubtitle => 'Crea per set o personalizzata.';
+
+  @override
+  String get addWishlist => 'Aggiungi wishlist';
+
+  @override
+  String get addWishlistSubtitle => 'Crea una wishlist per carte mancanti.';
 
   @override
   String get chooseCollection => 'Scegli collezione';
@@ -413,6 +419,31 @@ class AppLocalizationsIt extends AppLocalizations {
       'Tocca per creare la tua prima collezione.';
 
   @override
+  String get createYourCustomCollectionTitle =>
+      'Crea la tua collezione personalizzata';
+
+  @override
+  String get createYourCustomCollectionSubtitle =>
+      'Aggiungi carte manualmente.';
+
+  @override
+  String get createYourSetCollectionTitle => 'Crea la tua collezione set';
+
+  @override
+  String get createYourSetCollectionSubtitle =>
+      'Traccia le carte mancanti per set.';
+
+  @override
+  String get createYourDeckTitle => 'Crea il tuo mazzo';
+
+  @override
+  String get createYourWishlistTitle => 'Crea la tua wishlist';
+
+  @override
+  String get createYourWishlistSubtitle =>
+      'Aggiungi le carte mancanti che desideri.';
+
+  @override
   String get addCardsNowTitle => 'Aggiungere carte ora?';
 
   @override
@@ -440,10 +471,22 @@ class AppLocalizationsIt extends AppLocalizations {
   String get newCollectionTitle => 'Nuova collezione';
 
   @override
+  String get newDeckTitle => 'Nuovo mazzo';
+
+  @override
   String get create => 'Crea';
 
   @override
   String get collectionNameHint => 'Nome collezione';
+
+  @override
+  String get deckNameHint => 'Nome mazzo';
+
+  @override
+  String get deckFormatOptionalLabel => 'Formato (opzionale)';
+
+  @override
+  String get noFormatOption => 'Nessun formato';
 
   @override
   String get createCustomCollectionFirst =>
@@ -788,10 +831,35 @@ class AppLocalizationsIt extends AppLocalizations {
   String get setCollectionSubtitle => 'Traccia le carte mancanti del set.';
 
   @override
+  String get wishlistCollectionTitle => 'Wishlist';
+
+  @override
+  String get wishlistCollectionSubtitle =>
+      'Aggiungi le carte mancanti che desideri.';
+
+  @override
+  String get wishlistDefaultName => 'Wishlist';
+
+  @override
+  String get wishlistLimitReachedTitle => 'Limite wishlist raggiunto';
+
+  @override
+  String wishlistLimitReachedBody(int limit) {
+    return 'Il piano Free supporta fino a $limit wishlist.';
+  }
+
+  @override
   String get customCollectionTitle => 'Collezione personalizzata';
 
   @override
   String get customCollectionSubtitle => 'Aggiungi carte manualmente.';
+
+  @override
+  String get deckCollectionTitle => 'Mazzo';
+
+  @override
+  String get deckCollectionSubtitle =>
+      'Contenitore per giocare (formato opzionale).';
 
   @override
   String get details => 'Dettagli';
@@ -821,6 +889,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get detailArtist => 'Artista';
+
+  @override
+  String get detailFormat => 'Formato';
 
   @override
   String get sortBy => 'Ordina per';
@@ -1063,6 +1134,22 @@ class AppLocalizationsIt extends AppLocalizations {
   String get collectionsFeature => 'Collezioni';
 
   @override
+  String get setCollectionsFeature => 'Collezioni set';
+
+  @override
+  String get customCollectionsFeature => 'Collezioni personalizzate';
+
+  @override
+  String get decksFeature => 'Mazzi';
+
+  @override
+  String get wishlistFeature => 'Wishlist';
+
+  @override
+  String get freeCollectionsBreakdown =>
+      '2 set, 2 personalizzate, 2 mazzi, 1 wishlist';
+
+  @override
   String get cardSearchAddFeature => 'Ricerca e aggiunta carte';
 
   @override
@@ -1170,4 +1257,55 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get authContinueAsGuest => 'Continua come ospite';
+
+  @override
+  String get backupTitle => 'Backup';
+
+  @override
+  String get backupSubtitle =>
+      'Esporta o importa il backup completo locale delle collezioni.';
+
+  @override
+  String get backupExport => 'Esporta';
+
+  @override
+  String get backupImport => 'Importa';
+
+  @override
+  String get backupNoFilesFound => 'Nessun file di backup locale trovato.';
+
+  @override
+  String get backupChooseImportFile => 'Scegli file backup';
+
+  @override
+  String get backupImportConfirmTitle => 'Importare backup?';
+
+  @override
+  String get backupImportConfirmBody =>
+      'Questo sostituira le collezioni correnti e le copie possedute.';
+
+  @override
+  String backupExported(Object fileName) {
+    return 'Backup esportato: $fileName';
+  }
+
+  @override
+  String backupImported(int collections, int entries) {
+    return 'Backup importato. Collezioni: $collections, voci: $entries';
+  }
+
+  @override
+  String get share => 'Condividi';
+
+  @override
+  String get backupShareNowTitle => 'Condividere backup ora?';
+
+  @override
+  String get backupShareNowBody =>
+      'Puoi inviare il file esportato via email, app di messaggistica o cloud drive.';
+
+  @override
+  String backupShareFailed(Object error) {
+    return 'Impossibile condividere il backup: $error';
+  }
 }

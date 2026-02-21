@@ -14,7 +14,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _priceCurrency = 'eur';
   bool _showPrices = true;
   String _appLocaleCode = 'en';
-  String _appVersion = '0.4.2';
+  String _appVersion = '0.4.4';
+  bool _backupBusy = false;
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
 
@@ -188,6 +189,8 @@ class _SettingsPageState extends State<SettingsPage> {
       context,
       allowCancel: true,
       selectedType: _bulkType,
+      requireConfirmation: true,
+      confirmLabel: AppLocalizations.of(context)!.downloadUpdate,
     );
     if (selected == null || selected == _bulkType) {
       return;
@@ -234,9 +237,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(l10n.preparingDatabaseBody),
-              ),
+              Expanded(child: Text(l10n.preparingDatabaseBody)),
             ],
           ),
         );
@@ -260,10 +261,8 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _bulkType = selected;
     });
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.databaseChangedGoHome,
-    );
+    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+    Navigator.of(context).pop();
   }
 
   Future<void> _deleteBulkFiles() async {
@@ -279,8 +278,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await legacyTempFile.delete();
     }
     for (final option in _bulkOptions) {
-      final targetPath =
-          '${directory.path}/${_bulkTypeFileName(option.type)}';
+      final targetPath = '${directory.path}/${_bulkTypeFileName(option.type)}';
       final tempPath = '$targetPath.download';
       final mainFile = File(targetPath);
       final tempFile = File(tempPath);
@@ -302,9 +300,9 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
       final l10n = AppLocalizations.of(context)!;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.unableToSignOutTryAgain)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.unableToSignOutTryAgain)));
     }
   }
 
@@ -324,9 +322,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_googleSignInErrorMessage(error))),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_googleSignInErrorMessage(error))));
     }
   }
 
@@ -361,6 +359,180 @@ class _SettingsPageState extends State<SettingsPage> {
     await _signInWithGoogleFromSettings();
   }
 
+  Future<void> _exportLocalBackup() async {
+    if (_backupBusy) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    setState(() {
+      _backupBusy = true;
+    });
+    try {
+      final result = await LocalBackupService.instance
+          .exportCollectionsBackup();
+      await AnalyticsService.instance.logBackupExported(
+        collections: result.collections,
+        collectionCards: result.collectionCards,
+        cards: result.cards,
+      );
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        l10n.backupExported(
+          result.file.path.split(Platform.pathSeparator).last,
+        ),
+      );
+      final shareNow = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(l10n.backupShareNowTitle),
+            content: Text(l10n.backupShareNowBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(l10n.notNow),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(l10n.share),
+              ),
+            ],
+          );
+        },
+      );
+      if (shareNow == true && mounted) {
+        await _shareBackupFile(result.file);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, l10n.importFailed(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _backupBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importLocalBackup() async {
+    if (_backupBusy) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final backups = await LocalBackupService.instance.listBackupFiles();
+    if (!mounted) {
+      return;
+    }
+    if (backups.isEmpty) {
+      showAppSnackBar(context, l10n.backupNoFilesFound);
+      return;
+    }
+
+    final selectedFile = await showDialog<File>(
+      context: context,
+      builder: (context) {
+        return SimpleDialog(
+          title: Text(l10n.backupChooseImportFile),
+          children: backups
+              .take(20)
+              .map(
+                (file) => SimpleDialogOption(
+                  onPressed: () => Navigator.of(context).pop(file),
+                  child: Text(file.path.split(Platform.pathSeparator).last),
+                ),
+              )
+              .toList(growable: false),
+        );
+      },
+    );
+    if (selectedFile == null || !mounted) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.backupImportConfirmTitle),
+          content: Text(l10n.backupImportConfirmBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.importNow),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _backupBusy = true;
+    });
+    try {
+      final stats = await LocalBackupService.instance
+          .importCollectionsBackupFromFile(selectedFile);
+      await AnalyticsService.instance.logBackupImported(
+        collections: stats['collections'] ?? 0,
+        collectionCards: stats['collectionCards'] ?? 0,
+        cards: stats['cards'] ?? 0,
+      );
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        l10n.backupImported(
+          stats['collections'] ?? 0,
+          stats['collectionCards'] ?? 0,
+        ),
+      );
+      _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, l10n.importFailed(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _backupBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _shareBackupFile(File file) async {
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: file.path.split(Platform.pathSeparator).last,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.backupShareFailed(error),
+      );
+    }
+  }
+
   Widget _buildProfileTile(User? user) {
     final displayName = user?.displayName?.trim();
     final email = user?.email?.trim();
@@ -368,10 +540,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final hasEmail = email != null && email.isNotEmpty;
     final isGuest = user == null;
     final l10n = AppLocalizations.of(context)!;
-    final title =
-        hasDisplayName ? displayName : (isGuest ? l10n.guestLabel : l10n.googleUserLabel);
-    final subtitle =
-        hasEmail ? email : (isGuest ? l10n.localProfileLabel : l10n.signedInWithGoogle);
+    final title = hasDisplayName
+        ? displayName
+        : (isGuest ? l10n.guestLabel : l10n.googleUserLabel);
+    final subtitle = hasEmail
+        ? email
+        : (isGuest ? l10n.localProfileLabel : l10n.signedInWithGoogle);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -390,10 +564,7 @@ class _SettingsPageState extends State<SettingsPage> {
       subtitle: Text(subtitle),
       trailing: isGuest
           ? null
-          : TextButton(
-              onPressed: _signOut,
-              child: Text(l10n.signOut),
-            ),
+          : TextButton(onPressed: _signOut, child: Text(l10n.signOut)),
     );
   }
 
@@ -450,9 +621,9 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 6),
             Text(
               subtitle,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFFBFAE95),
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
             ),
           ],
           const Padding(
@@ -470,9 +641,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: Text(l10n.settings),
-      ),
+      appBar: AppBar(title: Text(l10n.settings)),
       body: Stack(
         children: [
           const _AppBackground(),
@@ -480,15 +649,18 @@ class _SettingsPageState extends State<SettingsPage> {
             const Center(child: CircularProgressIndicator())
           else
             ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                16,
+                20,
+                24 + MediaQuery.of(context).padding.bottom + 16,
+              ),
               children: [
                 _buildSectionCard(
                   context: context,
                   icon: Icons.account_circle_outlined,
                   title: l10n.profile,
-                  children: [
-                    _buildProfileSection(context),
-                  ],
+                  children: [_buildProfileSection(context)],
                 ),
                 const SizedBox(height: 14),
                 _buildSectionCard(
@@ -539,9 +711,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           const SizedBox(height: 4),
                           Text(
                             l10n.needMoreThanFreeBody,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: const Color(0xFFBFAE95),
-                                ),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
                           ),
                           const SizedBox(height: 10),
                           Align(
@@ -558,7 +729,10 @@ class _SettingsPageState extends State<SettingsPage> {
                                 backgroundColor: const Color(0xFFE9C46A),
                                 foregroundColor: const Color(0xFF1C1510),
                               ),
-                              icon: const Icon(Icons.workspace_premium_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.workspace_premium_rounded,
+                                size: 18,
+                              ),
                               label: Text(l10n.discoverPlus),
                             ),
                           ),
@@ -582,8 +756,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       _bulkTypeDescription(l10n, _bulkType ?? ''),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFBFAE95),
-                          ),
+                        color: const Color(0xFFBFAE95),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Align(
@@ -635,8 +809,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       l10n.availableCurrenciesHint,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFFBFAE95),
-                          ),
+                        color: const Color(0xFFBFAE95),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     RadioGroup<String>(
@@ -684,6 +858,44 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.backup_outlined,
+                  title: l10n.backupTitle,
+                  subtitle: l10n.backupSubtitle,
+                  trailing: _backupBusy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _backupBusy ? null : _exportLocalBackup,
+                            icon: const Icon(Icons.upload_file_rounded),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            label: Text(l10n.backupExport),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _backupBusy ? null : _importLocalBackup,
+                            icon: const Icon(Icons.download_rounded),
+                            label: Text(l10n.backupImport),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

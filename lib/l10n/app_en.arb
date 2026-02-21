@@ -67,7 +67,7 @@
   "storeAvailable": "Store available",
   "storeNotAvailableYet": "Store not available yet",
   "unlimitedCollectionsUnlocked": "Unlimited collections are unlocked.",
-  "unlockProRemoveLimit": "Unlock Pro to remove the 5-collection limit.",
+  "unlockProRemoveLimit": "Unlock Pro to remove the 7-collection limit.",
   "priceLabel": "Price: {price}",
   "@priceLabel": {
     "placeholders": {
@@ -172,8 +172,10 @@
   "addCardsToCatalogSubtitle": "Add to the main catalog.",
   "addCardsToCollection": "Add card(s) to a collection",
   "addCardsToCollectionSubtitle": "Choose a custom collection.",
-  "addCollection": "Add a collection",
+  "addCollection": "Add collection/set",
   "addCollectionSubtitle": "Create set-based or custom.",
+  "addWishlist": "Add wishlist",
+  "addWishlistSubtitle": "Create a wishlist for missing cards.",
   "chooseCollection": "Choose collection",
   "chooseCardDatabaseTitle": "Choose card database",
   "chooseYourGameTitle": "Choose your game",
@@ -200,6 +202,13 @@
   "myCollections": "My collections",
   "buildYourCollectionsTitle": "Build your own collections",
   "buildYourCollectionsSubtitle": "Tap to create your first collection.",
+  "createYourCustomCollectionTitle": "Create your custom collection",
+  "createYourCustomCollectionSubtitle": "Add cards manually.",
+  "createYourSetCollectionTitle": "Create your set collection",
+  "createYourSetCollectionSubtitle": "Track missing cards by set.",
+  "createYourDeckTitle": "Create your deck",
+  "createYourWishlistTitle": "Create your wishlist",
+  "createYourWishlistSubtitle": "Add missing cards you want.",
   "addCardsNowTitle": "Add cards now?",
   "addCardsNowBody": "Use search and filters to add multiple cards.",
   "yes": "Yes",
@@ -213,8 +222,12 @@
     }
   },
   "newCollectionTitle": "New collection",
+  "newDeckTitle": "New deck",
   "create": "Create",
   "collectionNameHint": "Collection name",
+  "deckNameHint": "Deck name",
+  "deckFormatOptionalLabel": "Format (optional)",
+  "noFormatOption": "No format",
   "createCustomCollectionFirst": "Create a custom collection first.",
   "rename": "Rename",
   "delete": "Delete",
@@ -404,8 +417,22 @@
   "createCollectionTitle": "Create collection",
   "setCollectionTitle": "Set collection",
   "setCollectionSubtitle": "Tracks missing cards by set.",
+  "wishlistCollectionTitle": "Wishlist",
+  "wishlistCollectionSubtitle": "Add missing cards you want.",
+  "wishlistDefaultName": "Wishlist",
+  "wishlistLimitReachedTitle": "Wishlist limit reached",
+  "wishlistLimitReachedBody": "Free plan supports up to {limit} wishlist.",
+  "@wishlistLimitReachedBody": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
   "customCollectionTitle": "Custom collection",
-  "customCollectionSubtitle": "Add cards manually.",
+  "customCollectionSubtitle": "Create a custom collection.",
+  "deckCollectionTitle": "Deck",
+  "deckCollectionSubtitle": "Container for playing (optional format).",
   "details": "Details",
   "loyaltyLabel": "Loyalty {value}",
   "@loyaltyLabel": {
@@ -420,6 +447,7 @@
   "detailLanguage": "Language",
   "detailRelease": "Release",
   "detailArtist": "Artist",
+  "detailFormat": "Format",
   "sortBy": "Sort by",
   "selectCards": "Select cards",
   "selectedCardsCount": "{count, plural, =0 {0 selected} =1 {1 selected} other {{count} selected}}",
@@ -493,6 +521,11 @@
   "plusPlanLabel": "Plus",
   "dailyCardScansFeature": "Daily card scans",
   "collectionsFeature": "Collections",
+  "setCollectionsFeature": "Set collections",
+  "customCollectionsFeature": "Custom collections",
+  "decksFeature": "Decks",
+  "wishlistFeature": "Wishlist",
+  "freeCollectionsBreakdown": "2 set, 2 custom, 2 decks, 1 wishlist",
   "cardSearchAddFeature": "Card search and add",
   "advancedFiltersFeature": "Advanced filters",
   "scansPerDay": "{count}/day",
@@ -540,5 +573,39 @@
   "authWelcomeTitle": "Welcome to BinderVault",
   "authWelcomeSubtitle": "Sign in with Google to sync your account.",
   "authSignInWithGoogle": "Sign in with Google",
-  "authContinueAsGuest": "Continue as guest"
+  "authContinueAsGuest": "Continue as guest",
+  "backupTitle": "Backup",
+  "backupSubtitle": "Export or import your full local collections backup.",
+  "backupExport": "Export",
+  "backupImport": "Import",
+  "backupNoFilesFound": "No local backup files found.",
+  "backupChooseImportFile": "Choose backup file",
+  "backupImportConfirmTitle": "Import backup?",
+  "backupImportConfirmBody": "This will replace current collections and owned entries.",
+  "backupExported": "Backup exported: {fileName}",
+  "@backupExported": {
+    "placeholders": {
+      "fileName": {}
+    }
+  },
+  "backupImported": "Backup imported. Collections: {collections}, entries: {entries}",
+  "@backupImported": {
+    "placeholders": {
+      "collections": {
+        "type": "int"
+      },
+      "entries": {
+        "type": "int"
+      }
+    }
+  },
+  "share": "Share",
+  "backupShareNowTitle": "Share backup now?",
+  "backupShareNowBody": "You can send the exported file via email, messaging apps, or cloud drives.",
+  "backupShareFailed": "Unable to share backup: {error}",
+  "@backupShareFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  }
 }

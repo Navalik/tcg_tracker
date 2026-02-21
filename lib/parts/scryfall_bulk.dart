@@ -277,6 +277,28 @@ class ScryfallBulkChecker {
   static String _prefsKeyDownloadUri(String bulkType) =>
       'scryfall_${bulkType}_download_uri';
 
+  Future<ScryfallBulkCheckResult> _cachedResult(String bulkType) async {
+    final prefs = await SharedPreferences.getInstance();
+    final latestUpdatedAt = prefs.getString(_prefsKeyLatestUpdatedAt(bulkType));
+    final installedUpdatedAt =
+        prefs.getString(_prefsKeyInstalledUpdatedAt(bulkType));
+    final cachedDownloadUriRaw = prefs.getString(_prefsKeyDownloadUri(bulkType));
+    final cachedDownloadUri = _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
+        ? cachedDownloadUriRaw
+        : null;
+    final cachedUpdatedAt = latestUpdatedAt == null
+        ? null
+        : DateTime.tryParse(latestUpdatedAt);
+    final updateAvailable =
+        latestUpdatedAt != null && latestUpdatedAt != installedUpdatedAt;
+    return ScryfallBulkCheckResult(
+      updateAvailable: updateAvailable,
+      updatedAt: cachedUpdatedAt,
+      downloadUri: cachedDownloadUri,
+      updatedAtRaw: latestUpdatedAt,
+    );
+  }
+
   Future<ScryfallBulkCheckResult> checkAllCardsUpdate(String bulkType) async {
     try {
       final response = await ScryfallApiClient.instance.get(
@@ -285,13 +307,13 @@ class ScryfallBulkChecker {
         maxRetries: 2,
       );
       if (response.statusCode != 200) {
-        return const ScryfallBulkCheckResult(updateAvailable: false);
+        return _cachedResult(bulkType);
       }
 
       final payload = jsonDecode(response.body) as Map<String, dynamic>;
       final data = payload['data'] as List<dynamic>?;
       if (data == null) {
-        return const ScryfallBulkCheckResult(updateAvailable: false);
+        return _cachedResult(bulkType);
       }
 
       final entry = data.whereType<Map<String, dynamic>>().firstWhere(
@@ -299,7 +321,7 @@ class ScryfallBulkChecker {
             orElse: () => const {},
           );
       if (entry.isEmpty) {
-        return const ScryfallBulkCheckResult(updateAvailable: false);
+        return _cachedResult(bulkType);
       }
 
       final updatedAtRaw = entry['updated_at'] as String?;
@@ -317,6 +339,11 @@ class ScryfallBulkChecker {
       if (downloadUri != null) {
         await prefs.setString(_prefsKeyDownloadUri(bulkType), downloadUri);
       }
+      final cachedDownloadUriRaw = prefs.getString(_prefsKeyDownloadUri(bulkType));
+      final cachedDownloadUri =
+          _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
+          ? cachedDownloadUriRaw
+          : null;
 
       final installedUpdatedAt =
           prefs.getString(_prefsKeyInstalledUpdatedAt(bulkType));
@@ -326,11 +353,11 @@ class ScryfallBulkChecker {
       return ScryfallBulkCheckResult(
         updateAvailable: updateAvailable,
         updatedAt: updatedAt,
-        downloadUri: downloadUri,
+        downloadUri: downloadUri ?? cachedDownloadUri,
         updatedAtRaw: updatedAtRaw,
       );
     } catch (_) {
-      return const ScryfallBulkCheckResult(updateAvailable: false);
+      return _cachedResult(bulkType);
     }
   }
 

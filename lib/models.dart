@@ -147,10 +147,7 @@ class CollectionCardEntry {
 }
 
 class SetInfo {
-  const SetInfo({
-    required this.code,
-    required this.name,
-  });
+  const SetInfo({required this.code, required this.name});
 
   final String code;
   final String name;
@@ -161,7 +158,9 @@ String _formatSetLabel({
   required String setCode,
   required String collectorNumber,
 }) {
-  final label = setName.trim().isNotEmpty ? setName.trim() : setCode.toUpperCase();
+  final label = setName.trim().isNotEmpty
+      ? setName.trim()
+      : setCode.toUpperCase();
   if (label.isEmpty) {
     return collectorNumber.isEmpty ? '' : '#$collectorNumber';
   }
@@ -184,7 +183,9 @@ String _formatSetLabelWithProgress({
   required String setCode,
   required String collectorProgress,
 }) {
-  final label = setName.trim().isNotEmpty ? setName.trim() : setCode.toUpperCase();
+  final label = setName.trim().isNotEmpty
+      ? setName.trim()
+      : setCode.toUpperCase();
   if (label.isEmpty) {
     return collectorProgress;
   }
@@ -193,11 +194,8 @@ String _formatSetLabelWithProgress({
   }
   return '$label • $collectorProgress';
 }
-enum CollectionType {
-  all,
-  set,
-  custom,
-}
+
+enum CollectionType { all, set, wishlist, custom, deck }
 
 CollectionType collectionTypeFromDb(String? value) {
   switch (value?.toLowerCase()) {
@@ -205,7 +203,12 @@ CollectionType collectionTypeFromDb(String? value) {
       return CollectionType.all;
     case 'set':
       return CollectionType.set;
+    case 'wishlist':
+      return CollectionType.wishlist;
     case 'custom':
+      return CollectionType.custom;
+    case 'deck':
+      return CollectionType.deck;
     default:
       return CollectionType.custom;
   }
@@ -217,8 +220,12 @@ String collectionTypeToDb(CollectionType type) {
       return 'all';
     case CollectionType.set:
       return 'set';
+    case CollectionType.wishlist:
+      return 'wishlist';
     case CollectionType.custom:
       return 'custom';
+    case CollectionType.deck:
+      return 'deck';
   }
 }
 
@@ -228,6 +235,7 @@ class CollectionFilter {
     this.artist,
     this.manaMin,
     this.manaMax,
+    this.format,
     this.sets = const {},
     this.rarities = const {},
     this.colors = const {},
@@ -238,21 +246,23 @@ class CollectionFilter {
   final String? artist;
   final int? manaMin;
   final int? manaMax;
+  final String? format;
   final Set<String> sets;
   final Set<String> rarities;
   final Set<String> colors;
   final Set<String> types;
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'artist': artist,
-        'manaMin': manaMin,
-        'manaMax': manaMax,
-        'sets': sets.toList(),
-        'rarities': rarities.toList(),
-        'colors': colors.toList(),
-        'types': types.toList(),
-      };
+    'name': name,
+    'artist': artist,
+    'manaMin': manaMin,
+    'manaMax': manaMax,
+    'format': format,
+    'sets': sets.toList(),
+    'rarities': rarities.toList(),
+    'colors': colors.toList(),
+    'types': types.toList(),
+  };
 
   factory CollectionFilter.fromJson(Map<String, dynamic> json) {
     Set<String> types = Set<String>.from(json['types'] as List? ?? const []);
@@ -267,10 +277,49 @@ class CollectionFilter {
       artist: json['artist'] as String?,
       manaMin: json['manaMin'] is int ? json['manaMin'] as int : null,
       manaMax: json['manaMax'] is int ? json['manaMax'] as int : null,
+      format: json['format'] as String?,
       sets: Set<String>.from(json['sets'] as List? ?? const []),
       rarities: Set<String>.from(json['rarities'] as List? ?? const []),
       colors: Set<String>.from(json['colors'] as List? ?? const []),
       types: types,
     );
+  }
+}
+
+const List<String> kSupportedDeckFormats = <String>[
+  'standard',
+  'pioneer',
+  'modern',
+  'legacy',
+  'vintage',
+  'pauper',
+  'commander',
+  'brawl',
+];
+
+String deckFormatLabel(String value) {
+  switch (value.trim().toLowerCase()) {
+    case 'standard':
+      return 'Standard';
+    case 'pioneer':
+      return 'Pioneer';
+    case 'modern':
+      return 'Modern';
+    case 'legacy':
+      return 'Legacy';
+    case 'vintage':
+      return 'Vintage';
+    case 'pauper':
+      return 'Pauper';
+    case 'commander':
+      return 'Commander';
+    case 'brawl':
+      return 'Brawl';
+    default:
+      final normalized = value.trim();
+      if (normalized.isEmpty) {
+        return value;
+      }
+      return normalized[0].toUpperCase() + normalized.substring(1).toLowerCase();
   }
 }

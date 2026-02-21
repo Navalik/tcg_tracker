@@ -358,7 +358,7 @@
     "storeAvailable":  "Store disponibile",
     "storeNotAvailableYet":  "Store non ancora disponibile",
     "unlimitedCollectionsUnlocked":  "Collezioni illimitate sbloccate.",
-    "unlockProRemoveLimit":  "Sblocca Pro per rimuovere il limite di 5 collezioni.",
+    "unlockProRemoveLimit":  "Sblocca Pro per rimuovere il limite di 7 collezioni.",
     "priceLabel":  "Prezzo: {price}",
     "whatYouGet":  "Cosa ottieni",
     "unlimitedCollectionsFeature":  "Collezioni illimitate",
@@ -403,8 +403,10 @@
     "addCardsToCatalogSubtitle":  "Aggiungi al catalogo principale.",
     "addCardsToCollection":  "Aggiungi carta/e a una collezione",
     "addCardsToCollectionSubtitle":  "Scegli una collezione personalizzata.",
-    "addCollection":  "Aggiungi una collezione",
+    "addCollection":  "Aggiungi collezione/set",
     "addCollectionSubtitle":  "Crea per set o personalizzata.",
+    "addWishlist":  "Aggiungi wishlist",
+    "addWishlistSubtitle":  "Crea una wishlist per carte mancanti.",
     "chooseCollection":  "Scegli collezione",
     "chooseCardDatabaseTitle":  "Scegli database carte",
     "chooseYourGameTitle":  "Scegli il tuo gioco",
@@ -417,6 +419,13 @@
     "myCollections":  "Le mie collezioni",
     "buildYourCollectionsTitle":  "Crea le tue collezioni",
     "buildYourCollectionsSubtitle":  "Tocca per creare la tua prima collezione.",
+    "createYourCustomCollectionTitle": "Crea la tua collezione personalizzata",
+    "createYourCustomCollectionSubtitle": "Aggiungi carte manualmente.",
+    "createYourSetCollectionTitle": "Crea la tua collezione set",
+    "createYourSetCollectionSubtitle": "Traccia le carte mancanti per set.",
+    "createYourDeckTitle": "Crea il tuo mazzo",
+    "createYourWishlistTitle": "Crea la tua wishlist",
+    "createYourWishlistSubtitle": "Aggiungi le carte mancanti che desideri.",
     "addCardsNowTitle":  "Aggiungere carte ora?",
     "addCardsNowBody":  "Usa ricerca e filtri per aggiungere piu carte.",
     "noSetsAvailableYet":  "Nessun set disponibile al momento.",
@@ -424,7 +433,11 @@
     "collectionAlreadyExists":  "La collezione esiste gia.",
     "failedToAddCollection":  "Impossibile aggiungere collezione: {error}",
     "newCollectionTitle":  "Nuova collezione",
+    "newDeckTitle":  "Nuovo mazzo",
     "collectionNameHint":  "Nome collezione",
+    "deckNameHint":  "Nome mazzo",
+    "deckFormatOptionalLabel":  "Formato (opzionale)",
+    "noFormatOption":  "Nessun formato",
     "createCustomCollectionFirst":  "Crea prima una collezione personalizzata.",
     "renameCollectionTitle":  "Rinomina collezione",
     "deleteCollectionTitle":  "Eliminare collezione?",
@@ -519,8 +532,22 @@
     "createCollectionTitle":  "Crea collezione",
     "setCollectionTitle":  "Collezione set",
     "setCollectionSubtitle":  "Traccia le carte mancanti del set.",
+    "wishlistCollectionTitle":  "Wishlist",
+    "wishlistCollectionSubtitle":  "Aggiungi le carte mancanti che desideri.",
+    "wishlistDefaultName":  "Wishlist",
+    "wishlistLimitReachedTitle":  "Limite wishlist raggiunto",
+    "wishlistLimitReachedBody":  "Il piano Free supporta fino a {limit} wishlist.",
+    "@wishlistLimitReachedBody":  {
+        "placeholders":  {
+            "limit":  {
+                "type":  "int"
+            }
+        }
+    },
     "customCollectionTitle":  "Collezione personalizzata",
     "customCollectionSubtitle":  "Aggiungi carte manualmente.",
+    "deckCollectionTitle":  "Mazzo",
+    "deckCollectionSubtitle":  "Contenitore per giocare (formato opzionale).",
     "loyaltyLabel":  "Lealta {value}",
     "detailSet":  "Espansione",
     "detailCollector":  "Collezionista",
@@ -529,6 +556,7 @@
     "detailLanguage":  "Lingua",
     "detailRelease":  "Uscita",
     "detailArtist":  "Artista",
+    "detailFormat":  "Formato",
     "selectCards":  "Seleziona carte",
     "selectedCardsCount":  "{count, plural, =0 {0 selezionate} =1 {1 selezionata} other {{count} selezionate}}",
     "deleteCardsTitle":  "Eliminare le carte selezionate?",
@@ -546,6 +574,11 @@
     "plusPlanLabel":  "Plus",
     "dailyCardScansFeature":  "Scansioni carte giornaliere",
     "collectionsFeature":  "Collezioni",
+    "setCollectionsFeature":  "Collezioni set",
+    "customCollectionsFeature":  "Collezioni personalizzate",
+    "decksFeature":  "Mazzi",
+    "wishlistFeature":  "Wishlist",
+    "freeCollectionsBreakdown":  "2 set, 2 personalizzate, 2 mazzi, 1 wishlist",
     "cardSearchAddFeature":  "Ricerca e aggiunta carte",
     "advancedFiltersFeature":  "Filtri avanzati",
     "scansPerDay":  "{count}/giorno",
@@ -593,6 +626,40 @@
     "authWelcomeTitle":  "Benvenuto in BinderVault",
     "authWelcomeSubtitle":  "Accedi con Google per sincronizzare il tuo account.",
     "authSignInWithGoogle":  "Accedi con Google",
-    "authContinueAsGuest":  "Continua come ospite"
+    "authContinueAsGuest":  "Continua come ospite",
+    "backupTitle":  "Backup",
+    "backupSubtitle":  "Esporta o importa il backup completo locale delle collezioni.",
+    "backupExport":  "Esporta",
+    "backupImport":  "Importa",
+    "backupNoFilesFound":  "Nessun file di backup locale trovato.",
+    "backupChooseImportFile":  "Scegli file backup",
+    "backupImportConfirmTitle":  "Importare backup?",
+    "backupImportConfirmBody":  "Questo sostituira le collezioni correnti e le copie possedute.",
+    "backupExported":  "Backup esportato: {fileName}",
+    "@backupExported":  {
+        "placeholders":  {
+            "fileName":  {}
+        }
+    },
+    "backupImported":  "Backup importato. Collezioni: {collections}, voci: {entries}",
+    "@backupImported":  {
+        "placeholders":  {
+            "collections":  {
+                "type":  "int"
+            },
+            "entries":  {
+                "type":  "int"
+            }
+        }
+    },
+    "share":  "Condividi",
+    "backupShareNowTitle":  "Condividere backup ora?",
+    "backupShareNowBody":  "Puoi inviare il file esportato via email, app di messaggistica o cloud drive.",
+    "backupShareFailed":  "Impossibile condividere il backup: {error}",
+    "@backupShareFailed":  {
+        "placeholders":  {
+            "error":  {}
+        }
+    }
 }
 
