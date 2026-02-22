@@ -1885,7 +1885,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       if (sideboardCards.any((entry) => entry.quantity > 0)) {
         buffer.writeln();
-        buffer.writeln('Sideboard');
+        if (!arenaFormat) {
+          buffer.writeln('Sideboard');
+        }
         for (final entry in sideboardCards) {
           if (entry.quantity <= 0) {
             continue;
@@ -3699,6 +3701,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (restartAfterImport) {
         await _softRestartAfterDatabaseBootstrap();
       }
+      await _maybeShowLatestReleaseNotesAfterDbImport();
+      if (!mounted) {
+        return;
+      }
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(l10n.importComplete)));
@@ -3715,6 +3721,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           SnackBar(content: Text(l10n.importFailed('import_failed'))),
         );
     }
+  }
+
+  Future<void> _maybeShowLatestReleaseNotesAfterDbImport() async {
+    final lastSeen = await AppSettings.loadLastSeenReleaseNotesId();
+    if (lastSeen == _latestReleaseNotesId) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    await _showLatestReleaseNotesPanel(context);
   }
 
   Future<void> _rebuildSearchIndex() async {

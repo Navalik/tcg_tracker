@@ -124,7 +124,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _selectionMode = false;
   final Set<String> _selectedCardIds = {};
   final Set<String> _quickAddAnimating = {};
+  final Set<String> _quickRemoveAnimating = {};
   final Set<String> _priceRefreshQueued = {};
+  Set<String>? _cachedKnownSetCodesForScan;
   String _priceCurrency = 'eur';
   bool _showPrices = true;
   static const List<String> _basicLandManaOrder = ['W', 'U', 'B', 'R', 'G'];
@@ -1824,7 +1826,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         ownedCollectionId,
         entry.cardId,
         quantity: nextQuantity,
-        foil: entry.foil,
+        foil: widget.isDeckCollection ? false : entry.foil,
         altArt: entry.altArt,
       );
     }
@@ -1839,6 +1841,43 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       if (mounted) {
         setState(() {
           _quickAddAnimating.remove(entry.cardId);
+        });
+      }
+    }
+    await _loadCards();
+  }
+
+  Future<void> _quickRemoveCard(
+    CollectionCardEntry entry, {
+    BuildContext? anchorContext,
+  }) async {
+    final ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null ||
+        widget.isWishlistCollection ||
+        entry.quantity <= 0) {
+      return;
+    }
+    final nextQuantity = entry.quantity - 1;
+    await ScryfallDatabase.instance.upsertCollectionCard(
+      ownedCollectionId,
+      entry.cardId,
+      quantity: nextQuantity,
+      foil: widget.isDeckCollection
+          ? false
+          : (nextQuantity == 0 ? false : entry.foil),
+      altArt: nextQuantity == 0 ? false : entry.altArt,
+    );
+    if (mounted) {
+      setState(() {
+        _quickRemoveAnimating.add(entry.cardId);
+      });
+      if (anchorContext != null && anchorContext.mounted) {
+        _showMiniToastForContext(anchorContext, '-1');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (mounted) {
+        setState(() {
+          _quickRemoveAnimating.remove(entry.cardId);
         });
       }
     }
@@ -1983,7 +2022,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       );
       return;
     }
-    final refinedSeed = await _refineOcrSeedForScan(ocrSeed);
+    final hasCardName = ocrSeed.cardName?.trim().isNotEmpty ?? false;
+    final refinedSeed = hasCardName
+        // Fast path: when OCR already has a card name, open printings picker
+        // immediately instead of waiting for network fallbacks.
+        ? ocrSeed
+        : await _refineOcrSeedForScan(ocrSeed);
     if (!context.mounted) {
       return;
     }
@@ -2100,11 +2144,17 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<Set<String>> _fetchKnownSetCodesForScan() async {
+    final cached = _cachedKnownSetCodesForScan;
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
+    }
     final sets = await ScryfallDatabase.instance.fetchAvailableSets();
-    return sets
+    final known = sets
         .map((set) => set.code.trim().toLowerCase())
         .where((code) => code.isNotEmpty)
         .toSet();
+    _cachedKnownSetCodesForScan = known;
+    return known;
   }
 
   _OcrSearchSeed? _buildOcrSearchSeedForScan(
@@ -3697,7 +3747,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Widget _buildListCardTile(CollectionCardEntry entry, AppLocalizations l10n) {
-    final isMissing = _isMissingStyleCollection && entry.quantity == 0;
+    final isMissing =
+        _isMissingStyleCollection &&
+        !widget.isWishlistCollection &&
+        entry.quantity == 0;
     final hasCornerQuantity = entry.quantity > 1;
     return GestureDetector(
       onTap: () {
@@ -3939,7 +3992,18 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     CollectionCardEntry entry,
     AppLocalizations l10n,
   ) {
-    final isMissing = _isMissingStyleCollection && entry.quantity == 0;
+    final isMissing =
+        _isMissingStyleCollection &&
+        !widget.isWishlistCollection &&
+        entry.quantity == 0;
+    final hasCornerQuantity = entry.quantity > 1;
+    final showQuickAdd =
+        widget.isWishlistCollection ||
+        widget.isAllCards ||
+        (!isMissing && entry.quantity > 0);
+    final showQuickRemove =
+        !widget.isWishlistCollection &&
+        entry.quantity > 0;
     return GestureDetector(
       onTap: () {
         if (_selectionMode) {
@@ -4032,19 +4096,112 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   fit: BoxFit.cover,
                                   alignment: Alignment.topCenter,
                                 ),
-                          if (entry.foil || entry.altArt)
+                          if (entry.altArt)
                             Positioned(
-                              bottom: 8,
-                              right: 8,
-                              child: Row(
-                                children: [
-                                  if (entry.foil)
-                                    _statusMiniBadge(icon: Icons.star),
-                                  if (entry.foil && entry.altArt)
-                                    const SizedBox(width: 6),
-                                  if (entry.altArt)
-                                    _statusMiniBadge(icon: Icons.brush),
-                                ],
+                              top: 6,
+                              right: hasCornerQuantity ? 42 : 8,
+                              child: _statusMiniBadge(icon: Icons.brush),
+                            ),
+                          if (entry.foil && !widget.isDeckCollection)
+                            const Positioned(
+                              top: 30,
+                              right: 2,
+                              child: Icon(
+                                Icons.star,
+                                size: 32,
+                                color: Color(0xFFE9C46A),
+                              ),
+                            ),
+                          if (showQuickRemove)
+                            Positioned(
+                              bottom: 2,
+                              left: 2,
+                              child: Builder(
+                                builder: (buttonContext) {
+                                  final isAnimating = _quickRemoveAnimating
+                                      .contains(entry.cardId);
+                                  return IconButton(
+                                    tooltip: '-1',
+                                    iconSize: 32,
+                                    icon: AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      transitionBuilder:
+                                          (child, animation) => ScaleTransition(
+                                            scale: animation,
+                                            child: FadeTransition(
+                                              opacity: animation,
+                                              child: child,
+                                            ),
+                                          ),
+                                      child: isAnimating
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              key: ValueKey('check'),
+                                              size: 32,
+                                            )
+                                          : const Icon(
+                                              Icons.remove_circle_outline,
+                                              key: ValueKey('remove'),
+                                              size: 32,
+                                            ),
+                                    ),
+                                    color: const Color(0xFFE9C46A),
+                                    onPressed: _selectionMode
+                                        ? null
+                                        : () => _quickRemoveCard(
+                                            entry,
+                                            anchorContext: buttonContext,
+                                          ),
+                                  );
+                                },
+                              ),
+                            ),
+                          if (showQuickAdd)
+                            Positioned(
+                              bottom: 2,
+                              right: 2,
+                              child: Builder(
+                                builder: (buttonContext) {
+                                  final isAnimating = _quickAddAnimating
+                                      .contains(entry.cardId);
+                                  return IconButton(
+                                    tooltip: l10n.addOne,
+                                    iconSize: 32,
+                                    icon: AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      transitionBuilder:
+                                          (child, animation) => ScaleTransition(
+                                            scale: animation,
+                                            child: FadeTransition(
+                                              opacity: animation,
+                                              child: child,
+                                            ),
+                                          ),
+                                      child: isAnimating
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              key: ValueKey('check'),
+                                              size: 32,
+                                            )
+                                          : const Icon(
+                                              Icons.add_circle_outline,
+                                              key: ValueKey('add'),
+                                              size: 32,
+                                            ),
+                                    ),
+                                    color: const Color(0xFFE9C46A),
+                                    onPressed: _selectionMode
+                                        ? null
+                                        : () => _quickAddCard(
+                                            entry,
+                                            anchorContext: buttonContext,
+                                          ),
+                                  );
+                                },
                               ),
                             ),
                         ],
@@ -4107,7 +4264,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               left: 8,
               child: _buildSelectionBadge(_isSelected(entry)),
             ),
-          if (entry.quantity > 1)
+          if (hasCornerQuantity)
             Positioned(
               top: 0,
               right: 0,

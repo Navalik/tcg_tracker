@@ -18,6 +18,7 @@ class AppSettings {
   static const _prefsKeyFreeScanCount = 'free_scan_count';
   static const _prefsKeyFreeScanLastSeenEpochMs = 'free_scan_last_seen_epoch_ms';
   static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
+  static const _prefsKeyLastSeenReleaseNotesId = 'last_seen_release_notes_id';
 
   static const List<String> languageCodes = [
     'en',
@@ -158,6 +159,25 @@ class AppSettings {
   static Future<void> saveProUnlocked(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_prefsKeyProUnlocked, value);
+  }
+
+  static Future<String?> loadLastSeenReleaseNotesId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyLastSeenReleaseNotesId)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> saveLastSeenReleaseNotesId(String releaseId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = releaseId.trim();
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyLastSeenReleaseNotesId);
+      return;
+    }
+    await prefs.setString(_prefsKeyLastSeenReleaseNotesId, normalized);
   }
 
   static Future<String> loadUserTier() async {

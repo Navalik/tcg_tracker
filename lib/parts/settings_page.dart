@@ -908,6 +908,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     ListTile(
                       title: Text(l10n.versionLabel),
                       subtitle: Text(_appVersion),
+                      trailing: OutlinedButton(
+                        onPressed: () => _showLatestReleaseNotesPanel(context),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF5D4731)),
+                        ),
+                        child: Text(_whatsNewLabel(context)),
+                      ),
                       contentPadding: EdgeInsets.zero,
                     ),
                   ],
