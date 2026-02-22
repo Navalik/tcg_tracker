@@ -200,6 +200,7 @@
   "proEnabled": "Pro enabled",
   "upgradeToPro": "Upgrade to Pro",
   "myCollections": "My collections",
+  "specialCollections": "Special",
   "buildYourCollectionsTitle": "Build your own collections",
   "buildYourCollectionsSubtitle": "Tap to create your first collection.",
   "createYourCustomCollectionTitle": "Create your custom collection",
@@ -370,8 +371,21 @@
   "filters": "Filters",
   "addOne": "Add one",
   "missingLabel": "Missing",
+  "legalLabel": "Legal",
+  "notLegalLabel": "Not legal",
   "typeCardNameHint": "Type a card name",
-  "resultsWithFilters": "Results: {visible} / {total} · Languages: {languages}",
+  "deckSectionCreatures": "Creatures",
+  "deckSectionInstants": "Instants",
+  "deckSectionSorceries": "Sorceries",
+  "deckSectionArtifacts": "Artifacts",
+  "deckSectionEnchantments": "Enchantments",
+  "deckSectionPlaneswalkers": "Planeswalkers",
+  "deckSectionBattles": "Battles",
+  "deckSectionLands": "Lands",
+  "deckSectionTribals": "Tribals",
+  "deckSectionOther": "Other",
+  "basicLandsLabel": "Basic lands",
+  "resultsWithFilters": "Results: {visible} / {total} Â· Languages: {languages}",
   "@resultsWithFilters": {
     "placeholders": {
       "visible": {
@@ -383,7 +397,7 @@
       "languages": {}
     }
   },
-  "resultsWithoutFilters": "Results: {total} · Languages: {languages}",
+  "resultsWithoutFilters": "Results: {total} Â· Languages: {languages}",
   "@resultsWithoutFilters": {
     "placeholders": {
       "total": {
@@ -398,7 +412,7 @@
   "tryDifferentNameOrSpelling": "Try a different name or spelling.",
   "allCardsCollectionNotFound": "All cards collection not found.",
   "searchSetHint": "Search set",
-  "setCollectionCount": "Set • {count} cards",
+  "setCollectionCount": "Set â€¢ {count} cards",
   "@setCollectionCount": {
     "placeholders": {
       "count": {
@@ -406,7 +420,7 @@
       }
     }
   },
-  "customCollectionCount": "Custom • {count} cards",
+  "customCollectionCount": "Custom â€¢ {count} cards",
   "@customCollectionCount": {
     "placeholders": {
       "count": {

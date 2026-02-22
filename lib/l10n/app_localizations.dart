@@ -794,6 +794,12 @@ abstract class AppLocalizations {
   /// **'My collections'**
   String get myCollections;
 
+  /// No description provided for @specialCollections.
+  ///
+  /// In en, this message translates to:
+  /// **'Special'**
+  String get specialCollections;
+
   /// No description provided for @buildYourCollectionsTitle.
   ///
   /// In en, this message translates to:
@@ -1454,22 +1460,100 @@ abstract class AppLocalizations {
   /// **'Missing'**
   String get missingLabel;
 
+  /// No description provided for @legalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Legal'**
+  String get legalLabel;
+
+  /// No description provided for @notLegalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Not legal'**
+  String get notLegalLabel;
+
   /// No description provided for @typeCardNameHint.
   ///
   /// In en, this message translates to:
   /// **'Type a card name'**
   String get typeCardNameHint;
 
+  /// No description provided for @deckSectionCreatures.
+  ///
+  /// In en, this message translates to:
+  /// **'Creatures'**
+  String get deckSectionCreatures;
+
+  /// No description provided for @deckSectionInstants.
+  ///
+  /// In en, this message translates to:
+  /// **'Instants'**
+  String get deckSectionInstants;
+
+  /// No description provided for @deckSectionSorceries.
+  ///
+  /// In en, this message translates to:
+  /// **'Sorceries'**
+  String get deckSectionSorceries;
+
+  /// No description provided for @deckSectionArtifacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Artifacts'**
+  String get deckSectionArtifacts;
+
+  /// No description provided for @deckSectionEnchantments.
+  ///
+  /// In en, this message translates to:
+  /// **'Enchantments'**
+  String get deckSectionEnchantments;
+
+  /// No description provided for @deckSectionPlaneswalkers.
+  ///
+  /// In en, this message translates to:
+  /// **'Planeswalkers'**
+  String get deckSectionPlaneswalkers;
+
+  /// No description provided for @deckSectionBattles.
+  ///
+  /// In en, this message translates to:
+  /// **'Battles'**
+  String get deckSectionBattles;
+
+  /// No description provided for @deckSectionLands.
+  ///
+  /// In en, this message translates to:
+  /// **'Lands'**
+  String get deckSectionLands;
+
+  /// No description provided for @deckSectionTribals.
+  ///
+  /// In en, this message translates to:
+  /// **'Tribals'**
+  String get deckSectionTribals;
+
+  /// No description provided for @deckSectionOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get deckSectionOther;
+
+  /// No description provided for @basicLandsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic lands'**
+  String get basicLandsLabel;
+
   /// No description provided for @resultsWithFilters.
   ///
   /// In en, this message translates to:
-  /// **'Results: {visible} / {total} · Languages: {languages}'**
+  /// **'Results: {visible} / {total} Â· Languages: {languages}'**
   String resultsWithFilters(int visible, int total, Object languages);
 
   /// No description provided for @resultsWithoutFilters.
   ///
   /// In en, this message translates to:
-  /// **'Results: {total} · Languages: {languages}'**
+  /// **'Results: {total} Â· Languages: {languages}'**
   String resultsWithoutFilters(int total, Object languages);
 
   /// No description provided for @startTypingToSearch.
@@ -1511,13 +1595,13 @@ abstract class AppLocalizations {
   /// No description provided for @setCollectionCount.
   ///
   /// In en, this message translates to:
-  /// **'Set • {count} cards'**
+  /// **'Set â€¢ {count} cards'**
   String setCollectionCount(int count);
 
   /// No description provided for @customCollectionCount.
   ///
   /// In en, this message translates to:
-  /// **'Custom • {count} cards'**
+  /// **'Custom â€¢ {count} cards'**
   String customCollectionCount(int count);
 
   /// No description provided for @createCollectionTitle.

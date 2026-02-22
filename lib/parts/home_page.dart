@@ -37,8 +37,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _initialCollectionsLoading = true;
   bool _collectionsLoadInProgress = false;
   int _totalCardCount = 0;
+  Map<int, int> _deckSideboardCounts = {};
   late final AnimationController _snakeController;
   Map<String, String> _setNameLookup = {};
+  static const int _deckImportBatchSize = 120;
 
   void _onCollectionsRefreshRequested() {
     unawaited(_loadCollections());
@@ -105,6 +107,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return collection.name.startsWith(_setPrefix);
   }
 
+  bool _isBasicLandsCollection(CollectionInfo collection) {
+    return collection.type == CollectionType.basicLands ||
+        collection.name.trim().toLowerCase() ==
+            _basicLandsCollectionName.toLowerCase();
+  }
+
+  bool _isDeckSideboardCollection(CollectionInfo collection) {
+    return collection.name.startsWith('__deck_side__:');
+  }
+
   String _setCollectionName(String setCode) {
     return '$_setPrefix${setCode.trim().toLowerCase()}';
   }
@@ -128,12 +140,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (collection.name == _allCardsCollectionName) {
       return AppLocalizations.of(context)!.allCards;
     }
+    if (_isBasicLandsCollection(collection)) {
+      return AppLocalizations.of(context)!.basicLandsLabel;
+    }
     return collection.name;
   }
 
   int _userCollectionCount() {
     return _collections
-        .where((item) => item.name != _allCardsCollectionName)
+        .where(
+          (item) =>
+              item.name != _allCardsCollectionName &&
+              !_isBasicLandsCollection(item),
+        )
         .length;
   }
 
@@ -349,6 +368,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             ..clear()
             ..addAll(updated);
           _totalCardCount = owned;
+          _deckSideboardCounts = {};
         });
         return;
       }
@@ -373,6 +393,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
             );
           _totalCardCount = owned;
+          _deckSideboardCounts = {};
         });
         return;
       }
@@ -404,6 +425,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final setNames = await ScryfallDatabase.instance.fetchSetNamesForCodes(
         setCodes,
       );
+      final deckSideCounts = <int, int>{};
+      for (final collection in renamed) {
+        if (collection.type != CollectionType.deck) {
+          continue;
+        }
+        final sideboardCollectionId = await ScryfallDatabase.instance
+            .fetchDeckSideboardCollectionId(collection.id);
+        if (sideboardCollectionId == null) {
+          deckSideCounts[collection.id] = 0;
+          continue;
+        }
+        final sideCount = await ScryfallDatabase.instance.countCollectionQuantity(
+          sideboardCollectionId,
+        );
+        deckSideCounts[collection.id] = sideCount;
+      }
       if (!mounted) {
         return;
       }
@@ -413,6 +450,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ..addAll(renamed);
         _totalCardCount = owned;
         _setNameLookup = setNames;
+        _deckSideboardCounts = deckSideCounts;
       });
     } on TimeoutException {
       if (mounted) {
@@ -444,9 +482,42 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       orElse: () => null,
     );
     final userCollections = _collections
-        .where((collection) => collection.name != _allCardsCollectionName)
+        .where(
+          (collection) =>
+              collection.name != _allCardsCollectionName &&
+              !_isBasicLandsCollection(collection) &&
+              !_isDeckSideboardCollection(collection),
+        )
+        .toList();
+    final deckCollections = userCollections
+        .where((item) => item.type == CollectionType.deck)
+        .toList();
+    final nonDeckCollections = userCollections
+        .where((item) => item.type != CollectionType.deck)
         .toList();
     final widgets = <Widget>[];
+
+    void openCollection(CollectionInfo collection) {
+      final setCode = _setCodeForCollection(collection);
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) => CollectionDetailPage(
+                collectionId: collection.id,
+                name: _collectionDisplayName(collection),
+                isSetCollection: setCode != null,
+                isDeckCollection: collection.type == CollectionType.deck,
+                isBasicLandsCollection:
+                    collection.type == CollectionType.basicLands,
+                isWishlistCollection:
+                    collection.type == CollectionType.wishlist,
+                setCode: setCode,
+                filter: collection.filter,
+              ),
+            ),
+          )
+          .then((_) => _loadCollections());
+    }
 
     if (allCards != null) {
       widgets.add(
@@ -483,14 +554,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
     widgets.add(const SizedBox(height: 12));
 
-    final hasSetCollection = userCollections.any(_isSetCollection);
-    final hasCustomCollection = userCollections.any(
+    final hasSetCollection = nonDeckCollections.any(_isSetCollection);
+    final hasCustomCollection = nonDeckCollections.any(
       (item) => item.type == CollectionType.custom,
     );
-    final hasDeckCollection = userCollections.any(
-      (item) => item.type == CollectionType.deck,
-    );
-    final hasWishlistCollection = userCollections.any(
+    final hasDeckCollection = deckCollections.isNotEmpty;
+    final hasWishlistCollection = nonDeckCollections.any(
       (item) => item.type == CollectionType.wishlist,
     );
     final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
@@ -499,7 +568,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
     final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
 
-    void addCreateCards() {
+    void addCreateCards({required bool includeDeck}) {
       if (!hasCustomCollection) {
         widgets.add(
           _buildCreateCollectionCard(
@@ -522,7 +591,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         );
       }
-      if (!hasDeckCollection) {
+      if (includeDeck && !hasDeckCollection) {
         widgets.add(
           _buildCreateCollectionCard(
             context,
@@ -546,13 +615,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
 
-    if (userCollections.isEmpty) {
-      addCreateCards();
-      return widgets;
-    }
-
-    for (final collection in userCollections) {
-      final setCode = _setCodeForCollection(collection);
+    for (final collection in nonDeckCollections) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -562,30 +625,47 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             onLongPress: (position) {
               _showCollectionActions(collection, position);
             },
-            onTap: () {
-              Navigator.of(context)
-                  .push(
-                    MaterialPageRoute(
-                      builder: (_) => CollectionDetailPage(
-                        collectionId: collection.id,
-                        name: _collectionDisplayName(collection),
-                        isSetCollection: setCode != null,
-                        isDeckCollection: collection.type == CollectionType.deck,
-                        isWishlistCollection:
-                            collection.type == CollectionType.wishlist,
-                        setCode: setCode,
-                        filter: collection.filter,
-                      ),
-                    ),
-                  )
-                  .then((_) => _loadCollections());
-            },
+            onTap: () => openCollection(collection),
           ),
         ),
       );
     }
 
-    addCreateCards();
+    addCreateCards(includeDeck: false);
+
+    widgets.add(const SizedBox(height: 6));
+    widgets.add(_SectionDivider(label: AppLocalizations.of(context)!.deckCollectionTitle));
+    widgets.add(const SizedBox(height: 12));
+
+    for (final collection in deckCollections) {
+      final sideCount = _deckSideboardCounts[collection.id] ?? 0;
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: _CollectionCard(
+            name: _collectionDisplayName(collection),
+            count: collection.cardCount,
+            countLabel: '${collection.cardCount}+$sideCount',
+            onLongPress: (position) {
+              _showCollectionActions(collection, position);
+            },
+            onTap: () => openCollection(collection),
+          ),
+        ),
+      );
+    }
+
+    if (!hasDeckCollection) {
+      widgets.add(
+        _buildCreateCollectionCard(
+          context,
+          icon: Icons.style,
+          title: AppLocalizations.of(context)!.createYourDeckTitle,
+          enabled: canCreateDeck,
+          onTap: () => _addDeckCollection(context),
+        ),
+      );
+    }
 
     return widgets;
   }
@@ -1198,7 +1278,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final controller = TextEditingController();
     String? selectedFormat;
-    final name = await showDialog<String>(
+    _DeckImportSource? importSource;
+    final request = await showDialog<_DeckCreateRequest>(
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
@@ -1238,6 +1319,37 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       });
                     },
                   ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final picked = await _pickDeckImportSource();
+                      if (!context.mounted) {
+                        return;
+                      }
+                      if (picked == null) {
+                        return;
+                      }
+                      setState(() {
+                        importSource = picked;
+                      });
+                    },
+                    icon: const Icon(Icons.upload_file),
+                    label: Text(_deckImportButtonLabel()),
+                  ),
+                  if (importSource != null) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        importSource!.fileName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFBFAE95),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               actions: [
@@ -1248,7 +1360,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 FilledButton(
                   onPressed: () {
                     final value = controller.text.trim();
-                    Navigator.of(context).pop(value.isEmpty ? null : value);
+                    if (value.isEmpty) {
+                      Navigator.of(context).pop();
+                      return;
+                    }
+                    Navigator.of(context).pop(
+                      _DeckCreateRequest(
+                        name: value,
+                        format: selectedFormat,
+                        importSource: importSource,
+                      ),
+                    );
                   },
                   child: Text(l10n.create),
                 ),
@@ -1259,14 +1381,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       },
     );
 
-    if (name == null) {
+    if (request == null) {
       return;
     }
     if (!context.mounted) {
       return;
     }
 
-    if (_collections.any((item) => item.name == name)) {
+    if (_collections.any((item) => item.name == request.name)) {
       showAppSnackBar(
         context,
         AppLocalizations.of(context)!.collectionAlreadyExists,
@@ -1274,14 +1396,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
-    final normalizedFormat = selectedFormat?.trim().toLowerCase();
+    final normalizedFormat = request.format?.trim().toLowerCase();
     final filter = (normalizedFormat == null || normalizedFormat.isEmpty)
         ? null
         : CollectionFilter(format: normalizedFormat);
     int id;
     try {
       id = await ScryfallDatabase.instance.addCollection(
-        name,
+        request.name,
         type: CollectionType.deck,
         filter: filter,
       );
@@ -1302,13 +1424,528 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _collections.add(
         CollectionInfo(
           id: id,
-          name: name,
+          name: request.name,
           cardCount: 0,
           type: CollectionType.deck,
           filter: filter,
         ),
       );
     });
+    if (request.importSource != null) {
+      await _runDeckImportWithFeedback(
+        collectionId: id,
+        text: request.importSource!.content,
+      );
+    }
+    await _loadCollections();
+  }
+
+  bool _isItalianUi() {
+    return Localizations.localeOf(context).languageCode.toLowerCase().startsWith(
+      'it',
+    );
+  }
+
+  String _deckImportButtonLabel() {
+    return _isItalianUi() ? 'Carica file Arena/MTGO' : 'Load Arena/MTGO file';
+  }
+
+  String _deckImportMenuLabel() {
+    return _isItalianUi() ? 'Importa lista mazzo' : 'Import deck list';
+  }
+
+  String _deckExportArenaLabel() {
+    return _isItalianUi() ? 'Esporta per Arena' : 'Export for Arena';
+  }
+
+  String _deckExportMtgoLabel() {
+    return _isItalianUi() ? 'Esporta per MTGO' : 'Export for MTGO';
+  }
+
+  String _deckImportedSummaryLabel(int imported, int skipped) {
+    if (_isItalianUi()) {
+      return 'Mazzo importato: $imported carte, $skipped non trovate';
+    }
+    return 'Deck imported: $imported cards, $skipped not found';
+  }
+
+  String _deckImportingLabel() {
+    return _isItalianUi() ? 'Importazione mazzo in corso...' : 'Importing deck...';
+  }
+
+  String _deckImportResultTitle() {
+    return _isItalianUi() ? 'Risultato import' : 'Import result';
+  }
+
+  String _deckImportNotFoundTitle() {
+    return _isItalianUi() ? 'Carte non trovate' : 'Cards not found';
+  }
+
+  String _deckExportedSummaryLabel(String fileName) {
+    if (_isItalianUi()) {
+      return 'Mazzo esportato: $fileName';
+    }
+    return 'Deck exported: $fileName';
+  }
+
+  String _deckImportFailedLabel(Object error) {
+    if (_isItalianUi()) {
+      return 'Import mazzo non riuscito: $error';
+    }
+    return 'Deck import failed: $error';
+  }
+
+  String _deckExportFailedLabel(Object error) {
+    if (_isItalianUi()) {
+      return 'Export mazzo non riuscito: $error';
+    }
+    return 'Deck export failed: $error';
+  }
+
+  Future<_DeckImportSource?> _pickDeckImportSource() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['txt', 'dek'],
+      withData: kIsWeb,
+    );
+    if (result == null || result.files.isEmpty) {
+      return null;
+    }
+    final file = result.files.first;
+    final fileName = file.name.trim().isEmpty ? 'decklist.txt' : file.name.trim();
+    String? content;
+    if (file.bytes != null) {
+      content = utf8.decode(file.bytes!, allowMalformed: true);
+    } else if (file.path != null) {
+      content = await File(file.path!).readAsString();
+    }
+    if (content == null || content.trim().isEmpty) {
+      return null;
+    }
+    return _DeckImportSource(fileName: fileName, content: content);
+  }
+
+  _ParsedDeckList _parseDeckListText(String text) {
+    final mainboard = <String, int>{};
+    final sideboard = <String, int>{};
+    var inSideboard = false;
+    var pendingBlankSideboardSwitch = false;
+    var switchedByBlank = false;
+    final lines = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+    final cardXmlExp = RegExp(
+      r'<Cards[^>]*Name="([^"]+)"[^>]*Quantity="(\d+)"[^>]*>',
+      caseSensitive: false,
+    );
+    for (final rawLine in lines) {
+      final line = rawLine.trim();
+      if (line.isEmpty) {
+        if (!inSideboard && mainboard.isNotEmpty && !switchedByBlank) {
+          pendingBlankSideboardSwitch = true;
+        }
+        continue;
+      }
+      final hasCountLine = RegExp(r'^\d+\s+.+$').hasMatch(line);
+      final hasXmlCard = RegExp(
+        r'^<Cards\b',
+        caseSensitive: false,
+      ).hasMatch(line);
+      if (!inSideboard &&
+          pendingBlankSideboardSwitch &&
+          !switchedByBlank &&
+          (hasCountLine || hasXmlCard)) {
+        inSideboard = true;
+        switchedByBlank = true;
+      }
+      pendingBlankSideboardSwitch = false;
+      final lower = line.toLowerCase();
+      if (lower == 'deck' ||
+          lower == 'mainboard' ||
+          lower == 'maindeck' ||
+          lower == 'main') {
+        inSideboard = false;
+        pendingBlankSideboardSwitch = false;
+        continue;
+      }
+      if (lower == 'sideboard' ||
+          lower == 'side board' ||
+          lower.startsWith('sideboard ')) {
+        inSideboard = true;
+        switchedByBlank = true;
+        pendingBlankSideboardSwitch = false;
+        continue;
+      }
+      var lineToParse = line;
+      if (lower.startsWith('sb:')) {
+        inSideboard = true;
+        switchedByBlank = true;
+        pendingBlankSideboardSwitch = false;
+        lineToParse = line.substring(3).trim();
+        if (lineToParse.isEmpty) {
+          continue;
+        }
+      }
+
+      final xmlMatch = cardXmlExp.firstMatch(lineToParse);
+      if (xmlMatch != null) {
+        final name = (xmlMatch.group(1) ?? '').trim();
+        final qty = int.tryParse(xmlMatch.group(2) ?? '') ?? 0;
+        if (name.isNotEmpty && qty > 0) {
+          final xmlIsSideboard = RegExp(
+            r'Sideboard\s*=\s*"true"',
+            caseSensitive: false,
+          ).hasMatch(line);
+          final target =
+              (inSideboard || xmlIsSideboard) ? sideboard : mainboard;
+          target[name] = (target[name] ?? 0) + qty;
+        }
+        continue;
+      }
+
+      final mainMatch = RegExp(r'^(\d+)\s*x?\s+(.+)$', caseSensitive: false)
+          .firstMatch(lineToParse);
+      if (mainMatch == null) {
+        continue;
+      }
+      final qty = int.tryParse(mainMatch.group(1) ?? '') ?? 0;
+      if (qty <= 0) {
+        continue;
+      }
+      var name = (mainMatch.group(2) ?? '').trim();
+      name = name.replaceAll(RegExp(r'\s+\([A-Za-z0-9]+\)\s+[A-Za-z0-9]+$'), '');
+      name = name.replaceAll(RegExp(r'\s+$'), '');
+      if (name.isEmpty) {
+        continue;
+      }
+      final target = inSideboard ? sideboard : mainboard;
+      target[name] = (target[name] ?? 0) + qty;
+    }
+    return _ParsedDeckList(mainboard: mainboard, sideboard: sideboard);
+  }
+
+  Future<_DeckImportResult> _importDeckTextIntoCollection({
+    required int collectionId,
+    required String text,
+  }) async {
+    final parsed = _parseDeckListText(text);
+    if (parsed.mainboard.isEmpty && parsed.sideboard.isEmpty) {
+      return const _DeckImportResult(imported: 0, skipped: 0, notFoundCards: []);
+    }
+    final sideboardCollectionId = await ScryfallDatabase.instance
+        .ensureDeckSideboardCollectionId(collectionId);
+    var importedCards = 0;
+    var skippedCards = 0;
+    final notFoundCards = <String>[];
+    final mainEntries = parsed.mainboard.entries.toList(growable: false);
+    final sideEntries = parsed.sideboard.entries.toList(growable: false);
+    var processed = 0;
+    Future<void> importEntries(
+      List<MapEntry<String, int>> entries, {
+      required int targetCollectionId,
+    }) async {
+      for (final entry in entries) {
+        processed += 1;
+        if (processed % 20 == 0) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        final cardId = await _resolveCardIdForDeckImport(entry.key);
+        if (cardId == null) {
+          skippedCards += entry.value;
+          notFoundCards.add(entry.key);
+          continue;
+        }
+        final existing = await ScryfallDatabase.instance.fetchCardEntryById(
+          cardId,
+          collectionId: targetCollectionId,
+        );
+        final currentQty = existing?.quantity ?? 0;
+        final nextQty = currentQty + entry.value;
+        await ScryfallDatabase.instance.upsertCollectionCard(
+          targetCollectionId,
+          cardId,
+          quantity: nextQty,
+          foil: false,
+          altArt: false,
+        );
+        importedCards += entry.value;
+      }
+    }
+
+    await importEntries(mainEntries, targetCollectionId: collectionId);
+    await importEntries(sideEntries, targetCollectionId: sideboardCollectionId);
+    return _DeckImportResult(
+      imported: importedCards,
+      skipped: skippedCards,
+      notFoundCards: notFoundCards,
+    );
+  }
+
+  Future<String?> _resolveCardIdForDeckImport(String rawName) async {
+    final name = rawName.trim();
+    if (name.isEmpty) {
+      return null;
+    }
+
+    final localId = await ScryfallDatabase.instance.fetchPreferredCardIdByExactName(
+      name,
+    );
+    if (localId != null) {
+      return localId;
+    }
+
+    Future<String?> fetchOnline(String url) async {
+      try {
+        final response = await ScryfallApiClient.instance.get(
+          Uri.parse(url),
+          timeout: const Duration(seconds: 5),
+          maxRetries: 2,
+        );
+        if (response.statusCode != 200) {
+          return null;
+        }
+        final payload = jsonDecode(response.body);
+        if (payload is! Map<String, dynamic>) {
+          return null;
+        }
+        await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+        final id = (payload['id'] as String?)?.trim();
+        if (id != null && id.isNotEmpty) {
+          return id;
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    final exactUrl =
+        'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}';
+    final exactId = await fetchOnline(exactUrl);
+    if (exactId != null) {
+      return exactId;
+    }
+
+    final fuzzyUrl =
+        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(name)}';
+    final fuzzyId = await fetchOnline(fuzzyUrl);
+    if (fuzzyId != null) {
+      return fuzzyId;
+    }
+
+    return null;
+  }
+
+  Future<T> _runWithBlockingDialog<T>({
+    required String message,
+    required Future<T> Function() action,
+  }) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            content: Row(
+              children: [
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(message)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    try {
+      return await action();
+    } finally {
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+  }
+
+  Future<void> _showDeckImportResultDialog(_DeckImportResult result) async {
+    if (!mounted) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final missingPreview = result.notFoundCards.take(12).toList(growable: false);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(_deckImportResultTitle()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_deckImportedSummaryLabel(result.imported, result.skipped)),
+              if (missingPreview.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _deckImportNotFoundTitle(),
+                  style: Theme.of(dialogContext).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                ...missingPreview.map((name) => Text('- $name')),
+                if (result.notFoundCards.length > missingPreview.length)
+                  Text(
+                    _isItalianUi()
+                        ? '...e altre ${result.notFoundCards.length - missingPreview.length}'
+                        : '...and ${result.notFoundCards.length - missingPreview.length} more',
+                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFFBFAE95),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.confirm),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _runDeckImportWithFeedback({
+    required int collectionId,
+    required String text,
+  }) async {
+    try {
+      final result = await _runWithBlockingDialog(
+        message: _deckImportingLabel(),
+        action: () => _importDeckTextIntoCollection(
+          collectionId: collectionId,
+          text: text,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      await _showDeckImportResultDialog(result);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, _deckImportFailedLabel(error));
+    }
+  }
+
+  Future<List<CollectionCardEntry>> _fetchAllCardsForCollection(
+    int collectionId,
+  ) async {
+    final all = <CollectionCardEntry>[];
+    var offset = 0;
+    while (true) {
+      final page = await ScryfallDatabase.instance.fetchCollectionCards(
+        collectionId,
+        limit: _deckImportBatchSize,
+        offset: offset,
+      );
+      if (page.isEmpty) {
+        break;
+      }
+      all.addAll(page);
+      if (page.length < _deckImportBatchSize) {
+        break;
+      }
+      offset += page.length;
+    }
+    return all;
+  }
+
+  Future<void> _exportDeckCollection(
+    CollectionInfo collection, {
+    required bool arenaFormat,
+  }) async {
+    try {
+      final cards = await _fetchAllCardsForCollection(collection.id);
+      final sideboardCollectionId = await ScryfallDatabase.instance
+          .ensureDeckSideboardCollectionId(collection.id);
+      final sideboardCards = await _fetchAllCardsForCollection(sideboardCollectionId);
+      final buffer = StringBuffer();
+      for (final entry in cards) {
+        if (entry.quantity <= 0) {
+          continue;
+        }
+        if (arenaFormat) {
+          buffer.writeln(
+            '${entry.quantity} ${entry.name} (${entry.setCode.toUpperCase()}) ${entry.collectorNumber}',
+          );
+        } else {
+          buffer.writeln('${entry.quantity} ${entry.name}');
+        }
+      }
+      if (sideboardCards.any((entry) => entry.quantity > 0)) {
+        buffer.writeln();
+        buffer.writeln('Sideboard');
+        for (final entry in sideboardCards) {
+          if (entry.quantity <= 0) {
+            continue;
+          }
+          if (arenaFormat) {
+            buffer.writeln(
+              '${entry.quantity} ${entry.name} (${entry.setCode.toUpperCase()}) ${entry.collectorNumber}',
+            );
+          } else {
+            buffer.writeln('${entry.quantity} ${entry.name}');
+          }
+        }
+      }
+      final docs = await getApplicationDocumentsDirectory();
+      final exportDir = Directory(path.join(docs.path, 'deck_exports'));
+      if (!exportDir.existsSync()) {
+        exportDir.createSync(recursive: true);
+      }
+      final ext = arenaFormat ? 'arena' : 'mtgo';
+      final safeName = collection.name
+          .replaceAll(RegExp(r'[^A-Za-z0-9_\- ]'), '')
+          .trim()
+          .replaceAll(RegExp(r'\s+'), '_');
+      final stamp = DateTime.now().toLocal().toIso8601String().replaceAll(
+        RegExp(r'[:\-]'),
+        '',
+      ).replaceAll('.', '');
+      final fileName = '${safeName.isEmpty ? 'deck' : safeName}_${ext}_$stamp.txt';
+      final file = File(path.join(exportDir.path, fileName));
+      await file.writeAsString(buffer.toString(), flush: true);
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: fileName,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, _deckExportedSummaryLabel(fileName));
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, _deckExportFailedLabel(error));
+    }
+  }
+
+  Future<void> _importDeckFileIntoCollection(CollectionInfo collection) async {
+    final picked = await _pickDeckImportSource();
+    if (picked == null) {
+      return;
+    }
+    await _runDeckImportWithFeedback(
+      collectionId: collection.id,
+      text: picked.content,
+    );
+    if (!mounted) {
+      return;
+    }
     await _loadCollections();
   }
 
@@ -2642,7 +3279,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     CollectionInfo collection,
     Offset globalPosition,
   ) async {
-    if (collection.name == _allCardsCollectionName) {
+    if (collection.name == _allCardsCollectionName ||
+        _isBasicLandsCollection(collection)) {
       return;
     }
     final overlay =
@@ -2682,6 +3320,44 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       }
     }
+    if (isDeckCollection) {
+      menuItems.add(
+        PopupMenuItem(
+          value: _CollectionAction.importDeckFile,
+          child: Row(
+            children: [
+              const Icon(Icons.upload_file, size: 18),
+              const SizedBox(width: 8),
+              Text(_deckImportMenuLabel()),
+            ],
+          ),
+        ),
+      );
+      menuItems.add(
+        PopupMenuItem(
+          value: _CollectionAction.exportDeckArena,
+          child: Row(
+            children: [
+              const Icon(Icons.download, size: 18),
+              const SizedBox(width: 8),
+              Text(_deckExportArenaLabel()),
+            ],
+          ),
+        ),
+      );
+      menuItems.add(
+        PopupMenuItem(
+          value: _CollectionAction.exportDeckMtgo,
+          child: Row(
+            children: [
+              const Icon(Icons.download_for_offline_outlined, size: 18),
+              const SizedBox(width: 8),
+              Text(_deckExportMtgoLabel()),
+            ],
+          ),
+        ),
+      );
+    }
     menuItems.add(
       PopupMenuItem(
         value: _CollectionAction.delete,
@@ -2707,6 +3383,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _renameCollection(collection);
     } else if (selection == _CollectionAction.editFilters) {
       await _editCollectionFilters(collection);
+    } else if (selection == _CollectionAction.importDeckFile) {
+      await _importDeckFileIntoCollection(collection);
+    } else if (selection == _CollectionAction.exportDeckArena) {
+      await _exportDeckCollection(collection, arenaFormat: true);
+    } else if (selection == _CollectionAction.exportDeckMtgo) {
+      await _exportDeckCollection(collection, arenaFormat: false);
     } else if (selection == _CollectionAction.delete) {
       await _deleteCollection(collection);
     }
@@ -2831,6 +3513,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     await ScryfallDatabase.instance.deleteCollection(collection.id);
+    if (collection.type == CollectionType.deck) {
+      await ScryfallDatabase.instance.deleteDeckSideboardCollection(collection.id);
+    }
     if (!mounted) {
       return;
     }
@@ -3326,11 +4011,13 @@ class _CollectionCard extends StatelessWidget {
     required this.name,
     required this.count,
     required this.onTap,
+    this.countLabel,
     this.onLongPress,
   });
 
   final String name;
   final int count;
+  final String? countLabel;
   final VoidCallback onTap;
   final ValueChanged<Offset>? onLongPress;
 
@@ -3376,7 +4063,7 @@ class _CollectionCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        l10n.cardCount(count),
+                        countLabel ?? l10n.cardCount(count),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFBFAE95),
                         ),
@@ -5469,7 +6156,58 @@ class _ScanFieldStatusBox extends StatelessWidget {
   }
 }
 
-enum _CollectionAction { rename, editFilters, delete }
+class _DeckImportSource {
+  const _DeckImportSource({
+    required this.fileName,
+    required this.content,
+  });
+
+  final String fileName;
+  final String content;
+}
+
+class _DeckCreateRequest {
+  const _DeckCreateRequest({
+    required this.name,
+    this.format,
+    this.importSource,
+  });
+
+  final String name;
+  final String? format;
+  final _DeckImportSource? importSource;
+}
+
+class _DeckImportResult {
+  const _DeckImportResult({
+    required this.imported,
+    required this.skipped,
+    required this.notFoundCards,
+  });
+
+  final int imported;
+  final int skipped;
+  final List<String> notFoundCards;
+}
+
+class _ParsedDeckList {
+  const _ParsedDeckList({
+    required this.mainboard,
+    required this.sideboard,
+  });
+
+  final Map<String, int> mainboard;
+  final Map<String, int> sideboard;
+}
+
+enum _CollectionAction {
+  rename,
+  editFilters,
+  importDeckFile,
+  exportDeckArena,
+  exportDeckMtgo,
+  delete,
+}
 
 enum _HomeAddAction { addByScan, addCards, addCollection, addWishlist }
 

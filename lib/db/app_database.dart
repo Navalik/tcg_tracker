@@ -203,6 +203,8 @@ class ScryfallDatabase {
 
   static const _prefsKeyRegenerated = 'db_regenerated_v1';
   static const _prefsKeyAvailableLanguages = 'available_languages';
+  static const _basicLandsCollectionInternalName = '__basic_lands__';
+  static const _deckSideboardCollectionPrefix = '__deck_side__:';
 
   AppDatabase? _db;
 
@@ -241,6 +243,87 @@ class ScryfallDatabase {
         )
         .getSingleOrNull();
     return fallback?.read<int>('id');
+  }
+
+  Future<int?> fetchBasicLandsCollectionId() async {
+    final db = await open();
+    final typed =
+        await (db.select(db.collections)
+              ..where((tbl) => tbl.type.equals('basic_lands'))
+              ..limit(1))
+            .getSingleOrNull();
+    if (typed != null) {
+      return typed.id;
+    }
+    final fallback = await db
+        .customSelect(
+          '''
+          SELECT id AS id
+          FROM collections
+          WHERE lower(name) IN (?, ?, ?)
+          LIMIT 1
+          ''',
+          variables: [
+            Variable.withString(_basicLandsCollectionInternalName),
+            Variable.withString('terre base'),
+            Variable.withString('basic lands'),
+          ],
+        )
+        .getSingleOrNull();
+    return fallback?.read<int>('id');
+  }
+
+  String deckSideboardCollectionName(int deckCollectionId) {
+    return '$_deckSideboardCollectionPrefix$deckCollectionId';
+  }
+
+  Future<int?> fetchDeckSideboardCollectionId(int deckCollectionId) async {
+    final db = await open();
+    final row = await (db.select(db.collections)
+          ..where(
+            (tbl) => tbl.name.equals(deckSideboardCollectionName(deckCollectionId)),
+          )
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.id;
+  }
+
+  Future<int> ensureDeckSideboardCollectionId(int deckCollectionId) async {
+    final existing = await fetchDeckSideboardCollectionId(deckCollectionId);
+    if (existing != null) {
+      return existing;
+    }
+    return addCollection(
+      deckSideboardCollectionName(deckCollectionId),
+      type: CollectionType.custom,
+    );
+  }
+
+  Future<void> deleteDeckSideboardCollection(int deckCollectionId) async {
+    final existing = await fetchDeckSideboardCollectionId(deckCollectionId);
+    if (existing == null) {
+      return;
+    }
+    await deleteCollection(existing);
+  }
+
+  Future<int> ensureBasicLandsCollectionId() async {
+    final existingId = await fetchBasicLandsCollectionId();
+    if (existingId != null) {
+      final db = await open();
+      await (db.update(db.collections)..where((tbl) => tbl.id.equals(existingId)))
+          .write(
+            CollectionsCompanion(
+              name: Value(_basicLandsCollectionInternalName),
+              type: Value(collectionTypeToDb(CollectionType.basicLands)),
+            ),
+          );
+      return existingId;
+    }
+    return addCollection(
+      _basicLandsCollectionInternalName,
+      type: CollectionType.basicLands,
+    );
   }
 
   Future<void> hardReset() async {
@@ -346,6 +429,16 @@ class ScryfallDatabase {
         counts[row.id] = deckRow.read<int>('total');
         continue;
       }
+      if (collectionTypeFromDb(row.type) == CollectionType.basicLands) {
+        final basicLandsRow = await db
+            .customSelect(
+              'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
+              variables: [Variable.withInt(row.id)],
+            )
+            .getSingle();
+        counts[row.id] = basicLandsRow.read<int>('total');
+        continue;
+      }
       final filter = row.filterJson == null
           ? null
           : CollectionFilter.fromJson(
@@ -365,6 +458,12 @@ class ScryfallDatabase {
     CollectionType type = CollectionType.custom,
     CollectionFilter? filter,
   }) async {
+    if (type == CollectionType.basicLands) {
+      final existing = await fetchBasicLandsCollectionId();
+      if (existing != null) {
+        return existing;
+      }
+    }
     final db = await open();
     return db
         .into(db.collections)
@@ -1422,6 +1521,17 @@ class ScryfallDatabase {
     return row.read<int>('total');
   }
 
+  Future<int> countCollectionQuantity(int collectionId) async {
+    final db = await open();
+    final row = await db
+        .customSelect(
+          'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
+          variables: [Variable.withInt(collectionId)],
+        )
+        .getSingle();
+    return row.read<int>('total');
+  }
+
   Future<List<CardSearchResult>> fetchFilteredCardPreviews(
     CollectionFilter filter, {
     int limit = 40,
@@ -1875,6 +1985,158 @@ class ScryfallDatabase {
     );
   }
 
+  Future<String?> fetchPreferredCardIdByExactName(String cardName) async {
+    final normalizedName = cardName.trim().toLowerCase();
+    if (normalizedName.isEmpty) {
+      return null;
+    }
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT id AS id
+      FROM cards
+      WHERE LOWER(name) = ?
+      ORDER BY
+        CASE WHEN LOWER(COALESCE(lang, '')) = 'en' THEN 0 ELSE 1 END,
+        COALESCE(released_at, '') DESC,
+        COALESCE(set_code, '') ASC,
+        CASE WHEN COALESCE(collector_number, '') GLOB '[0-9]*' THEN 0 ELSE 1 END,
+        CASE
+          WHEN COALESCE(collector_number, '') GLOB '[0-9]*'
+          THEN CAST(collector_number AS INTEGER)
+          ELSE 999999
+        END ASC
+      LIMIT 1
+      ''',
+      variables: [Variable.withString(normalizedName)],
+    ).get();
+    if (rows.isEmpty) {
+      return null;
+    }
+    return rows.first.read<String>('id');
+  }
+
+  Future<String?> fetchPreferredBasicLandCardId(String mana) async {
+    final normalizedMana = mana.trim().toUpperCase();
+    const namesByMana = {
+      'W': 'plains',
+      'U': 'island',
+      'B': 'swamp',
+      'R': 'mountain',
+      'G': 'forest',
+    };
+    final basicName = namesByMana[normalizedMana];
+    if (basicName == null) {
+      return null;
+    }
+    final db = await open();
+    final strictRows = await db.customSelect(
+      '''
+      SELECT id AS id
+      FROM cards
+      WHERE
+        LOWER(name) = ?
+        AND LOWER(COALESCE(type_line, '')) LIKE '%basic land%'
+        AND LOWER(COALESCE(rarity, '')) = 'common'
+        AND LOWER(COALESCE(lang, '')) = 'en'
+        AND LOWER(COALESCE(set_code, '')) != 'sld'
+      ORDER BY
+        COALESCE(released_at, '') DESC,
+        CASE WHEN COALESCE(collector_number, '') GLOB '[0-9]*' THEN 0 ELSE 1 END,
+        CASE
+          WHEN COALESCE(collector_number, '') GLOB '[0-9]*'
+          THEN CAST(collector_number AS INTEGER)
+          ELSE 999999
+        END ASC,
+        COALESCE(set_code, '') ASC
+      LIMIT 1
+      ''',
+      variables: [Variable.withString(basicName)],
+    ).get();
+    if (strictRows.isNotEmpty) {
+      return strictRows.first.read<String>('id');
+    }
+
+    final fallbackRows = await db.customSelect(
+      '''
+      SELECT id AS id
+      FROM cards
+      WHERE
+        LOWER(name) = ?
+        AND LOWER(COALESCE(type_line, '')) LIKE '%basic land%'
+      ORDER BY
+        COALESCE(released_at, '') DESC,
+        CASE WHEN LOWER(COALESCE(set_code, '')) = 'sld' THEN 1 ELSE 0 END,
+        CASE WHEN LOWER(COALESCE(lang, '')) = 'en' THEN 0 ELSE 1 END,
+        CASE WHEN COALESCE(collector_number, '') GLOB '[0-9]*' THEN 0 ELSE 1 END,
+        CASE
+          WHEN COALESCE(collector_number, '') GLOB '[0-9]*'
+          THEN CAST(collector_number AS INTEGER)
+          ELSE 999999
+        END ASC
+      LIMIT 1
+      ''',
+      variables: [Variable.withString(basicName)],
+    ).get();
+    if (fallbackRows.isEmpty) {
+      return null;
+    }
+    return fallbackRows.first.read<String>('id');
+  }
+
+  Future<CollectionCardEntry?> fetchFirstBasicLandEntryForCollection(
+    int collectionId,
+    String mana,
+  ) async {
+    final normalizedMana = mana.trim().toUpperCase();
+    const namesByMana = {
+      'W': 'plains',
+      'U': 'island',
+      'B': 'swamp',
+      'R': 'mountain',
+      'G': 'forest',
+    };
+    final basicName = namesByMana[normalizedMana];
+    if (basicName == null) {
+      return null;
+    }
+    final db = await open();
+    final rows = await db.customSelect(
+      '''
+      SELECT collection_cards.card_id AS card_id
+      FROM collection_cards
+      JOIN cards ON cards.id = collection_cards.card_id
+      WHERE
+        collection_cards.collection_id = ?
+        AND collection_cards.quantity > 0
+        AND (
+          LOWER(cards.name) = ?
+          OR (
+            COALESCE(cards.color_identity, '') = ?
+            AND LOWER(COALESCE(cards.type_line, '')) LIKE '%basic land%'
+          )
+        )
+      ORDER BY
+        collection_cards.quantity DESC,
+        CASE WHEN LOWER(cards.name) = ? THEN 0 ELSE 1 END,
+        CASE WHEN LOWER(COALESCE(cards.lang, '')) = 'en' THEN 0 ELSE 1 END,
+        COALESCE(cards.released_at, '') DESC
+      LIMIT 1
+      ''',
+      variables: [
+        Variable.withInt(collectionId),
+        Variable.withString(basicName),
+        Variable.withString('["$normalizedMana"]'),
+        Variable.withString(basicName),
+      ],
+    ).get();
+    if (rows.isEmpty) {
+      return null;
+    }
+    final cardId = rows.first.read<String>('card_id');
+    return fetchCardEntryById(cardId, collectionId: collectionId);
+  }
+
   Future<List<String>> fetchCardLegalFormats(String cardId) async {
     final normalizedId = cardId.trim();
     if (normalizedId.isEmpty) {
@@ -1924,6 +2186,49 @@ class ScryfallDatabase {
     } catch (_) {
       return const [];
     }
+  }
+
+  Future<Map<String, bool>> fetchCardLegalityForFormat(
+    List<String> cardIds, {
+    required String format,
+  }) async {
+    final normalizedFormat = format.trim().toLowerCase();
+    if (normalizedFormat.isEmpty || cardIds.isEmpty) {
+      return const {};
+    }
+    final uniqueIds = cardIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueIds.isEmpty) {
+      return const {};
+    }
+    final db = await open();
+    final path = r'$.legalities.' + normalizedFormat;
+    final placeholders = List.filled(uniqueIds.length, '?').join(', ');
+    final rows = await db
+        .customSelect(
+          '''
+      SELECT
+        id AS card_id,
+        LOWER(COALESCE(json_extract(card_json, ?), '')) AS legality
+      FROM cards
+      WHERE id IN ($placeholders)
+      ''',
+          variables: [
+            Variable.withString(path),
+            ...uniqueIds.map(Variable.withString),
+          ],
+        )
+        .get();
+    final result = <String, bool>{};
+    for (final row in rows) {
+      final cardId = row.read<String>('card_id');
+      final legality = row.read<String>('legality');
+      result[cardId] = legality == 'legal' || legality == 'restricted';
+    }
+    return result;
   }
 
   Future<void> updateCardPrices(

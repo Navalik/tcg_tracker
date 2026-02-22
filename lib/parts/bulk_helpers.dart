@@ -11,6 +11,7 @@ class _BulkOption {
 const String _allCardsCollectionName = 'All cards';
 const String _legacyMyCollectionName = 'My collection';
 const String _setPrefix = 'Set: ';
+const String _basicLandsCollectionName = '__basic_lands__';
 
 const List<_BulkOption> _bulkOptions = [
   _BulkOption(

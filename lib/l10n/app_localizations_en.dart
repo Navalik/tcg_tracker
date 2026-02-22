@@ -407,6 +407,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get myCollections => 'My collections';
 
   @override
+  String get specialCollections => 'Special';
+
+  @override
   String get buildYourCollectionsTitle => 'Build your own collections';
 
   @override
@@ -763,16 +766,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get missingLabel => 'Missing';
 
   @override
+  String get legalLabel => 'Legal';
+
+  @override
+  String get notLegalLabel => 'Not legal';
+
+  @override
   String get typeCardNameHint => 'Type a card name';
 
   @override
+  String get deckSectionCreatures => 'Creatures';
+
+  @override
+  String get deckSectionInstants => 'Instants';
+
+  @override
+  String get deckSectionSorceries => 'Sorceries';
+
+  @override
+  String get deckSectionArtifacts => 'Artifacts';
+
+  @override
+  String get deckSectionEnchantments => 'Enchantments';
+
+  @override
+  String get deckSectionPlaneswalkers => 'Planeswalkers';
+
+  @override
+  String get deckSectionBattles => 'Battles';
+
+  @override
+  String get deckSectionLands => 'Lands';
+
+  @override
+  String get deckSectionTribals => 'Tribals';
+
+  @override
+  String get deckSectionOther => 'Other';
+
+  @override
+  String get basicLandsLabel => 'Basic lands';
+
+  @override
   String resultsWithFilters(int visible, int total, Object languages) {
-    return 'Results: $visible / $total · Languages: $languages';
+    return 'Results: $visible / $total Â· Languages: $languages';
   }
 
   @override
   String resultsWithoutFilters(int total, Object languages) {
-    return 'Results: $total · Languages: $languages';
+    return 'Results: $total Â· Languages: $languages';
   }
 
   @override
@@ -795,12 +837,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String setCollectionCount(int count) {
-    return 'Set • $count cards';
+    return 'Set â€¢ $count cards';
   }
 
   @override
   String customCollectionCount(int count) {
-    return 'Custom • $count cards';
+    return 'Custom â€¢ $count cards';
   }
 
   @override

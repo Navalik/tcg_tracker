@@ -32,6 +32,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialCollectorNumber,
     this.selectionEnabled = true,
     this.ownershipCollectionId,
+    this.alsoAddToCollectionId,
     this.addMissingToCollectionId,
     this.requiredFilter,
     this.showFilterButton = true,
@@ -42,6 +43,7 @@ class _CardSearchSheet extends StatefulWidget {
   final String? initialCollectorNumber;
   final bool selectionEnabled;
   final int? ownershipCollectionId;
+  final int? alsoAddToCollectionId;
   final int? addMissingToCollectionId;
   final CollectionFilter? requiredFilter;
   final bool showFilterButton;
@@ -92,6 +94,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   String _priceCurrency = 'eur';
   final Map<String, _SearchPriceData> _priceDataByCardId = {};
   final Set<String> _priceRefreshQueued = {};
+  Map<String, bool> _deckLegalityByCardId = const {};
+
+  String? get _deckFormatConstraint {
+    final format = widget.requiredFilter?.format?.trim().toLowerCase();
+    if (format == null || format.isEmpty) {
+      return null;
+    }
+    return format;
+  }
 
   @override
   void initState() {
@@ -185,6 +196,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           _results = [];
           _loading = false;
           _onlineArtworkLoading = false;
+          _deckLegalityByCardId = const {};
         });
       }
       return;
@@ -210,6 +222,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _onlineArtworkLoading = false;
       _results = [];
       _ownedQuantitiesByCardId = const {};
+      _deckLegalityByCardId = const {};
       _priceDataByCardId.clear();
     });
 
@@ -366,6 +379,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     final rawPageCount = page.length;
     Map<String, int> ownedQuantities = const {};
+    Map<String, bool> deckLegality = const {};
     final ownershipCollectionId = widget.ownershipCollectionId;
     if (ownershipCollectionId != null && page.isNotEmpty) {
       ownedQuantities = await ScryfallDatabase.instance
@@ -379,6 +393,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             .toList(growable: false);
       }
     }
+    final deckFormat = _deckFormatConstraint;
+    if (deckFormat != null && page.isNotEmpty) {
+      deckLegality = await ScryfallDatabase.instance.fetchCardLegalityForFormat(
+        page.map((card) => card.id).toList(growable: false),
+        format: deckFormat,
+      );
+    }
     if (!mounted) {
       return;
     }
@@ -386,12 +407,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (replace) {
         _results = page;
         _ownedQuantitiesByCardId = ownedQuantities;
+        _deckLegalityByCardId = deckLegality;
       } else {
         _results = [..._results, ...page];
         _ownedQuantitiesByCardId = {
           ..._ownedQuantitiesByCardId,
           ...ownedQuantities,
         };
+        _deckLegalityByCardId = {..._deckLegalityByCardId, ...deckLegality};
       }
       _loading = false;
       _loadingMore = false;
@@ -716,7 +739,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       artist: base.artist ?? required.artist,
       manaMin: base.manaMin ?? required.manaMin,
       manaMax: base.manaMax ?? required.manaMax,
-      format: required.format ?? base.format,
+      format: base.format,
       sets: {...required.sets, ...base.sets},
       rarities: {...required.rarities, ...base.rarities},
       colors: {...required.colors, ...base.colors},
@@ -733,7 +756,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         (required.artist?.trim().isNotEmpty ?? false) ||
         required.manaMin != null ||
         required.manaMax != null ||
-        (required.format?.trim().isNotEmpty ?? false) ||
         required.sets.isNotEmpty ||
         required.rarities.isNotEmpty ||
         required.colors.isNotEmpty ||
@@ -1576,6 +1598,95 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return quantity <= 0;
   }
 
+  List<String> _manaTokens(String manaCost) {
+    final source = manaCost.trim();
+    if (source.isEmpty) {
+      return const [];
+    }
+    final matches = RegExp(r'\{([^}]+)\}').allMatches(source).toList();
+    if (matches.isEmpty) {
+      return [source];
+    }
+    return matches
+        .map((match) => (match.group(1) ?? '').trim().toUpperCase())
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Color _manaPipColor(String token) {
+    switch (token) {
+      case 'W':
+        return const Color(0xFFF3E6B2);
+      case 'U':
+        return const Color(0xFF7DB7FF);
+      case 'B':
+        return const Color(0xFF5C5C66);
+      case 'R':
+        return const Color(0xFFE27A5E);
+      case 'G':
+        return const Color(0xFF74B77F);
+      case 'C':
+        return const Color(0xFF9AA2AD);
+      default:
+        if (RegExp(r'^\d+$').hasMatch(token)) {
+          return const Color(0xFF8F949C);
+        }
+        return const Color(0xFF7A8088);
+    }
+  }
+
+  Widget _buildManaCostPips(String manaCost) {
+    final tokens = _manaTokens(manaCost);
+    if (tokens.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: tokens.map((token) {
+        final color = _manaPipColor(token);
+        final isColoredSingle = const {'W', 'U', 'B', 'R', 'G'}.contains(token);
+        final label = isColoredSingle ? '' : token;
+        return Container(
+          width: 23,
+          height: 23,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF3A2F24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: label.isEmpty
+              ? null
+              : Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF1A1714),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        );
+      }).toList(growable: false),
+    );
+  }
+
+  String? _statusBadgeLabel(CardSearchResult card, AppLocalizations l10n) {
+    final deckFormat = _deckFormatConstraint;
+    if (deckFormat != null) {
+      final isLegal = _deckLegalityByCardId[card.id] ?? false;
+      return isLegal ? l10n.legalLabel : l10n.notLegalLabel;
+    }
+    return _isMissingCard(card) ? l10n.missingLabel : null;
+  }
+
   void _onResultTap(CardSearchResult card) {
     if (widget.selectionEnabled) {
       Navigator.of(context).pop(_CardSearchSelection.single(card));
@@ -1694,24 +1805,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     children: [
                       Row(
                         children: [
-                          if (manaCost.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A221B),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: const Color(0xFF3A2F24),
-                                ),
-                              ),
-                              child: Text(
-                                manaCost,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
+                          if (manaCost.isNotEmpty) _buildManaCostPips(manaCost),
                           const Spacer(),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
@@ -2119,12 +2213,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Widget _buildResultTile(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
+    final statusBadge = _statusBadgeLabel(card, l10n);
+    final hasStatusBadge = statusBadge != null;
     final canSelectCards = widget.selectionEnabled;
     final setLabel = _setLabelForSearch(card);
     final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
-    final showRightActions = showAdd || canSelectCards || isMissing;
+    final showRightActions = showAdd || canSelectCards || hasStatusBadge;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -2231,11 +2327,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (isMissing) ...[
+                            if (hasStatusBadge) ...[
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: _buildBadge(
-                                  l10n.missingLabel,
+                                  statusBadge,
                                   inverted: true,
                                 ),
                               ),
@@ -2282,6 +2378,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Widget _buildGalleryCard(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
+    final statusBadge = _statusBadgeLabel(card, l10n);
+    final hasStatusBadge = statusBadge != null;
     final imageUrl = card.imageUri?.trim() ?? '';
     final setLabel = _setLabelForSearch(card);
     final hasRarity = card.rarity.trim().isNotEmpty;
@@ -2413,12 +2511,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             ),
           ),
         ),
-        if (isMissing)
+        if (hasStatusBadge)
           Align(
             alignment: const Alignment(1, 0.0),
             child: Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: _buildBadge(l10n.missingLabel, inverted: true),
+              child: _buildBadge(statusBadge, inverted: true),
             ),
           ),
       ],
@@ -2977,6 +3075,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Future<void> _addCardFromPreview(CardSearchResult card) async {
     final ownedCollectionId = widget.ownershipCollectionId;
+    final alsoAddToCollectionId = widget.alsoAddToCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
     if ((ownedCollectionId == null && missingCollectionId == null) ||
         _addingFromPreview) {
@@ -3006,6 +3105,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           ownedCollectionId,
           card.id,
         );
+        if (alsoAddToCollectionId != null &&
+            alsoAddToCollectionId != ownedCollectionId) {
+          await ScryfallDatabase.instance.addCardToCollection(
+            alsoAddToCollectionId,
+            card.id,
+          );
+        }
       }
       if (!mounted) {
         return;
@@ -3032,6 +3138,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Future<void> _addCardFromDetails(CollectionCardEntry entry) async {
     final ownedCollectionId = widget.ownershipCollectionId;
+    final alsoAddToCollectionId = widget.alsoAddToCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
     if ((ownedCollectionId == null && missingCollectionId == null) ||
         _addingFromPreview) {
@@ -3051,6 +3158,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           ownedCollectionId,
           entry.cardId,
         );
+        if (alsoAddToCollectionId != null &&
+            alsoAddToCollectionId != ownedCollectionId) {
+          await ScryfallDatabase.instance.addCardToCollection(
+            alsoAddToCollectionId,
+            entry.cardId,
+          );
+        }
       }
       if (!mounted) {
         return;

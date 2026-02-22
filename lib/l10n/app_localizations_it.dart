@@ -412,6 +412,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get myCollections => 'Le mie collezioni';
 
   @override
+  String get specialCollections => 'Speciali';
+
+  @override
   String get buildYourCollectionsTitle => 'Crea le tue collezioni';
 
   @override
@@ -778,7 +781,46 @@ class AppLocalizationsIt extends AppLocalizations {
   String get missingLabel => 'Mancante';
 
   @override
+  String get legalLabel => 'Legale';
+
+  @override
+  String get notLegalLabel => 'Non legale';
+
+  @override
   String get typeCardNameHint => 'Digita il nome di una carta';
+
+  @override
+  String get deckSectionCreatures => 'Creature';
+
+  @override
+  String get deckSectionInstants => 'Istantanei';
+
+  @override
+  String get deckSectionSorceries => 'Stregonerie';
+
+  @override
+  String get deckSectionArtifacts => 'Artefatti';
+
+  @override
+  String get deckSectionEnchantments => 'Incantesimi';
+
+  @override
+  String get deckSectionPlaneswalkers => 'Planeswalker';
+
+  @override
+  String get deckSectionBattles => 'Battaglie';
+
+  @override
+  String get deckSectionLands => 'Terre';
+
+  @override
+  String get deckSectionTribals => 'Tribali';
+
+  @override
+  String get deckSectionOther => 'Altro';
+
+  @override
+  String get basicLandsLabel => 'Terre base';
 
   @override
   String resultsWithFilters(int visible, int total, Object languages) {
