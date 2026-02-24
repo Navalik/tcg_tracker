@@ -44,6 +44,7 @@ class PurchaseManager extends ChangeNotifier {
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
+  Timer? _purchaseWatchdog;
 
   UserTier _userTier = UserTier.free;
   Set<String> _ownedTcgs = const <String>{};
@@ -85,9 +86,19 @@ class PurchaseManager extends ChangeNotifier {
       _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
         _handlePurchaseUpdates,
         onDone: () {
+          _purchasePending = false;
+          _restoringPurchases = false;
+          _purchaseWatchdog?.cancel();
           _purchaseSubscription = null;
+          notifyListeners();
         },
-        onError: (_) {},
+        onError: (_) {
+          _lastError = 'purchase_failed';
+          _purchasePending = false;
+          _restoringPurchases = false;
+          _purchaseWatchdog?.cancel();
+          notifyListeners();
+        },
       );
 
       if (_storeAvailable) {
@@ -143,6 +154,7 @@ class PurchaseManager extends ChangeNotifier {
     }
     _lastError = null;
     _purchasePending = true;
+    _startPurchaseWatchdog();
     notifyListeners();
     try {
       final PurchaseParam param;
@@ -162,10 +174,17 @@ class PurchaseManager extends ChangeNotifier {
       } else {
         param = PurchaseParam(productDetails: selected.productDetails);
       }
-      await _inAppPurchase.buyNonConsumable(purchaseParam: param);
+      final started = await _inAppPurchase.buyNonConsumable(purchaseParam: param);
+      if (!started) {
+        _lastError = 'purchase_start_failed';
+        _purchasePending = false;
+        _purchaseWatchdog?.cancel();
+        notifyListeners();
+      }
     } catch (_) {
       _lastError = 'purchase_start_failed';
       _purchasePending = false;
+      _purchaseWatchdog?.cancel();
       notifyListeners();
     }
   }
@@ -230,6 +249,7 @@ class PurchaseManager extends ChangeNotifier {
 
       if (purchase.status == PurchaseStatus.pending) {
         _purchasePending = true;
+        _startPurchaseWatchdog();
         notifyListeners();
         continue;
       }
@@ -237,11 +257,13 @@ class PurchaseManager extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.error) {
         _lastError = 'purchase_failed';
         _purchasePending = false;
+        _purchaseWatchdog?.cancel();
         notifyListeners();
       }
 
       if (purchase.status == PurchaseStatus.canceled) {
         _purchasePending = false;
+        _purchaseWatchdog?.cancel();
         notifyListeners();
       }
 
@@ -252,6 +274,7 @@ class PurchaseManager extends ChangeNotifier {
           _lastError = 'entitlement_verification_failed';
         }
         _purchasePending = false;
+        _purchaseWatchdog?.cancel();
         notifyListeners();
       }
 
@@ -396,6 +419,18 @@ class PurchaseManager extends ChangeNotifier {
 
   UserTier _tierFromStored(String value) {
     return value.trim().toLowerCase() == 'plus' ? UserTier.plus : UserTier.free;
+  }
+
+  void _startPurchaseWatchdog() {
+    _purchaseWatchdog?.cancel();
+    _purchaseWatchdog = Timer(const Duration(seconds: 90), () {
+      if (!_purchasePending) {
+        return;
+      }
+      _lastError = 'purchase_failed';
+      _purchasePending = false;
+      notifyListeners();
+    });
   }
 
   bool _supportsStore() => Platform.isAndroid || Platform.isIOS;
