@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CollectionViewMode { list, gallery }
+enum AppTcgGame { mtg, pokemon }
 
 class AppSettings {
   static const _prefsKeyUserTier = 'user_tier';
@@ -19,6 +20,9 @@ class AppSettings {
   static const _prefsKeyFreeScanLastSeenEpochMs = 'free_scan_last_seen_epoch_ms';
   static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
   static const _prefsKeyLastSeenReleaseNotesId = 'last_seen_release_notes_id';
+  static const _prefsKeySelectedTcg = 'selected_tcg';
+  static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
+      'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
 
   static const List<String> languageCodes = [
     'en',
@@ -82,19 +86,35 @@ class AppSettings {
   }
 
   static Future<String?> loadBulkType() async {
+    return loadBulkTypeForGame(AppTcgGame.mtg);
+  }
+
+  static Future<String?> loadBulkTypeForGame(AppTcgGame game) async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(_prefsKeyBulkType);
+    final gameKey = _prefsKeyBulkTypeForGame(game);
+    final stored = prefs.getString(gameKey);
     if (stored != null && stored.isNotEmpty) {
       return stored;
     }
     const fallback = 'oracle_cards';
-    await prefs.setString(_prefsKeyBulkType, fallback);
+    if (game == AppTcgGame.mtg) {
+      final legacy = prefs.getString(_prefsKeyBulkType);
+      if (legacy != null && legacy.isNotEmpty) {
+        await prefs.setString(gameKey, legacy);
+        return legacy;
+      }
+    }
+    await prefs.setString(gameKey, fallback);
     return fallback;
   }
 
   static Future<void> saveBulkType(String value) async {
+    return saveBulkTypeForGame(AppTcgGame.mtg, value);
+  }
+
+  static Future<void> saveBulkTypeForGame(AppTcgGame game, String value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKeyBulkType, value);
+    await prefs.setString(_prefsKeyBulkTypeForGame(game), value);
   }
 
   static Future<String> loadPriceCurrency() async {
@@ -306,9 +326,12 @@ class AppSettings {
     await prefs.remove(_prefsKeyAvailableLanguages);
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
+    await prefs.remove(_prefsKeyBulkTypeForGame(AppTcgGame.mtg));
+    await prefs.remove(_prefsKeyBulkTypeForGame(AppTcgGame.pokemon));
     await prefs.remove(_prefsKeyPriceCurrency);
     await prefs.remove(_prefsKeyShowPrices);
     await prefs.remove(_prefsKeyAppLocale);
+    await prefs.remove(_prefsKeySelectedTcg);
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
@@ -332,6 +355,27 @@ class AppSettings {
     await prefs.setString(
       _prefsKeyCollectionViewMode,
       mode == CollectionViewMode.gallery ? 'gallery' : 'list',
+    );
+  }
+
+  static Future<AppTcgGame> loadSelectedTcgGame() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeySelectedTcg)?.trim().toLowerCase();
+    if (value == 'pokemon') {
+      return AppTcgGame.pokemon;
+    }
+    if (value == 'mtg') {
+      return AppTcgGame.mtg;
+    }
+    await prefs.setString(_prefsKeySelectedTcg, 'mtg');
+    return AppTcgGame.mtg;
+  }
+
+  static Future<void> saveSelectedTcgGame(AppTcgGame game) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefsKeySelectedTcg,
+      game == AppTcgGame.pokemon ? 'pokemon' : 'mtg',
     );
   }
 }

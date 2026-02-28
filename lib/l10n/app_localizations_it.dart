@@ -328,6 +328,9 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
+  String get dbUpdateAvailableTapHere => 'Update DB disponibile, premi qui';
+
+  @override
   String get unknownDate => 'sconosciuta';
 
   @override

@@ -325,6 +325,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get dbUpdateAvailableTapHere => 'DB update available, tap here';
+
+  @override
   String get unknownDate => 'unknown';
 
   @override

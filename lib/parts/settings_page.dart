@@ -8,6 +8,7 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  static const String _pokemonOwnershipKey = 'pokemon';
   bool _loading = true;
   String? _bulkType;
   String _priceSource = 'scryfall';
@@ -16,8 +17,15 @@ class _SettingsPageState extends State<SettingsPage> {
   String _appLocaleCode = 'en';
   String _appVersion = '0.4.4';
   bool _backupBusy = false;
+  bool _gamesBusy = false;
+  TcgGame _primaryGame = TcgGame.mtg;
+  bool _pokemonUnlocked = false;
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
+  bool get _isItalianUi =>
+      Localizations.localeOf(context).languageCode.toLowerCase().startsWith('it');
+  AppTcgGame get _primarySettingsGame =>
+      _primaryGame == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
 
   String _googleSignInErrorMessage(Object error) {
     final l10n = AppLocalizations.of(context)!;
@@ -63,10 +71,12 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final bulkType = await AppSettings.loadBulkType();
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final bulkType = await AppSettings.loadBulkTypeForGame(selectedGame);
     final priceCurrency = await AppSettings.loadPriceCurrency();
     final showPrices = await AppSettings.loadShowPrices();
     final appLocaleCode = await AppSettings.loadAppLocale();
+    final ownedTcgs = await AppSettings.loadOwnedTcgs();
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -83,8 +93,89 @@ class _SettingsPageState extends State<SettingsPage> {
       _showPrices = showPrices;
       _appLocaleCode = appLocaleCode;
       _appVersion = appVersion;
+      _primaryGame =
+          selectedGame == AppTcgGame.pokemon ? TcgGame.pokemon : TcgGame.mtg;
+      _pokemonUnlocked = ownedTcgs.contains(_pokemonOwnershipKey);
       _loading = false;
     });
+  }
+
+  Future<void> _activatePokemonForTest() async {
+    final manager = PurchaseManager.instance;
+    await manager.init();
+    final next = <String>{...manager.ownedTcgs, _pokemonOwnershipKey};
+    await manager.setOwnedTcgs(next);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _pokemonUnlocked = true;
+    });
+    showAppSnackBar(
+      context,
+      _isItalianUi
+          ? 'Pokemon attivato (test).'
+          : 'Pokemon activated (test).',
+    );
+  }
+
+  Future<void> _changePrimaryGame(TcgGame selected) async {
+    if (selected == _primaryGame) {
+      return;
+    }
+    if (selected == TcgGame.pokemon && !_pokemonUnlocked) {
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Prima attiva Pokemon dalla sezione Giochi.'
+            : 'Activate Pokemon first in the Games section.',
+      );
+      return;
+    }
+    await TcgEnvironmentController.instance.setGame(selected);
+    final nextBulkType = await AppSettings.loadBulkTypeForGame(
+      selected == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _primaryGame = selected;
+      _bulkType = nextBulkType;
+    });
+    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+  }
+
+  Future<void> _restoreGamePurchases() async {
+    if (_gamesBusy) {
+      return;
+    }
+    setState(() {
+      _gamesBusy = true;
+    });
+    try {
+      final manager = PurchaseManager.instance;
+      await manager.init();
+      await manager.restorePurchases();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pokemonUnlocked = manager.ownedTcgs.contains(_pokemonOwnershipKey);
+      });
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Ripristino acquisti completato.'
+            : 'Purchases restored.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _gamesBusy = false;
+        });
+      }
+    }
   }
 
   Future<void> _changeAppLanguage() async {
@@ -245,7 +336,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     try {
-      await AppSettings.saveBulkType(selected);
+      await AppSettings.saveBulkTypeForGame(_primarySettingsGame, selected);
       await ScryfallBulkChecker().resetState();
       await ScryfallDatabase.instance.hardReset();
       await _deleteBulkFiles();
@@ -682,6 +773,140 @@ class _SettingsPageState extends State<SettingsPage> {
                           side: const BorderSide(color: Color(0xFF5D4731)),
                         ),
                         child: Text(l10n.change),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.sports_esports_rounded,
+                  title: _isItalianUi ? 'Giochi' : 'Games',
+                  subtitle: _isItalianUi
+                      ? 'Scegli il gioco primario e attiva Pokemon.'
+                      : 'Choose your primary game and activate Pokemon.',
+                  children: [
+                    Text(
+                      _isItalianUi ? 'Gioco principale' : 'Primary game',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    RadioGroup<TcgGame>(
+                      groupValue: _primaryGame,
+                      onChanged: (value) {
+                        if (value != null) {
+                          _changePrimaryGame(value);
+                        }
+                      },
+                      child: Column(
+                        children: [
+                          RadioListTile<TcgGame>(
+                            contentPadding: EdgeInsets.zero,
+                            value: TcgGame.mtg,
+                            title: const Text('Magic'),
+                            subtitle: Text(
+                              _isItalianUi
+                                  ? 'Sempre disponibile'
+                                  : 'Always available',
+                            ),
+                          ),
+                          RadioListTile<TcgGame>(
+                            contentPadding: EdgeInsets.zero,
+                            value: TcgGame.pokemon,
+                            title: const Text('Pokemon'),
+                            subtitle: Text(
+                              _pokemonUnlocked
+                                  ? (_isItalianUi
+                                      ? 'Acquistato'
+                                      : 'Purchased')
+                                  : (_isItalianUi
+                                      ? 'Gioco secondario: acquista'
+                                      : 'Secondary game: purchase'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0x221D1712),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isItalianUi ? 'Pokemon status' : 'Pokemon status',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _pokemonUnlocked
+                                ? (_isItalianUi
+                                    ? 'Acquistato e attivo.'
+                                    : 'Purchased and active.')
+                                : (_isItalianUi
+                                    ? 'Non acquistato. Prezzo stimato: circa 9 EUR una tantum.'
+                                    : 'Not purchased. Estimated price: about EUR 9 one-time.'),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: const Color(0xFFBFAE95),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: _gamesBusy ? null : _restoreGamePurchases,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            icon: _gamesBusy
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.restore),
+                            label: Text(
+                              _isItalianUi
+                                  ? 'Ripristina acquisti'
+                                  : 'Restore purchases',
+                            ),
+                          ),
+                          _pokemonUnlocked
+                              ? OutlinedButton.icon(
+                                  onPressed: null,
+                                  icon: const Icon(Icons.check_circle_outline),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: Color(0xFF5D4731)),
+                                  ),
+                                  label: Text(
+                                    _isItalianUi
+                                        ? 'Pokemon attivo'
+                                        : 'Pokemon active',
+                                  ),
+                                )
+                              : FilledButton.icon(
+                                  onPressed: _gamesBusy ? null : _activatePokemonForTest,
+                                  icon: const Icon(Icons.shopping_cart_checkout),
+                                  label: Text(
+                                    _isItalianUi
+                                        ? 'Acquista Pokemon (test)'
+                                        : 'Buy Pokemon (test)',
+                                  ),
+                                ),
+                        ],
                       ),
                     ),
                   ],

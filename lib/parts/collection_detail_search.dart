@@ -145,7 +145,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _loadBulkCoverageState() async {
-    final bulkType = await AppSettings.loadBulkType();
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final bulkType = await AppSettings.loadBulkTypeForGame(selectedGame);
     if (!mounted) {
       return;
     }

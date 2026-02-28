@@ -392,6 +392,7 @@
     "selectDatabaseToDownload":  "Seleziona un database da scaricare.",
     "databaseMissingDownloadRequired":  "Database {name} mancante. Download richiesto.",
     "updateReadyWithDate":  "Aggiornamento pronto: {date}",
+    "dbUpdateAvailableTapHere":  "Update DB disponibile, premi qui",
     "unknownDate":  "sconosciuta",
     "upToDate":  "Aggiornato.",
     "importNow":  "Importa ora",

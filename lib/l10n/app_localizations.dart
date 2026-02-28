@@ -644,6 +644,12 @@ abstract class AppLocalizations {
   /// **'Update ready: {date}'**
   String updateReadyWithDate(Object date);
 
+  /// No description provided for @dbUpdateAvailableTapHere.
+  ///
+  /// In en, this message translates to:
+  /// **'DB update available, tap here'**
+  String get dbUpdateAvailableTapHere;
+
   /// No description provided for @unknownDate.
   ///
   /// In en, this message translates to:

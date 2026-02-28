@@ -156,6 +156,7 @@
       "date": {}
     }
   },
+  "dbUpdateAvailableTapHere": "DB update available, tap here",
   "unknownDate": "unknown",
   "upToDate": "Up to date.",
   "importNow": "Import now",

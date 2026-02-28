@@ -68,10 +68,10 @@ class CollectionCards extends Table {
   Set<Column> get primaryKey => {collectionId, cardId};
 }
 
-LazyDatabase _openConnection() {
+LazyDatabase _openConnection(String fileName) {
   return LazyDatabase(() async {
     final directory = await getApplicationDocumentsDirectory();
-    final dbFile = File(path.join(directory.path, 'scryfall.db'));
+    final dbFile = File(path.join(directory.path, fileName));
     return NativeDatabase(
       dbFile,
       setup: (db) {
@@ -85,7 +85,7 @@ LazyDatabase _openConnection() {
 
 @DriftDatabase(tables: [Cards, Collections, CollectionCards])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  AppDatabase({required String fileName}) : super(_openConnection(fileName));
 
   @override
   int get schemaVersion => 4;
@@ -205,16 +205,28 @@ class ScryfallDatabase {
   static const _prefsKeyAvailableLanguages = 'available_languages';
   static const _basicLandsCollectionInternalName = '__basic_lands__';
   static const _deckSideboardCollectionPrefix = '__deck_side__:';
+  static const _defaultDbFileName = 'scryfall.db';
 
   AppDatabase? _db;
+  String _dbFileName = _defaultDbFileName;
 
   Future<AppDatabase> open() async {
     if (_db != null) {
       return _db!;
     }
     await _ensureRegenerated();
-    _db = AppDatabase();
+    _db = AppDatabase(fileName: _dbFileName);
     return _db!;
+  }
+
+  Future<void> setDatabaseFileName(String fileName) async {
+    final next = fileName.trim();
+    final resolved = next.isEmpty ? _defaultDbFileName : next;
+    if (_dbFileName == resolved) {
+      return;
+    }
+    await close();
+    _dbFileName = resolved;
   }
 
   Future<void> close() async {
@@ -2399,6 +2411,16 @@ class ScryfallDatabase {
     });
   }
 
+  Future<void> insertPokemonCardsBatch(
+    AppDatabase db,
+    List<Map<String, dynamic>> items,
+  ) async {
+    final companions = items.map(_mapPokemonCardCompanion).toList();
+    await db.batch((batch) {
+      batch.insertAll(db.cards, companions, mode: InsertMode.insertOrReplace);
+    });
+  }
+
   Future<void> upsertCardFromScryfall(Map<String, dynamic> card) async {
     final db = await open();
     await db
@@ -2900,6 +2922,61 @@ class ScryfallDatabase {
             : null,
       ),
       cardJson: Value(_encodeCardLegalitiesField(card)),
+    );
+  }
+
+  CardsCompanion _mapPokemonCardCompanion(Map<String, dynamic> card) {
+    final id = (card['id'] as String?)?.trim() ?? '';
+    final name = (card['name'] as String?)?.trim() ?? '';
+    final setCode = (card['set_code'] as String?)?.trim().toLowerCase() ?? '';
+    final setName = (card['set_name'] as String?)?.trim() ?? '';
+    final collectorNumber =
+        (card['collector_number'] as String?)?.trim() ?? '';
+    final rarity = (card['rarity'] as String?)?.trim() ?? '';
+    final typeLine = (card['type_line'] as String?)?.trim() ?? '';
+    final releasedAt = (card['released_at'] as String?)?.trim() ?? '';
+    final imageSmall = (card['image_small'] as String?)?.trim() ?? '';
+    final imageLarge = (card['image_large'] as String?)?.trim() ?? '';
+    final imageUris = <String, String>{};
+    if (imageSmall.isNotEmpty) {
+      imageUris['small'] = imageSmall;
+    }
+    if (imageLarge.isNotEmpty) {
+      imageUris['normal'] = imageLarge;
+    }
+    final normalizedId = id.isEmpty ? '${setCode}_$collectorNumber' : id;
+    final normalizedName = name.isEmpty ? normalizedId : name;
+    return CardsCompanion(
+      id: Value(normalizedId),
+      oracleId: const Value(null),
+      name: Value(normalizedName),
+      setCode: Value(setCode),
+      setName: Value(setName),
+      setTotal: const Value(null),
+      collectorNumber: Value(collectorNumber),
+      rarity: Value(rarity),
+      typeLine: Value(typeLine),
+      manaCost: const Value(''),
+      oracleText: const Value(''),
+      cmc: const Value(null),
+      colors: const Value(''),
+      colorIdentity: const Value(''),
+      artist: const Value(''),
+      power: const Value(''),
+      toughness: const Value(''),
+      loyalty: const Value(''),
+      lang: const Value('en'),
+      releasedAt: Value(releasedAt),
+      imageUris: Value(imageUris.isEmpty ? null : jsonEncode(imageUris)),
+      cardFaces: const Value(null),
+      cardJson: Value(jsonEncode(card)),
+      priceUsd: const Value(null),
+      priceUsdFoil: const Value(null),
+      priceUsdEtched: const Value(null),
+      priceEur: const Value(null),
+      priceEurFoil: const Value(null),
+      priceTix: const Value(null),
+      pricesUpdatedAt: const Value(null),
     );
   }
 }
