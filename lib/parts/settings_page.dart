@@ -8,9 +8,12 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const String _pokemonOwnershipKey = 'pokemon';
+  static const String _pokemonOwnershipKey =
+      PurchaseManager.pokemonOwnershipKey;
+  static const Duration _storeOperationTimeout = Duration(seconds: 20);
   bool _loading = true;
   String? _bulkType;
+  String _pokemonDatasetProfile = 'starter';
   String _priceSource = 'scryfall';
   String _priceCurrency = 'eur';
   bool _showPrices = true;
@@ -19,13 +22,32 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _backupBusy = false;
   bool _gamesBusy = false;
   TcgGame _primaryGame = TcgGame.mtg;
-  bool _pokemonUnlocked = false;
+  Set<String> _ownedTcgs = const <String>{};
+  late final PurchaseManager _purchaseManager;
+  late final VoidCallback _purchaseListener;
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
-  bool get _isItalianUi =>
-      Localizations.localeOf(context).languageCode.toLowerCase().startsWith('it');
+  bool get _isItalianUi => Localizations.localeOf(
+    context,
+  ).languageCode.toLowerCase().startsWith('it');
   AppTcgGame get _primarySettingsGame =>
       _primaryGame == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
+  TcgGame get _secondaryGame =>
+      _primaryGame == TcgGame.mtg ? TcgGame.pokemon : TcgGame.mtg;
+  String _ownershipKeyForGame(TcgGame game) => game == TcgGame.pokemon
+      ? PurchaseManager.pokemonOwnershipKey
+      : PurchaseManager.magicOwnershipKey;
+  bool _isGameUnlockedForUi(TcgGame game) {
+    if (game == _primaryGame) {
+      return true;
+    }
+    if (_ownedTcgs.contains(_ownershipKeyForGame(game))) {
+      return true;
+    }
+    return _purchaseManager.canAccessGame(
+      game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
+    );
+  }
 
   String _googleSignInErrorMessage(Object error) {
     final l10n = AppLocalizations.of(context)!;
@@ -47,7 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return l10n.authGoogleSignInConfigError;
       }
       if (blob.contains('network_error')) {
-        return l10n.authNetworkErrorDuringGoogleSignIn;
+        return l10n.authGoogleSignInFailedWithCode(error.code);
       }
       if (blob.contains('sign_in_canceled') || blob.contains('cancel')) {
         return l10n.authGoogleSignInCancelled;
@@ -67,16 +89,40 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _purchaseManager = PurchaseManager.instance;
+    _purchaseListener = () {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _ownedTcgs = _purchaseManager.ownedTcgs;
+        _gamesBusy =
+            _purchaseManager.purchasePending ||
+            _purchaseManager.restoringPurchases;
+      });
+    };
+    _purchaseManager.addListener(_purchaseListener);
     _loadSettings();
   }
 
+  @override
+  void dispose() {
+    _purchaseManager.removeListener(_purchaseListener);
+    super.dispose();
+  }
+
   Future<void> _loadSettings() async {
+    await _purchaseManager.init();
+    await _purchaseManager.syncPrimaryGameFromSettings();
     final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final primaryGame = await AppSettings.loadPrimaryTcgGameOrNull();
     final bulkType = await AppSettings.loadBulkTypeForGame(selectedGame);
     final priceCurrency = await AppSettings.loadPriceCurrency();
     final showPrices = await AppSettings.loadShowPrices();
     final appLocaleCode = await AppSettings.loadAppLocale();
     final ownedTcgs = await AppSettings.loadOwnedTcgs();
+    final pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
+    final pokemonDatasetProfile = await AppSettings.loadPokemonDatasetProfile();
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -93,29 +139,43 @@ class _SettingsPageState extends State<SettingsPage> {
       _showPrices = showPrices;
       _appLocaleCode = appLocaleCode;
       _appVersion = appVersion;
-      _primaryGame =
-          selectedGame == AppTcgGame.pokemon ? TcgGame.pokemon : TcgGame.mtg;
-      _pokemonUnlocked = ownedTcgs.contains(_pokemonOwnershipKey);
+      _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
+          ? TcgGame.pokemon
+          : TcgGame.mtg;
+      final pokemonAccessible =
+          pokemonUnlocked || ownedTcgs.contains(_pokemonOwnershipKey);
+      if (pokemonAccessible && !ownedTcgs.contains(_pokemonOwnershipKey)) {
+        _ownedTcgs = {...ownedTcgs, _pokemonOwnershipKey};
+      } else {
+        _ownedTcgs = _purchaseManager.ownedTcgs.isNotEmpty
+            ? _purchaseManager.ownedTcgs
+            : ownedTcgs;
+      }
+      _gamesBusy =
+          _purchaseManager.purchasePending ||
+          _purchaseManager.restoringPurchases;
+      _pokemonDatasetProfile = pokemonDatasetProfile;
       _loading = false;
     });
   }
 
-  Future<void> _activatePokemonForTest() async {
-    final manager = PurchaseManager.instance;
-    await manager.init();
-    final next = <String>{...manager.ownedTcgs, _pokemonOwnershipKey};
-    await manager.setOwnedTcgs(next);
+  Future<void> _activateSecondaryGameForTest() async {
+    final manager = _purchaseManager;
+    final secondary = _secondaryGame == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    await manager.setGameUnlockedForTest(secondary, true);
     if (!mounted) {
       return;
     }
     setState(() {
-      _pokemonUnlocked = true;
+      _ownedTcgs = manager.ownedTcgs;
     });
     showAppSnackBar(
       context,
       _isItalianUi
-          ? 'Pokemon attivato (test).'
-          : 'Pokemon activated (test).',
+          ? '${_secondaryGame == TcgGame.pokemon ? 'Pokemon' : 'Magic'} attivato (test).'
+          : '${_secondaryGame == TcgGame.pokemon ? 'Pokemon' : 'Magic'} activated (test).',
     );
   }
 
@@ -123,27 +183,75 @@ class _SettingsPageState extends State<SettingsPage> {
     if (selected == _primaryGame) {
       return;
     }
-    if (selected == TcgGame.pokemon && !_pokemonUnlocked) {
-      showAppSnackBar(
-        context,
-        _isItalianUi
-            ? 'Prima attiva Pokemon dalla sezione Giochi.'
-            : 'Activate Pokemon first in the Games section.',
-      );
-      return;
-    }
-    await TcgEnvironmentController.instance.setGame(selected);
-    final nextBulkType = await AppSettings.loadBulkTypeForGame(
-      selected == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
+    showAppSnackBar(
+      context,
+      _isItalianUi
+          ? 'Il gioco primario è fisso. Usa Reset test per cambiarlo.'
+          : 'Primary game is fixed. Use Reset test to change it.',
     );
-    if (!mounted) {
-      return;
+  }
+
+  Widget _buildGameSelectorEntry(TcgGame game) {
+    final isPrimary = game == _primaryGame;
+    final isUnlocked = _isGameUnlockedForUi(game);
+    final gameName = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
+    if (isUnlocked) {
+      return RadioListTile<TcgGame>(
+        contentPadding: EdgeInsets.zero,
+        value: game,
+        title: Text(gameName),
+        subtitle: Text(
+          isPrimary
+              ? (_isItalianUi
+                    ? 'Primario gratuito (per sempre)'
+                    : 'Primary free (forever)')
+              : (_isItalianUi ? 'Acquistato' : 'Purchased'),
+        ),
+      );
     }
-    setState(() {
-      _primaryGame = selected;
-      _bulkType = nextBulkType;
-    });
-    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        decoration: BoxDecoration(
+          color: const Color(0x221D1712),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF3A2F24)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(gameName, style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 2),
+            Text(
+              _isItalianUi
+                  ? 'Secondario: acquisto richiesto'
+                  : 'Secondary: purchase required',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
+            ),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: _gamesBusy ? null : _purchaseSecondaryGame,
+              icon: const Icon(Icons.shopping_cart_checkout),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFE9C46A),
+                foregroundColor: const Color(0xFF1C1510),
+              ),
+              label: Text(
+                _isItalianUi
+                    ? 'Acquista $gameName ${_purchaseManager.additionalTcgPriceLabel ?? ''}'
+                          .trim()
+                    : 'Buy $gameName ${_purchaseManager.additionalTcgPriceLabel ?? ''}'
+                          .trim(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _restoreGamePurchases() async {
@@ -154,14 +262,14 @@ class _SettingsPageState extends State<SettingsPage> {
       _gamesBusy = true;
     });
     try {
-      final manager = PurchaseManager.instance;
+      final manager = _purchaseManager;
       await manager.init();
-      await manager.restorePurchases();
+      await manager.restorePurchases().timeout(_storeOperationTimeout);
       if (!mounted) {
         return;
       }
       setState(() {
-        _pokemonUnlocked = manager.ownedTcgs.contains(_pokemonOwnershipKey);
+        _ownedTcgs = manager.ownedTcgs;
       });
       showAppSnackBar(
         context,
@@ -169,10 +277,113 @@ class _SettingsPageState extends State<SettingsPage> {
             ? 'Ripristino acquisti completato.'
             : 'Purchases restored.',
       );
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Ripristino acquisti troppo lento. Riprova.'
+            : 'Restore purchases is taking too long. Try again.',
+      );
     } finally {
       if (mounted) {
         setState(() {
           _gamesBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _purchaseSecondaryGame() async {
+    if (_gamesBusy) {
+      return;
+    }
+    setState(() {
+      _gamesBusy = true;
+    });
+    try {
+      await _purchaseManager.init();
+      await _purchaseManager.syncPrimaryGameFromSettings();
+      if (_purchaseManager.additionalTcgProduct == null) {
+        await _purchaseManager.refreshCatalog().timeout(_storeOperationTimeout);
+      }
+      if (_purchaseManager.additionalTcgProduct == null) {
+        if (!mounted) {
+          return;
+        }
+        showAppSnackBar(
+          context,
+          _isItalianUi
+              ? 'Prodotto non disponibile su Google Play.'
+              : 'Product not available on Google Play.',
+        );
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      final secondaryName = _secondaryGame == TcgGame.pokemon
+          ? 'Pokemon'
+          : 'Magic';
+      final priceLabel = _purchaseManager.additionalTcgPriceLabel ?? '';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(
+            _isItalianUi ? 'Acquista $secondaryName' : 'Buy $secondaryName',
+          ),
+          content: Text(
+            _isItalianUi
+                ? 'Sblocchi $secondaryName una sola volta, per sempre su questo account. Il prezzo e $priceLabel. Gli acquisti sono gestiti da Google Play.'
+                : 'You unlock $secondaryName with a one-time purchase, forever on this account. Price is $priceLabel. Purchases are handled by Google Play.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(_isItalianUi ? 'Annulla' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(
+                _isItalianUi ? 'Continua acquisto' : 'Continue purchase',
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) {
+        return;
+      }
+      await _purchaseManager.purchaseAdditionalTcgUnlock();
+      if (!mounted) {
+        return;
+      }
+      if (_purchaseManager.lastError == 'already_owned') {
+        showAppSnackBar(
+          context,
+          _isItalianUi
+              ? 'Acquisto già presente su Google Play. Entitlement sincronizzato.'
+              : 'Purchase already owned on Google Play. Entitlement synced.',
+        );
+      }
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Connessione allo store troppo lenta. Riprova.'
+            : 'Store connection is taking too long. Try again.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _gamesBusy =
+              _purchaseManager.purchasePending ||
+              _purchaseManager.restoringPurchases;
         });
       }
     }
@@ -276,14 +487,24 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _changeBulkType() async {
+    final isItalian = _isItalianUi;
     final selected = await _showBulkTypePicker(
       context,
       allowCancel: true,
       selectedType: _bulkType,
       requireConfirmation: true,
       confirmLabel: AppLocalizations.of(context)!.downloadUpdate,
+      allowResetAction: true,
+      resetLabel: isItalian ? 'Reset database Magic' : 'Reset Magic database',
     );
-    if (selected == null || selected == _bulkType) {
+    if (selected == null) {
+      return;
+    }
+    if (selected == _bulkPickerResetAction) {
+      await _resetDatabaseForGame(TcgGame.mtg);
+      return;
+    }
+    if (selected == _bulkType) {
       return;
     }
     if (!mounted) {
@@ -354,6 +575,186 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
     Navigator.of(context).pop();
+  }
+
+  Future<void> _resetDatabaseForGame(TcgGame game) async {
+    final l10n = AppLocalizations.of(context)!;
+    final isItalian = _isItalianUi;
+    final gameLabel = game == TcgGame.mtg ? 'Magic' : 'Pokemon';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            isItalian
+                ? 'Reset database $gameLabel'
+                : 'Reset $gameLabel database',
+          ),
+          content: Text(
+            isItalian
+                ? 'Verranno cancellate solo le carte nel database $gameLabel e riscaricate da zero. Collezioni, deck e quantità restano invariati.'
+                : 'Only $gameLabel cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(isItalian ? 'Reset' : 'Reset'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(isItalian ? 'Reset in corso' : 'Reset in progress'),
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                isItalian
+                    ? 'Pulizia database $gameLabel...'
+                    : 'Cleaning $gameLabel database...',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await TcgEnvironmentController.instance.init();
+      final activeGame = TcgEnvironmentController.instance.currentGame;
+      final activeConfig = TcgEnvironmentController.instance.configFor(
+        activeGame,
+      );
+      final targetConfig = TcgEnvironmentController.instance.configFor(game);
+      await ScryfallDatabase.instance.setDatabaseFileName(
+        targetConfig.dbFileName,
+      );
+      await ScryfallDatabase.instance.hardReset();
+      if (game == TcgGame.mtg) {
+        await ScryfallBulkChecker().resetState();
+        await _deleteBulkFiles();
+      } else {
+        await PokemonBulkService.instance.clearLocalDatasetArtifacts();
+      }
+      await ScryfallDatabase.instance.setDatabaseFileName(
+        activeConfig.dbFileName,
+      );
+    } finally {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+
+    if (!mounted) {
+      return;
+    }
+    showAppSnackBar(
+      context,
+      isItalian
+          ? 'Database $gameLabel resettato. Verrà riscaricato in modo pulito.'
+          : '$gameLabel database reset. It will be downloaded again cleanly.',
+    );
+    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+  }
+
+  String _pokemonProfileLabel(String profile) {
+    switch (profile.trim().toLowerCase()) {
+      case 'full':
+        return _isItalianUi ? 'Full (tutte le carte)' : 'Full (all cards)';
+      case 'expanded':
+        return _isItalianUi ? 'Expanded (10 set)' : 'Expanded (10 sets)';
+      case 'standard':
+        return _isItalianUi ? 'Standard (6 set)' : 'Standard (6 sets)';
+      case 'starter':
+      default:
+        return _isItalianUi ? 'Starter (3 set)' : 'Starter (3 sets)';
+    }
+  }
+
+  String _pokemonProfileDescription(String profile) {
+    switch (profile.trim().toLowerCase()) {
+      case 'full':
+        return _isItalianUi
+            ? 'Catalogo completo via API. Download grande.'
+            : 'Complete catalog via API. Large download.';
+      case 'expanded':
+        return _isItalianUi
+            ? 'Più carte offline, download più grande.'
+            : 'More offline cards, larger download.';
+      case 'standard':
+        return _isItalianUi
+            ? 'Compromesso tra dimensione e copertura.'
+            : 'Balanced size and card coverage.';
+      case 'starter':
+      default:
+        return _isItalianUi
+            ? 'Database leggero, ideale per iniziare.'
+            : 'Lightweight database, good to start.';
+    }
+  }
+
+  Future<void> _changePokemonDatasetProfile() async {
+    final options = const ['starter', 'standard', 'expanded', 'full'];
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final isIt = _isItalianUi;
+        return SimpleDialog(
+          title: Text(isIt ? 'Database Pokemon' : 'Pokemon database'),
+          children: [
+            RadioGroup<String>(
+              groupValue: _pokemonDatasetProfile,
+              onChanged: (value) => Navigator.of(context).pop(value),
+              child: Column(
+                children: options
+                    .map(
+                      (profile) => RadioListTile<String>(
+                        value: profile,
+                        title: Text(_pokemonProfileLabel(profile)),
+                        subtitle: Text(_pokemonProfileDescription(profile)),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || selected == _pokemonDatasetProfile) {
+      return;
+    }
+    await AppSettings.savePokemonDatasetProfile(selected);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _pokemonDatasetProfile = selected;
+    });
+    showAppSnackBar(
+      context,
+      _isItalianUi
+          ? 'Profilo Pokemon aggiornato. Tocca Update disponibile in Home per applicarlo.'
+          : 'Pokemon profile updated. Tap Update available in Home to apply.',
+    );
   }
 
   Future<void> _deleteBulkFiles() async {
@@ -624,6 +1025,59 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _resetPrimaryGameTestState() async {
+    final isItalian = _isItalianUi;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isItalian
+              ? 'Reset scenario primo avvio'
+              : 'Reset first-launch scenario',
+        ),
+        content: Text(
+          isItalian
+              ? 'Verrà ripristinata la scelta TCG primario e saranno azzerati gli acquisti (Plus e sblocchi TCG). Collezioni e carte salvate non verranno eliminate.'
+              : 'This will reset primary TCG selection and clear purchases (Plus and TCG unlocks). Saved collections and cards will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(isItalian ? 'Annulla' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(isItalian ? 'Reset test' : 'Reset test'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    await AppSettings.resetPrimaryGameSelectionFlow();
+    final manager = PurchaseManager.instance;
+    await manager.resetPurchaseStateForTest();
+    await manager.syncPrimaryGameFromSettings();
+    await TcgEnvironmentController.instance.setGame(TcgGame.mtg);
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _primaryGame = TcgGame.mtg;
+      _ownedTcgs = const <String>{};
+    });
+    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+    showAppSnackBar(
+      context,
+      isItalian
+          ? 'Scenario test ripristinato: scegli di nuovo il TCG primario. Acquisti azzerati.'
+          : 'Test scenario restored: choose your primary TCG again. Purchases cleared.',
+    );
+  }
+
   Widget _buildProfileTile(User? user) {
     final displayName = user?.displayName?.trim();
     final email = user?.email?.trim();
@@ -783,8 +1237,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.sports_esports_rounded,
                   title: _isItalianUi ? 'Giochi' : 'Games',
                   subtitle: _isItalianUi
-                      ? 'Scegli il gioco primario e attiva Pokemon.'
-                      : 'Choose your primary game and activate Pokemon.',
+                      ? 'Il primo gioco scelto è gratis per sempre. L’altro richiede acquisto.'
+                      : 'The first selected game stays free forever. The other requires purchase.',
                   children: [
                     Text(
                       _isItalianUi ? 'Gioco principale' : 'Primary game',
@@ -800,62 +1254,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                       child: Column(
                         children: [
-                          RadioListTile<TcgGame>(
-                            contentPadding: EdgeInsets.zero,
-                            value: TcgGame.mtg,
-                            title: const Text('Magic'),
-                            subtitle: Text(
-                              _isItalianUi
-                                  ? 'Sempre disponibile'
-                                  : 'Always available',
-                            ),
-                          ),
-                          RadioListTile<TcgGame>(
-                            contentPadding: EdgeInsets.zero,
-                            value: TcgGame.pokemon,
-                            title: const Text('Pokemon'),
-                            subtitle: Text(
-                              _pokemonUnlocked
-                                  ? (_isItalianUi
-                                      ? 'Acquistato'
-                                      : 'Purchased')
-                                  : (_isItalianUi
-                                      ? 'Gioco secondario: acquista'
-                                      : 'Secondary game: purchase'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0x221D1712),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _isItalianUi ? 'Pokemon status' : 'Pokemon status',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _pokemonUnlocked
-                                ? (_isItalianUi
-                                    ? 'Acquistato e attivo.'
-                                    : 'Purchased and active.')
-                                : (_isItalianUi
-                                    ? 'Non acquistato. Prezzo stimato: circa 9 EUR una tantum.'
-                                    : 'Not purchased. Estimated price: about EUR 9 one-time.'),
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: const Color(0xFFBFAE95),
-                            ),
-                          ),
+                          _buildGameSelectorEntry(TcgGame.mtg),
+                          _buildGameSelectorEntry(TcgGame.pokemon),
                         ],
                       ),
                     ),
@@ -867,15 +1267,19 @@ class _SettingsPageState extends State<SettingsPage> {
                         runSpacing: 8,
                         children: [
                           OutlinedButton.icon(
-                            onPressed: _gamesBusy ? null : _restoreGamePurchases,
+                            onPressed: _purchaseManager.restoringPurchases
+                                ? null
+                                : _restoreGamePurchases,
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
-                            icon: _gamesBusy
+                            icon: _purchaseManager.restoringPurchases
                                 ? const SizedBox(
                                     width: 14,
                                     height: 14,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.restore),
                             label: Text(
@@ -884,28 +1288,21 @@ class _SettingsPageState extends State<SettingsPage> {
                                   : 'Restore purchases',
                             ),
                           ),
-                          _pokemonUnlocked
-                              ? OutlinedButton.icon(
-                                  onPressed: null,
-                                  icon: const Icon(Icons.check_circle_outline),
-                                  style: OutlinedButton.styleFrom(
-                                    side: const BorderSide(color: Color(0xFF5D4731)),
-                                  ),
-                                  label: Text(
-                                    _isItalianUi
-                                        ? 'Pokemon attivo'
-                                        : 'Pokemon active',
-                                  ),
-                                )
-                              : FilledButton.icon(
-                                  onPressed: _gamesBusy ? null : _activatePokemonForTest,
-                                  icon: const Icon(Icons.shopping_cart_checkout),
-                                  label: Text(
-                                    _isItalianUi
-                                        ? 'Acquista Pokemon (test)'
-                                        : 'Buy Pokemon (test)',
-                                  ),
+                          if (!_isGameUnlockedForUi(_secondaryGame))
+                            OutlinedButton.icon(
+                              onPressed: _gamesBusy
+                                  ? null
+                                  : _activateSecondaryGameForTest,
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: Color(0xFF5D4731),
                                 ),
+                              ),
+                              icon: const Icon(Icons.science_outlined),
+                              label: Text(
+                                _isItalianUi ? 'Unlock test' : 'Unlock test',
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -971,28 +1368,92 @@ class _SettingsPageState extends State<SettingsPage> {
                   context: context,
                   icon: Icons.storage_rounded,
                   title: l10n.cardDatabase,
-                  subtitle: l10n.cardDatabaseSubtitle,
+                  subtitle: _isItalianUi
+                      ? 'Configura separatamente i database di Magic e Pokemon.'
+                      : 'Configure Magic and Pokemon databases separately.',
                   children: [
                     Text(
-                      _bulkTypeLabel(l10n, _bulkType),
+                      'Magic',
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _bulkTypeDescription(l10n, _bulkType ?? ''),
+                      _bulkTypeLabel(l10n, _bulkType),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFFBFAE95),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _bulkTypeDescription(l10n, _bulkType ?? ''),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF8F816B),
                       ),
                     ),
                     const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerRight,
-                      child: OutlinedButton(
-                        onPressed: _changeBulkType,
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF5D4731)),
-                        ),
-                        child: Text(l10n.change),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _resetDatabaseForGame(TcgGame.mtg),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(_isItalianUi ? 'Reset' : 'Reset'),
+                          ),
+                          OutlinedButton(
+                            onPressed: _changeBulkType,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(l10n.change),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 20, color: Color(0xFF3A2F24)),
+                    Text(
+                      'Pokemon',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _pokemonProfileLabel(_pokemonDatasetProfile),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _pokemonProfileDescription(_pokemonDatasetProfile),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF8F816B),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () =>
+                                _resetDatabaseForGame(TcgGame.pokemon),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(_isItalianUi ? 'Reset' : 'Reset'),
+                          ),
+                          OutlinedButton(
+                            onPressed: _changePokemonDatasetProfile,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(l10n.change),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1133,12 +1594,27 @@ class _SettingsPageState extends State<SettingsPage> {
                     ListTile(
                       title: Text(l10n.versionLabel),
                       subtitle: Text(_appVersion),
-                      trailing: OutlinedButton(
-                        onPressed: () => _showLatestReleaseNotesPanel(context),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Color(0xFF5D4731)),
-                        ),
-                        child: Text(_whatsNewLabel(context)),
+                      trailing: Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: _resetPrimaryGameTestState,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(
+                              _isItalianUi ? 'Reset test' : 'Reset test',
+                            ),
+                          ),
+                          OutlinedButton(
+                            onPressed: () =>
+                                _showLatestReleaseNotesPanel(context),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(_whatsNewLabel(context)),
+                          ),
+                        ],
                       ),
                       contentPadding: EdgeInsets.zero,
                     ),

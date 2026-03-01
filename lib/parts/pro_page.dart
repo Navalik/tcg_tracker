@@ -99,6 +99,9 @@ class _ProPageState extends State<ProPage> {
       builder: (context, _) {
         final isPro = _manager.isPro;
         final l10n = AppLocalizations.of(context)!;
+        final isItalian = Localizations.localeOf(
+          context,
+        ).languageCode.toLowerCase().startsWith('it');
         final monthly = _manager.monthlyPlan;
         final yearly = _manager.yearlyPlan;
         return Scaffold(
@@ -113,7 +116,11 @@ class _ProPageState extends State<ProPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF171411).withValues(alpha: 0.9),
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1E1712), Color(0xFF120F0C)],
+                      ),
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: const Color(0xFF3A2F24)),
                       boxShadow: [
@@ -124,35 +131,112 @@ class _ProPageState extends State<ProPage> {
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.workspace_premium_rounded,
-                          color: Color(0xFFE9C46A),
-                          size: 28,
+                        Row(
+                          children: [
+                            Container(
+                              width: 34,
+                              height: 34,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE9C46A).withValues(
+                                  alpha: 0.15,
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFF7A5B2E),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.workspace_premium_rounded,
+                                color: Color(0xFFE9C46A),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                isPro ? l10n.plusActive : l10n.upgradeToPlus,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE9C46A),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'PLUS',
+                                style: TextStyle(
+                                  color: Color(0xFF1C1510),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(height: 10),
+                        Text(
+                          isItalian
+                              ? 'Un solo Plus, su tutti i tuoi TCG sbloccati.'
+                              : 'One Plus plan, across all your unlocked TCGs.',
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFCCBA9E)),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            _PlusTag(
+                              label: isItalian
+                                  ? 'Valido su account'
+                                  : 'Account-wide',
+                            ),
+                            _PlusTag(
+                              label: isItalian
+                                  ? 'Tutti i TCG sbloccati'
+                                  : 'All unlocked TCGs',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0x221D1712),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF3A2F24)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(top: 1),
+                          child: Icon(
+                            Icons.info_outline_rounded,
+                            size: 16,
+                            color: Color(0xFFE9C46A),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            isPro ? l10n.plusActive : l10n.upgradeToPlus,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE9C46A),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: const Text(
-                            'PLUS',
-                            style: TextStyle(
-                              color: Color(0xFF1C1510),
-                              fontWeight: FontWeight.w800,
-                            ),
+                            isItalian
+                                ? 'Il Plus si applica a tutte le funzionalita premium di ogni TCG che hai gia sbloccato o acquistato.'
+                                : 'Plus applies to premium features for every TCG you have already unlocked or purchased.',
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
                           ),
                         ),
                       ],
@@ -407,6 +491,31 @@ class _ProPageState extends State<ProPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _PlusTag extends StatelessWidget {
+  const _PlusTag({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF241C15),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF5D4731)),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: const Color(0xFFDCC8A4),
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

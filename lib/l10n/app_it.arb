@@ -298,7 +298,7 @@
     "addByScanTitle":  "Da scansione",
     "addByScanSubtitle":  "Riconoscimento carta OCR live",
     "dailyScanLimitReachedTitle":  "Limite scansioni giornaliere raggiunto",
-    "allArtworks":  "Tutte le artwork",
+    "allArtworks":  "Interroga online",
     "ownedLabel":  "Possedute",
     "searchingOnlinePrintings":  "Ricerca stampe online...",
     "addToCollection":  "Aggiungi alla collezione",
@@ -619,7 +619,7 @@
     "scryfallProviderLabel":  "Scryfall",
     "currencyEurCode":  "EUR",
     "currencyUsdCode":  "USD",
-    "limitedCoverageTapAllArtworks":  "Copertura limitata del database attivo",
+    "limitedCoverageTapAllArtworks":  "Copertura locale ridotta\nTocca \"Interroga online\" per vedere più carte",
     "planSelectedPreview":  "Piano {plan} selezionato. La fatturazione verra abilitata nel prossimo step.",
     "@planSelectedPreview":  {
         "placeholders":  {

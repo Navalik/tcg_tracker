@@ -21,6 +21,9 @@ String _setIconUrl(String setCode) {
   if (code.isEmpty) {
     return '';
   }
+  if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+    return 'https://images.pokemontcg.io/$code/symbol.png';
+  }
   return 'https://svgs.scryfall.io/sets/$code.svg';
 }
 
@@ -28,6 +31,8 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
   if (setCode.trim().isEmpty) {
     return _emptySetIcon(size);
   }
+  final isPokemonGame =
+      TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
   return Container(
     width: size,
     height: size,
@@ -39,16 +44,22 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
         color: const Color(0xFF3A2F24),
       ),
     ),
-    child: SvgPicture.network(
-      _setIconUrl(setCode),
-      fit: BoxFit.contain,
-      colorFilter: const ColorFilter.mode(
-        Color(0xFFE9C46A),
-        BlendMode.srcIn,
-      ),
-      placeholderBuilder: (_) => _emptySetIcon(size - 12),
-      errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
-    ),
+    child: isPokemonGame
+        ? Image.network(
+            _setIconUrl(setCode),
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
+          )
+        : SvgPicture.network(
+            _setIconUrl(setCode),
+            fit: BoxFit.contain,
+            colorFilter: const ColorFilter.mode(
+              Color(0xFFE9C46A),
+              BlendMode.srcIn,
+            ),
+            placeholderBuilder: (_) => _emptySetIcon(size - 12),
+            errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
+          ),
   );
 }
 

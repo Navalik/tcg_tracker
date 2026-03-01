@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="240dp"
+    android:height="240dp"
+    android:viewportWidth="240"
+    android:viewportHeight="240">
+
+    <group
+        android:pivotX="98"
+        android:pivotY="122"
+        android:rotation="-14">
+        <path
+            android:fillColor="#6A4A45"
+            android:strokeColor="#8B655F"
+            android:strokeWidth="1.4"
+            android:pathData="M70,76 L132,76 L132,170 L70,170 Z" />
+    </group>
+
+    <group
+        android:pivotX="142"
+        android:pivotY="122"
+        android:rotation="14">
+        <path
+            android:fillColor="#465B72"
+            android:strokeColor="#667E99"
+            android:strokeWidth="1.4"
+            android:pathData="M108,76 L170,76 L170,170 L108,170 Z" />
+    </group>
+
+    <group
+        android:pivotX="120"
+        android:pivotY="116"
+        android:rotation="0">
+        <path
+            android:fillColor="#4E624F"
+            android:strokeColor="#6F8670"
+            android:strokeWidth="1.4"
+            android:pathData="M89,68 L151,68 L151,166 L89,166 Z" />
+    </group>
+
+    <group
+        android:pivotX="120"
+        android:pivotY="146"
+        android:rotation="45">
+        <path
+            android:fillColor="#70000000"
+            android:pathData="M98,124 L142,124 L142,168 L98,168 Z" />
+    </group>
+
+        <group
+            android:translateX="0"
+            android:translateY="-2"
+            android:pivotX="120"
+            android:pivotY="146"
+            android:rotation="45">
+        <path
+            android:fillColor="#D4B86A"
+            android:strokeColor="#B26A39"
+            android:strokeWidth="2"
+            android:pathData="M102,128 L138,128 L138,164 L102,164 Z" />
+    </group>
+</vector>

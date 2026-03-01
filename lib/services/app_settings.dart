@@ -1,6 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum CollectionViewMode { list, gallery }
+
 enum AppTcgGame { mtg, pokemon }
 
 class AppSettings {
@@ -17,10 +18,15 @@ class AppSettings {
   static const _prefsKeyProUnlocked = 'pro_unlocked';
   static const _prefsKeyFreeScanDate = 'free_scan_date';
   static const _prefsKeyFreeScanCount = 'free_scan_count';
-  static const _prefsKeyFreeScanLastSeenEpochMs = 'free_scan_last_seen_epoch_ms';
+  static const _prefsKeyFreeScanLastSeenEpochMs =
+      'free_scan_last_seen_epoch_ms';
   static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
   static const _prefsKeyLastSeenReleaseNotesId = 'last_seen_release_notes_id';
   static const _prefsKeySelectedTcg = 'selected_tcg';
+  static const _prefsKeyPrimaryTcg = 'primary_tcg';
+  static const _prefsKeyPokemonUnlocked = 'pokemon_unlocked';
+  static const _prefsKeyExtraTcgSlots = 'extra_tcg_slots';
+  static const _prefsKeyPokemonDatasetProfile = 'pokemon_dataset_profile';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
       'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
 
@@ -45,13 +51,8 @@ class AppSettings {
     'qya',
   ];
 
-  static const List<String> defaultLanguages = [
-    'en',
-  ];
-  static const List<String> supportedAppLocales = [
-    'en',
-    'it',
-  ];
+  static const List<String> defaultLanguages = ['en'];
+  static const List<String> supportedAppLocales = ['en', 'it'];
 
   static Future<Set<String>> loadSearchLanguages() async {
     return {'en'};
@@ -119,7 +120,10 @@ class AppSettings {
 
   static Future<String> loadPriceCurrency() async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getString(_prefsKeyPriceCurrency)?.trim().toLowerCase();
+    final stored = prefs
+        .getString(_prefsKeyPriceCurrency)
+        ?.trim()
+        .toLowerCase();
     if (stored == 'usd') {
       return 'usd';
     }
@@ -232,12 +236,23 @@ class AppSettings {
 
   static Future<void> saveOwnedTcgs(Set<String> ownedTcgs) async {
     final prefs = await SharedPreferences.getInstance();
-    final values = ownedTcgs
-        .map((value) => value.trim())
-        .where((value) => value.isNotEmpty)
-        .toList()
-      ..sort();
+    final values =
+        ownedTcgs
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList()
+          ..sort();
     await prefs.setStringList(_prefsKeyOwnedTcgs, values);
+  }
+
+  static Future<bool> loadPokemonUnlocked() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefsKeyPokemonUnlocked) ?? false;
+  }
+
+  static Future<void> savePokemonUnlocked(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyPokemonUnlocked, value);
   }
 
   static String _todayKey([DateTime? now]) {
@@ -254,11 +269,13 @@ class AppSettings {
   }) async {
     final currentMs = (now ?? DateTime.now()).toUtc().millisecondsSinceEpoch;
     final lastSeenMs = prefs.getInt(_prefsKeyFreeScanLastSeenEpochMs);
-    final alreadyTampered = prefs.getBool(_prefsKeyFreeScanClockTampered) ?? false;
+    final alreadyTampered =
+        prefs.getBool(_prefsKeyFreeScanClockTampered) ?? false;
 
     // Small tolerance to avoid false positives due to skew.
     const rollbackToleranceMs = 5 * 60 * 1000;
-    final rollbackDetected = lastSeenMs != null && currentMs + rollbackToleranceMs < lastSeenMs;
+    final rollbackDetected =
+        lastSeenMs != null && currentMs + rollbackToleranceMs < lastSeenMs;
     final tampered = alreadyTampered || rollbackDetected;
 
     if (tampered != alreadyTampered) {
@@ -332,6 +349,10 @@ class AppSettings {
     await prefs.remove(_prefsKeyShowPrices);
     await prefs.remove(_prefsKeyAppLocale);
     await prefs.remove(_prefsKeySelectedTcg);
+    await prefs.remove(_prefsKeyPrimaryTcg);
+    await prefs.remove(_prefsKeyPokemonUnlocked);
+    await prefs.remove(_prefsKeyExtraTcgSlots);
+    await prefs.remove(_prefsKeyPokemonDatasetProfile);
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
@@ -348,9 +369,7 @@ class AppSettings {
     return CollectionViewMode.list;
   }
 
-  static Future<void> saveCollectionViewMode(
-    CollectionViewMode mode,
-  ) async {
+  static Future<void> saveCollectionViewMode(CollectionViewMode mode) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _prefsKeyCollectionViewMode,
@@ -377,5 +396,90 @@ class AppSettings {
       _prefsKeySelectedTcg,
       game == AppTcgGame.pokemon ? 'pokemon' : 'mtg',
     );
+  }
+
+  static Future<bool> hasPrimaryGameSelection() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyPrimaryTcg)?.trim().toLowerCase();
+    return value == 'mtg' || value == 'pokemon';
+  }
+
+  static Future<AppTcgGame?> loadPrimaryTcgGameOrNull() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyPrimaryTcg)?.trim().toLowerCase();
+    if (value == 'pokemon') {
+      return AppTcgGame.pokemon;
+    }
+    if (value == 'mtg') {
+      return AppTcgGame.mtg;
+    }
+    return null;
+  }
+
+  static Future<void> savePrimaryTcgGame(AppTcgGame game) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefsKeyPrimaryTcg,
+      game == AppTcgGame.pokemon ? 'pokemon' : 'mtg',
+    );
+  }
+
+  static Future<void> ensurePrimaryTcgGame(AppTcgGame fallback) async {
+    final existing = await loadPrimaryTcgGameOrNull();
+    if (existing != null) {
+      return;
+    }
+    await savePrimaryTcgGame(fallback);
+  }
+
+  static Future<String> loadPokemonDatasetProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs
+        .getString(_prefsKeyPokemonDatasetProfile)
+        ?.trim()
+        .toLowerCase();
+    if (value == 'starter' ||
+        value == 'standard' ||
+        value == 'expanded' ||
+        value == 'full') {
+      return value!;
+    }
+    const fallback = 'starter';
+    await prefs.setString(_prefsKeyPokemonDatasetProfile, fallback);
+    return fallback;
+  }
+
+  static Future<void> savePokemonDatasetProfile(String profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = profile.trim().toLowerCase();
+    final normalized =
+        (value == 'starter' ||
+            value == 'standard' ||
+            value == 'expanded' ||
+            value == 'full')
+        ? value
+        : 'starter';
+    await prefs.setString(_prefsKeyPokemonDatasetProfile, normalized);
+  }
+
+  static Future<void> resetPrimaryGameSelectionFlow() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKeySelectedTcg);
+    await prefs.remove(_prefsKeyPrimaryTcg);
+    await prefs.remove(_prefsKeyOwnedTcgs);
+    await prefs.remove(_prefsKeyPokemonUnlocked);
+    await prefs.remove(_prefsKeyExtraTcgSlots);
+  }
+
+  static Future<int> loadExtraTcgSlots() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_prefsKeyExtraTcgSlots) ?? 0;
+    return value < 0 ? 0 : value;
+  }
+
+  static Future<void> saveExtraTcgSlots(int slots) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = slots < 0 ? 0 : slots;
+    await prefs.setInt(_prefsKeyExtraTcgSlots, normalized);
   }
 }

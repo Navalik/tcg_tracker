@@ -1073,7 +1073,7 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il piano Free consente 20 scansioni al giorno. Passa a Plus per scansioni illimitate.';
 
   @override
-  String get allArtworks => 'Tutte le artwork';
+  String get allArtworks => 'Interroga online';
 
   @override
   String get ownedLabel => 'Possedute';
@@ -1255,7 +1255,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get limitedCoverageTapAllArtworks =>
-      'Copertura limitata del database attivo';
+      'Copertura locale ridotta\nTocca \"Interroga online\" per vedere più carte';
 
   @override
   String planSelectedPreview(Object plan) {

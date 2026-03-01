@@ -2,7 +2,7 @@ part of 'package:tcg_tracker/main.dart';
 
 enum _CardSortMode { name, color, type }
 
-enum _AddCardEntryMode { byName, byScan }
+enum _AddCardEntryMode { byName, byScan, byFilter }
 
 class _DeckSectionRow {
   const _DeckSectionRow.header({
@@ -50,6 +50,24 @@ class _DeckStats {
   final int other;
 }
 
+class _PokemonDeckStats {
+  const _PokemonDeckStats({
+    required this.total,
+    required this.pokemon,
+    required this.trainer,
+    required this.energy,
+    required this.basicPokemon,
+    required this.overLimitNames,
+  });
+
+  final int total;
+  final int pokemon;
+  final int trainer;
+  final int energy;
+  final int basicPokemon;
+  final int overLimitNames;
+}
+
 class CollectionDetailPage extends StatefulWidget {
   const CollectionDetailPage({
     super.key,
@@ -83,7 +101,7 @@ class CollectionDetailPage extends StatefulWidget {
 class _CollectionDetailPageState extends State<CollectionDetailPage> {
   static const int _pageSize = 120;
   static const int _freeDailyScanLimit = 20;
-  static const List<String> _deckTypeOrder = [
+  static const List<String> _mtgDeckTypeOrder = [
     'Creature',
     'Planeswalker',
     'Battle',
@@ -93,6 +111,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     'Sorcery',
     'Land',
     'Tribal',
+    'Other',
+  ];
+  static const List<String> _pokemonDeckTypeOrder = [
+    'Pokemon',
+    'Trainer',
+    'Energy',
     'Other',
   ];
   final List<CollectionCardEntry> _cards = [];
@@ -135,8 +159,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       !widget.isAllCards &&
       !widget.isDeckCollection &&
       (widget.filter != null || widget.isSetCollection);
+  bool get _isPokemonActive =>
+      TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
   bool get _isMissingStyleCollection =>
       _isFilterCollection || widget.isWishlistCollection;
+  bool get _isPokemonDeck => widget.isDeckCollection && _isPokemonActive;
+  List<String> get _activeDeckTypeOrder =>
+      _isPokemonDeck ? _pokemonDeckTypeOrder : _mtgDeckTypeOrder;
 
   bool _isBasicLandForMana(CollectionCardEntry entry, String mana) {
     final normalizedMana = mana.trim().toUpperCase();
@@ -265,15 +294,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     _initialize();
     _loadViewMode();
     _scrollController.addListener(_onScroll);
-    if (widget.autoOpenAddCard && !widget.isSetCollection) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _autoAddShown) {
-          return;
-        }
-        _autoAddShown = true;
-        _addCard(context);
-      });
-    }
   }
 
   Future<void> _initialize() async {
@@ -290,7 +310,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _allCardsCollectionId = widget.collectionId;
     } else {
       _allCardsCollectionId = await ScryfallDatabase.instance
-          .fetchAllCardsCollectionId();
+          .ensureAllCardsCollectionId();
       _ownedCollectionId = widget.isDeckCollection
           ? widget.collectionId
           : _allCardsCollectionId;
@@ -301,6 +321,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     if (!mounted) {
       return;
+    }
+    if (widget.autoOpenAddCard && !widget.isSetCollection && !_autoAddShown) {
+      _autoAddShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        _addCard(context);
+      });
     }
     await _loadCards();
   }
@@ -393,7 +422,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _sideboardLabel() {
-    final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final languageCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     if (languageCode.startsWith('it')) {
       return 'Sideboard';
     }
@@ -401,7 +432,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _moveToSideboardLabel() {
-    final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final languageCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     if (languageCode.startsWith('it')) {
       return 'Sposta nel sideboard';
     }
@@ -409,7 +442,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _moveToMainboardLabel() {
-    final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final languageCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     if (languageCode.startsWith('it')) {
       return 'Sposta nel mainboard';
     }
@@ -417,7 +452,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _moveAllToMainboardLabel() {
-    final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final languageCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     if (languageCode.startsWith('it')) {
       return 'Sposta tutto nel mainboard';
     }
@@ -425,7 +462,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _moveAllToSideboardLabel() {
-    final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final languageCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     if (languageCode.startsWith('it')) {
       return 'Sposta tutto nel sideboard';
     }
@@ -514,9 +553,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               const SizedBox(height: 8),
               Text(
                 _subtitleLabel(entry),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFFBFAE95),
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
@@ -586,9 +625,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               const SizedBox(height: 8),
               Text(
                 _subtitleLabel(entry),
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: const Color(0xFFBFAE95),
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
               ),
               const SizedBox(height: 14),
               FilledButton.icon(
@@ -1125,13 +1164,51 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Set<String> _cardColors(CollectionCardEntry entry) {
-    return _parseColorSet(entry.colors, entry.colorIdentity);
+    return _parseColorSet(entry.colors, entry.colorIdentity, entry.typeLine);
   }
 
   Set<String> _cardTypes(CollectionCardEntry entry) {
     final typeLine = entry.typeLine.trim();
     if (typeLine.isEmpty) {
       return {};
+    }
+    if (_isPokemonActive) {
+      final normalized = typeLine.toLowerCase().replaceAll(
+        'pokémon',
+        'pokemon',
+      );
+      final matches = <String>{};
+      bool containsAny(List<String> values) {
+        for (final value in values) {
+          if (normalized.contains(value)) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      if (containsAny(const ['pokemon'])) {
+        matches.add('Pokemon');
+      }
+      if (containsAny(const ['trainer', 'allenatore'])) {
+        matches.add('Trainer');
+      }
+      if (containsAny(const ['energy', 'energia'])) {
+        matches.add('Energy');
+      }
+      if (containsAny(const ['item', 'oggetto'])) {
+        matches.add('Item');
+      }
+      if (containsAny(const ['supporter', 'aiuto'])) {
+        matches.add('Supporter');
+      }
+      if (containsAny(const ['stadium', 'stadio'])) {
+        matches.add('Stadium');
+      }
+      if (containsAny(const ['tool', 'strumento'])) {
+        matches.add('Tool');
+      }
+      return matches;
     }
     const knownTypes = [
       'Artifact',
@@ -1153,9 +1230,51 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     return matches;
   }
 
+  String _typeLabel(String value) {
+    if (!_isPokemonActive) {
+      return value;
+    }
+    final isIt = _isItalianUi();
+    switch (value) {
+      case 'Pokemon':
+        return 'Pokemon';
+      case 'Trainer':
+        return isIt ? 'Allenatore' : 'Trainer';
+      case 'Energy':
+        return isIt ? 'Energia' : 'Energy';
+      case 'Item':
+        return isIt ? 'Oggetto' : 'Item';
+      case 'Supporter':
+        return isIt ? 'Aiuto' : 'Supporter';
+      case 'Stadium':
+        return isIt ? 'Stadio' : 'Stadium';
+      case 'Tool':
+        return isIt ? 'Strumento Pokemon' : 'Pokemon Tool';
+      default:
+        return value;
+    }
+  }
+
   String _deckPrimaryType(CollectionCardEntry entry) {
+    if (_isPokemonDeck) {
+      final types = _cardTypes(entry);
+      if (types.contains('Pokemon')) {
+        return 'Pokemon';
+      }
+      if (types.contains('Energy')) {
+        return 'Energy';
+      }
+      if (types.contains('Trainer') ||
+          types.contains('Item') ||
+          types.contains('Supporter') ||
+          types.contains('Stadium') ||
+          types.contains('Tool')) {
+        return 'Trainer';
+      }
+      return 'Other';
+    }
     final types = _cardTypes(entry);
-    for (final type in _deckTypeOrder) {
+    for (final type in _activeDeckTypeOrder) {
       if (type == 'Other') {
         continue;
       }
@@ -1167,6 +1286,19 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _deckSectionLabel(String typeKey, AppLocalizations l10n) {
+    if (_isPokemonDeck) {
+      final isIt = _isItalianUi();
+      switch (typeKey) {
+        case 'Pokemon':
+          return 'Pokemon';
+        case 'Trainer':
+          return isIt ? 'Allenatore' : 'Trainer';
+        case 'Energy':
+          return isIt ? 'Energia' : 'Energy';
+        default:
+          return l10n.deckSectionOther;
+      }
+    }
     switch (typeKey) {
       case 'Creature':
         return l10n.deckSectionCreatures;
@@ -1196,7 +1328,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     AppLocalizations l10n,
   ) {
     final grouped = <String, List<CollectionCardEntry>>{};
-    for (final type in _deckTypeOrder) {
+    for (final type in _activeDeckTypeOrder) {
       grouped[type] = <CollectionCardEntry>[];
     }
     for (final entry in cards) {
@@ -1204,16 +1336,22 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       grouped.putIfAbsent(key, () => <CollectionCardEntry>[]).add(entry);
     }
     final rows = <_DeckSectionRow>[];
-    for (final type in _deckTypeOrder) {
+    for (final type in _activeDeckTypeOrder) {
       final sectionCards = grouped[type] ?? const <CollectionCardEntry>[];
       if (sectionCards.isEmpty) {
         continue;
       }
+      final count = _isPokemonDeck
+          ? sectionCards.fold<int>(
+              0,
+              (sum, card) => sum + (card.quantity > 0 ? card.quantity : 0),
+            )
+          : sectionCards.length;
       rows.add(
         _DeckSectionRow.header(
           typeKey: type,
           label: _deckSectionLabel(type, l10n),
-          count: sectionCards.length,
+          count: count,
         ),
       );
       for (final entry in sectionCards) {
@@ -1245,6 +1383,30 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   String _collectorProgressLabel(CollectionCardEntry entry) {
     return entry.collectorNumber.trim();
+  }
+
+  Widget _cardImageOrPlaceholder(String? rawImageUri) {
+    final imageUrl = (rawImageUri ?? '').trim();
+    if (imageUrl.isEmpty) {
+      return Container(
+        color: const Color(0xFF201A14),
+        child: const Icon(Icons.image_not_supported, color: Color(0xFFBFAE95)),
+      );
+    }
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          color: const Color(0xFF201A14),
+          child: const Icon(
+            Icons.image_not_supported,
+            color: Color(0xFFBFAE95),
+          ),
+        );
+      },
+    );
   }
 
   String _subtitleLabel(CollectionCardEntry entry) {
@@ -1469,12 +1631,24 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               return entry.value.toLowerCase().contains(setQuery) ||
                   entry.key.toLowerCase().contains(setQuery);
             }).toList();
-            const colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+            final colorOrder = _isPokemonActive
+                ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
+                : const ['W', 'U', 'B', 'R', 'G', 'C'];
             final sortedColors = availableColors.toList()
-              ..sort(
-                (a, b) =>
-                    colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)),
-              );
+              ..sort((a, b) {
+                final ai = colorOrder.indexOf(a);
+                final bi = colorOrder.indexOf(b);
+                if (ai == -1 && bi == -1) {
+                  return a.compareTo(b);
+                }
+                if (ai == -1) {
+                  return 1;
+                }
+                if (bi == -1) {
+                  return -1;
+                }
+                return ai.compareTo(bi);
+              });
             final sortedTypes = availableTypes.toList()..sort();
 
             return Container(
@@ -1565,7 +1739,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     if (sortedColors.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        l10n.colorLabel,
+                        _isPokemonActive
+                            ? (_isItalianUi() ? 'Tipo energia' : 'Energy type')
+                            : l10n.colorLabel,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
@@ -1595,12 +1771,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                             tempTypes.remove(value);
                           }
                         },
-                        (value) => value,
+                        (value) => _typeLabel(value),
                       ),
                     ],
                     const SizedBox(height: 16),
                     Text(
-                      l10n.manaValue,
+                      _isPokemonActive
+                          ? (_isItalianUi()
+                                ? 'Costo energia (attacco)'
+                                : 'Attack energy cost')
+                          : l10n.manaValue,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     const SizedBox(height: 8),
@@ -1723,6 +1903,34 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   String _colorLabel(String code) {
     final l10n = AppLocalizations.of(context)!;
+    if (_isPokemonActive) {
+      switch (code.toUpperCase()) {
+        case 'G':
+          return _isItalianUi() ? 'Erba' : 'Grass';
+        case 'R':
+          return _isItalianUi() ? 'Fuoco' : 'Fire';
+        case 'U':
+          return _isItalianUi() ? 'Acqua' : 'Water';
+        case 'L':
+          return _isItalianUi() ? 'Lampo' : 'Lightning';
+        case 'B':
+          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+        case 'F':
+          return _isItalianUi() ? 'Lotta' : 'Fighting';
+        case 'D':
+          return _isItalianUi() ? 'Drago' : 'Dragon';
+        case 'W':
+          return _isItalianUi() ? 'Folletto' : 'Fairy';
+        case 'C':
+          return _isItalianUi() ? 'Incolore' : 'Colorless';
+        case 'M':
+          return _isItalianUi() ? 'Metallo' : 'Metal';
+        case 'N':
+          return _isItalianUi() ? 'Nessuno' : 'None';
+        default:
+          return code.toUpperCase();
+      }
+    }
     switch (code.toUpperCase()) {
       case 'W':
         return l10n.colorWhite;
@@ -1739,6 +1947,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       default:
         return code.toUpperCase();
     }
+  }
+
+  bool _isItalianUi() {
+    final code = Localizations.localeOf(context).languageCode.toLowerCase();
+    return code.startsWith('it');
   }
 
   Widget _buildSearchHeader({required bool showOwnedMissing}) {
@@ -1888,7 +2101,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (widget.isBasicLandsCollection) {
       return;
     }
-    final ownedCollectionId = _ownedCollectionId;
+    var ownedCollectionId = _ownedCollectionId;
+    if (ownedCollectionId == null && widget.isAllCards) {
+      ownedCollectionId = await ScryfallDatabase.instance
+          .ensureAllCardsCollectionId();
+      if (!context.mounted) {
+        return;
+      }
+      _ownedCollectionId = ownedCollectionId;
+      _allCardsCollectionId ??= ownedCollectionId;
+    }
     if (ownedCollectionId == null) {
       showAppSnackBar(
         context,
@@ -1902,6 +2124,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     if (mode == _AddCardEntryMode.byScan) {
       await _addCardByScan(context, ownedCollectionId);
+      return;
+    }
+    if (mode == _AddCardEntryMode.byFilter) {
+      await _addCardsByFilter(context, ownedCollectionId);
       return;
     }
     await _addCardByName(context, ownedCollectionId);
@@ -1936,6 +2162,113 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return;
     }
     await _loadCards();
+  }
+
+  CollectionFilter _mergeFilters(
+    CollectionFilter base,
+    CollectionFilter? required,
+  ) {
+    if (required == null) {
+      return base;
+    }
+    return CollectionFilter(
+      name: base.name ?? required.name,
+      artist: base.artist ?? required.artist,
+      manaMin: base.manaMin ?? required.manaMin,
+      manaMax: base.manaMax ?? required.manaMax,
+      format: base.format ?? required.format,
+      sets: {...required.sets, ...base.sets},
+      rarities: {...required.rarities, ...base.rarities},
+      colors: {...required.colors, ...base.colors},
+      types: {...required.types, ...base.types},
+    );
+  }
+
+  Future<List<String>> _collectCardIdsForFilter(
+    CollectionFilter filter, {
+    int pageSize = 400,
+  }) async {
+    final cardIds = <String>{};
+    var offset = 0;
+    while (true) {
+      final batch = await ScryfallDatabase.instance.fetchFilteredCardPreviews(
+        filter,
+        limit: pageSize,
+        offset: offset,
+      );
+      if (batch.isEmpty) {
+        break;
+      }
+      for (final card in batch) {
+        cardIds.add(card.id);
+      }
+      if (batch.length < pageSize) {
+        break;
+      }
+      offset += batch.length;
+    }
+    return cardIds.toList(growable: false);
+  }
+
+  Future<void> _addCardsByFilter(
+    BuildContext context,
+    int ownedCollectionId,
+  ) async {
+    final title = _isItalianUi()
+        ? 'Aggiungi piu carte da filtro'
+        : 'Add multiple cards by filter';
+    final selectedFilter = await Navigator.of(context).push<CollectionFilter>(
+      MaterialPageRoute(
+        builder: (_) => _CollectionFilterBuilderPage(
+          name: title,
+          submitLabel: _isItalianUi() ? 'Aggiungi' : 'Add',
+        ),
+      ),
+    );
+    if (!context.mounted || selectedFilter == null) {
+      return;
+    }
+    final filter = _mergeFilters(selectedFilter, _requiredSearchFilter());
+    if (!context.mounted) {
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    List<String> cardIds = const [];
+    try {
+      cardIds = await _collectCardIdsForFilter(filter);
+      if (!context.mounted) {
+        return;
+      }
+      Navigator.of(context, rootNavigator: true).pop();
+      if (cardIds.isEmpty) {
+        showAppSnackBar(context, AppLocalizations.of(context)!.noResultsFound);
+        return;
+      }
+      await ScryfallDatabase.instance.addCardsToCollection(
+        ownedCollectionId,
+        cardIds,
+      );
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.addedCards(cardIds.length),
+      );
+      await _loadCards();
+    } catch (_) {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.downloadFailedGeneric,
+        );
+      }
+    }
   }
 
   Future<_AddCardEntryMode?> _showAddCardEntryModePicker(
@@ -1981,6 +2314,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                 subtitle: Text(l10n.addByScanSubtitle),
                 onTap: () =>
                     Navigator.of(context).pop(_AddCardEntryMode.byScan),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: Text(
+                  _isItalianUi()
+                      ? 'Aggiungi piu carte da filtro'
+                      : 'Add multiple cards by filter',
+                ),
+                subtitle: Text(
+                  _isItalianUi()
+                      ? 'Seleziona filtri e aggiungi tutte le carte trovate'
+                      : 'Apply filters and add all matching cards',
+                ),
+                onTap: () =>
+                    Navigator.of(context).pop(_AddCardEntryMode.byFilter),
               ),
             ],
           ),
@@ -2760,38 +3108,46 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: tokens.map((token) {
-        final color = _manaPipColor(token);
-        final isColoredSingle = const {'W', 'U', 'B', 'R', 'G'}.contains(token);
-        final label = isColoredSingle ? '' : token;
-        return Container(
-          width: 23,
-          height: 23,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3A2F24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: label.isEmpty
-              ? null
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF1A1714),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+      children: tokens
+          .map((token) {
+            final color = _manaPipColor(token);
+            final isColoredSingle = const {
+              'W',
+              'U',
+              'B',
+              'R',
+              'G',
+            }.contains(token);
+            final label = isColoredSingle ? '' : token;
+            return Container(
+              width: 23,
+              height: 23,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF3A2F24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
                   ),
-                ),
-        );
-      }).toList(growable: false),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: label.isEmpty
+                  ? null
+                  : Text(
+                      label,
+                      style: const TextStyle(
+                        color: Color(0xFF1A1714),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            );
+          })
+          .toList(growable: false),
     );
   }
 
@@ -2994,11 +3350,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      if (entry.imageUri != null)
+                      if ((entry.imageUri ?? '').trim().isNotEmpty)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
                           child: Image.network(
-                            entry.imageUri!,
+                            entry.imageUri!.trim(),
                             fit: BoxFit.contain,
                           ),
                         ),
@@ -3473,7 +3829,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     AppLocalizations l10n,
   ) {
     final grouped = <String, List<CollectionCardEntry>>{};
-    for (final type in _deckTypeOrder) {
+    for (final type in _activeDeckTypeOrder) {
       grouped[type] = <CollectionCardEntry>[];
     }
     for (final entry in cards) {
@@ -3481,7 +3837,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       grouped.putIfAbsent(key, () => <CollectionCardEntry>[]).add(entry);
     }
     final sections = <_DeckSection>[];
-    for (final type in _deckTypeOrder) {
+    for (final type in _activeDeckTypeOrder) {
       final sectionCards = grouped[type] ?? const <CollectionCardEntry>[];
       if (sectionCards.isEmpty) {
         continue;
@@ -3525,10 +3881,88 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     );
   }
 
+  bool _isPokemonBasicEnergy(CollectionCardEntry entry) {
+    final types = _cardTypes(entry);
+    if (!types.contains('Energy')) {
+      return false;
+    }
+    final normalized = entry.typeLine.toLowerCase().replaceAll(
+      'pokÃ©mon',
+      'pokemon',
+    );
+    return normalized.contains('basic');
+  }
+
+  _PokemonDeckStats _buildPokemonDeckStats(List<CollectionCardEntry> cards) {
+    var total = 0;
+    var pokemon = 0;
+    var trainer = 0;
+    var energy = 0;
+    var basicPokemon = 0;
+    final quantitiesByName = <String, int>{};
+    final basicEnergyNames = <String>{};
+    for (final entry in cards) {
+      final qty = entry.quantity > 0 ? entry.quantity : 0;
+      if (qty == 0) {
+        continue;
+      }
+      total += qty;
+      final types = _cardTypes(entry);
+      if (types.contains('Pokemon')) {
+        pokemon += qty;
+        final normalized = entry.typeLine.toLowerCase().replaceAll(
+          'pokÃ©mon',
+          'pokemon',
+        );
+        if (normalized.contains('basic')) {
+          basicPokemon += qty;
+        }
+      } else if (types.contains('Energy')) {
+        energy += qty;
+      } else if (types.contains('Trainer') ||
+          types.contains('Item') ||
+          types.contains('Supporter') ||
+          types.contains('Stadium') ||
+          types.contains('Tool')) {
+        trainer += qty;
+      } else {
+        trainer += qty;
+      }
+      final normalizedName = entry.name.trim().toLowerCase();
+      if (normalizedName.isNotEmpty) {
+        quantitiesByName[normalizedName] =
+            (quantitiesByName[normalizedName] ?? 0) + qty;
+        if (_isPokemonBasicEnergy(entry)) {
+          basicEnergyNames.add(normalizedName);
+        }
+      }
+    }
+    var overLimitNames = 0;
+    quantitiesByName.forEach((name, qty) {
+      if (basicEnergyNames.contains(name)) {
+        return;
+      }
+      if (qty > 4) {
+        overLimitNames += 1;
+      }
+    });
+    return _PokemonDeckStats(
+      total: total,
+      pokemon: pokemon,
+      trainer: trainer,
+      energy: energy,
+      basicPokemon: basicPokemon,
+      overLimitNames: overLimitNames,
+    );
+  }
+
   Widget _buildDeckStatsCard(
     List<CollectionCardEntry> cards,
     AppLocalizations l10n,
   ) {
+    if (_isPokemonDeck) {
+      return _buildPokemonDeckStatsCard(cards, l10n);
+    }
     final stats = _buildDeckStats(cards);
     final basicLandCounts = _basicLandCountsForCards(cards);
     final languageCode = Localizations.localeOf(context).languageCode;
@@ -3678,6 +4112,140 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     );
   }
 
+  Widget _buildPokemonDeckStatsCard(
+    List<CollectionCardEntry> cards,
+    AppLocalizations l10n,
+  ) {
+    final stats = _buildPokemonDeckStats(cards);
+    final isIt = _isItalianUi();
+    Widget statCell(String label, int value) {
+      return Container(
+        decoration: BoxDecoration(
+          color: const Color(0x221E1713),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0x2FE9C46A)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              '$value',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: const Color(0xFFE9C46A),
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: const Color(0xFFD2C2A9),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget ruleRow({
+      required bool ok,
+      required String okLabel,
+      required String failLabel,
+    }) {
+      final bg = ok ? const Color(0x2A4BB26A) : const Color(0x4AA4463F);
+      final border = ok ? const Color(0x884BB26A) : const Color(0x88D06D5F);
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: border),
+        ),
+        child: Text(
+          ok ? okLabel : failLabel,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: const Color(0xFFEFE7D8),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    final totalOk = stats.total == 60;
+    final hasBasicPokemon = stats.basicPokemon > 0;
+    final copyLimitOk = stats.overLimitNames == 0;
+    final totalFailLabel = stats.total < 60
+        ? (isIt
+              ? 'Mancano ${60 - stats.total} carte per arrivare a 60.'
+              : 'Add ${60 - stats.total} cards to reach 60.')
+        : (isIt
+              ? 'Rimuovi ${stats.total - 60} carte per tornare a 60.'
+              : 'Remove ${stats.total - 60} cards to get back to 60.');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0x4AE9C46A)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 14,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 8,
+            childAspectRatio: 3.2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            children: [
+              statCell(isIt ? 'Totale' : 'Total', stats.total),
+              statCell('Pokemon', stats.pokemon),
+              statCell(isIt ? 'Allenatore' : 'Trainer', stats.trainer),
+              statCell(isIt ? 'Energie' : 'Energy', stats.energy),
+            ],
+          ),
+          ruleRow(
+            ok: totalOk,
+            okLabel: isIt ? 'Regola 60 carte: OK' : '60-card rule: OK',
+            failLabel: totalFailLabel,
+          ),
+          ruleRow(
+            ok: hasBasicPokemon,
+            okLabel: isIt
+                ? 'Pokemon Base presente: OK'
+                : 'Basic Pokemon present: OK',
+            failLabel: isIt
+                ? 'Manca almeno 1 Pokemon Base.'
+                : 'At least 1 Basic Pokemon is required.',
+          ),
+          ruleRow(
+            ok: copyLimitOk,
+            okLabel: isIt ? 'Limite copie: OK' : 'Copy limit: OK',
+            failLabel: isIt
+                ? '${stats.overLimitNames} carte superano 4 copie (escluse Energie Base).'
+                : '${stats.overLimitNames} card names exceed 4 copies (Basic Energy excluded).',
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDeckTypeListView(
     List<CollectionCardEntry> visibleCards,
     AppLocalizations l10n,
@@ -3791,11 +4359,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     child: Builder(
                       builder: (context) {
                         final labels = _listPriceLabels(entry);
-                        final accentStyle = Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFE9C46A),
-                        );
+                        final accentStyle = Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: const Color(0xFFE9C46A));
                         final valueStyle = accentStyle?.copyWith(
                           color: const Color(0xFFEFE7D8),
                           fontWeight: FontWeight.w500,
@@ -3926,7 +4493,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                     size: 36,
                                   )
                                 : const Icon(
-                                    Icons.add_circle_outline,
+                                    Icons.add_circle,
                                     key: ValueKey('add'),
                                     size: 36,
                                   ),
@@ -4001,9 +4568,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         widget.isWishlistCollection ||
         widget.isAllCards ||
         (!isMissing && entry.quantity > 0);
-    final showQuickRemove =
-        !widget.isWishlistCollection &&
-        entry.quantity > 0;
+    final showMissingQuickAdd = isMissing && _ownedCollectionId != null;
+    final showQuickRemove = !widget.isWishlistCollection && entry.quantity > 0;
     return GestureDetector(
       onTap: () {
         if (_selectionMode) {
@@ -4041,16 +4607,17 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     child: Builder(
                       builder: (context) {
                         final labels = _listPriceLabels(entry);
-                        final accentStyle = Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFE9C46A),
-                        );
+                        final accentStyle = Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: const Color(0xFFE9C46A));
                         final valueStyle = accentStyle?.copyWith(
                           color: const Color(0xFFEFE7D8),
                           fontWeight: FontWeight.w500,
                         );
-                        final selectedPrice = entry.foil ? labels.$2 : labels.$1;
+                        final selectedPrice = entry.foil
+                            ? labels.$2
+                            : labels.$1;
                         return SizedBox(
                           width: double.infinity,
                           child: Text(
@@ -4083,19 +4650,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          entry.imageUri == null
-                              ? Container(
-                                  color: const Color(0xFF201A14),
-                                  child: const Icon(
-                                    Icons.image_not_supported,
-                                    color: Color(0xFFBFAE95),
-                                  ),
-                                )
-                              : Image.network(
-                                  entry.imageUri!,
-                                  fit: BoxFit.cover,
-                                  alignment: Alignment.topCenter,
-                                ),
+                          _cardImageOrPlaceholder(entry.imageUri),
                           if (entry.altArt)
                             Positioned(
                               top: 6,
@@ -4127,8 +4682,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                       duration: const Duration(
                                         milliseconds: 250,
                                       ),
-                                      transitionBuilder:
-                                          (child, animation) => ScaleTransition(
+                                      transitionBuilder: (child, animation) =>
+                                          ScaleTransition(
                                             scale: animation,
                                             child: FadeTransition(
                                               opacity: animation,
@@ -4158,6 +4713,54 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                 },
                               ),
                             ),
+                          if (showMissingQuickAdd)
+                            Positioned(
+                              bottom: 2,
+                              left: 2,
+                              child: Builder(
+                                builder: (buttonContext) {
+                                  final isAnimating = _quickAddAnimating
+                                      .contains(entry.cardId);
+                                  return IconButton(
+                                    tooltip: l10n.addOne,
+                                    iconSize: 32,
+                                    icon: AnimatedSwitcher(
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      transitionBuilder: (child, animation) =>
+                                          ScaleTransition(
+                                            scale: animation,
+                                            child: FadeTransition(
+                                              opacity: animation,
+                                              child: child,
+                                            ),
+                                          ),
+                                      child: isAnimating
+                                          ? const Icon(
+                                              Icons.check_circle,
+                                              key: ValueKey(
+                                                'check_missing_add',
+                                              ),
+                                              size: 32,
+                                            )
+                                          : const Icon(
+                                              Icons.add_circle,
+                                              key: ValueKey('missing_add'),
+                                              size: 32,
+                                            ),
+                                    ),
+                                    color: const Color(0xFFE9C46A),
+                                    onPressed: _selectionMode
+                                        ? null
+                                        : () => _quickAddCard(
+                                            entry,
+                                            anchorContext: buttonContext,
+                                          ),
+                                  );
+                                },
+                              ),
+                            ),
                           if (showQuickAdd)
                             Positioned(
                               bottom: 2,
@@ -4173,8 +4776,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                       duration: const Duration(
                                         milliseconds: 250,
                                       ),
-                                      transitionBuilder:
-                                          (child, animation) => ScaleTransition(
+                                      transitionBuilder: (child, animation) =>
+                                          ScaleTransition(
                                             scale: animation,
                                             child: FadeTransition(
                                               opacity: animation,
@@ -4188,7 +4791,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                               size: 32,
                                             )
                                           : const Icon(
-                                              Icons.add_circle_outline,
+                                              Icons.add_circle,
                                               key: ValueKey('add'),
                                               size: 32,
                                             ),
@@ -4527,7 +5130,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
-                    if (!widget.isSetCollection && !widget.isBasicLandsCollection)
+                    if (!widget.isSetCollection &&
+                        !widget.isBasicLandsCollection)
                       FilledButton.icon(
                         onPressed: () => _addCard(context),
                         icon: const Icon(Icons.add),
@@ -4544,8 +5148,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       : ListView.separated(
                           controller: _scrollController,
                           padding: const EdgeInsets.all(20),
-                          itemCount: visibleCards.length + (_loadingMore ? 1 : 0),
-                          separatorBuilder: (_, _) => const SizedBox(height: 18),
+                          itemCount:
+                              visibleCards.length + (_loadingMore ? 1 : 0),
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 18),
                           itemBuilder: (context, index) {
                             if (index >= visibleCards.length) {
                               return _buildLoadMoreIndicator();
@@ -4557,24 +5163,25 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                 : (widget.isDeckCollection
                       ? _buildDeckTypeGalleryView(visibleCards, l10n)
                       : GridView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 0.72,
-                        ),
-                    itemCount: visibleCards.length + (_loadingMore ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index >= visibleCards.length) {
-                        return _buildLoadMoreIndicator();
-                      }
-                      final entry = visibleCards[index];
-                      return _buildGalleryCardTile(entry, l10n);
-                    },
-                  )),
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 16,
+                                crossAxisSpacing: 16,
+                                childAspectRatio: 0.72,
+                              ),
+                          itemCount:
+                              visibleCards.length + (_loadingMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index >= visibleCards.length) {
+                              return _buildLoadMoreIndicator();
+                            }
+                            final entry = visibleCards[index];
+                            return _buildGalleryCardTile(entry, l10n);
+                          },
+                        )),
           if (!_loading)
             Positioned(
               left: 20,

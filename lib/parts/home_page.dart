@@ -9,7 +9,6 @@ class CollectionHomePage extends StatefulWidget {
 
 class _CollectionHomePageState extends State<CollectionHomePage>
     with TickerProviderStateMixin {
-  static const String _pokemonOwnershipKey = 'pokemon';
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
   static const int _freeCollectionLimit = 7;
@@ -19,7 +18,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   static const int _freeWishlistLimit = 1;
   static const int _freeDailyScanLimit = 20;
   bool _isProUnlocked = false;
-  bool _pokemonUnlocked = false;
   late final PurchaseManager _purchaseManager;
   late final VoidCallback _purchaseListener;
   bool _checkingBulk = false;
@@ -34,6 +32,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _bulkImporting = false;
   double _bulkImportProgress = 0;
   int _bulkImportedCount = 0;
+  String? _pokemonSyncStatus;
   String? _bulkUpdatedAtRaw;
   bool _cardsMissing = false;
   bool _initialCollectionsLoading = true;
@@ -59,15 +58,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       setState(() {
         _isProUnlocked = _purchaseManager.isPro;
-        _pokemonUnlocked = _purchaseManager.ownedTcgs.contains(
-          _pokemonOwnershipKey,
-        );
       });
     };
     _purchaseManager.addListener(_purchaseListener);
-    unawaited(_purchaseManager.init());
     _isProUnlocked = _purchaseManager.isPro;
-    _pokemonUnlocked = _purchaseManager.ownedTcgs.contains(_pokemonOwnershipKey);
     _snakeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -78,6 +72,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _initializeEnvironmentAndData() async {
+    await _purchaseManager.init();
+    await _ensurePrimaryGameSelectionOnFirstLaunch();
     await TcgEnvironmentController.instance.init();
     if (!mounted) {
       return;
@@ -86,23 +82,122 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _selectedHomeGame = TcgEnvironmentController.instance.currentGame;
     });
     await ScryfallDatabase.instance.open();
-    await _initializeForCurrentGame();
     await _loadCollections();
+    unawaited(_initializeForCurrentGame());
+  }
+
+  Future<void> _ensurePrimaryGameSelectionOnFirstLaunch() async {
+    final alreadySelected = await AppSettings.hasPrimaryGameSelection();
+    if (alreadySelected || !mounted) {
+      return;
+    }
+    final selected = await _showPrimaryGamePickerDialog();
+    if (selected == null) {
+      await AppSettings.ensurePrimaryTcgGame(AppTcgGame.mtg);
+      await AppSettings.saveSelectedTcgGame(AppTcgGame.mtg);
+      await _purchaseManager.syncPrimaryGameFromSettings();
+      return;
+    }
+    final selectedGame = selected == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    await AppSettings.savePrimaryTcgGame(selectedGame);
+    await AppSettings.saveSelectedTcgGame(selectedGame);
+    await _purchaseManager.syncPrimaryGameFromSettings();
+  }
+
+  Future<TcgGame?> _showPrimaryGamePickerDialog() async {
+    if (!mounted) {
+      return null;
+    }
+    final isItalian = _isItalianUi();
+    var current = TcgGame.mtg;
+    return showDialog<TcgGame>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) => AlertDialog(
+            title: Text(
+              isItalian ? 'Scegli gioco primario' : 'Choose primary game',
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  isItalian
+                      ? 'Alla prima apertura scegli il TCG primario (gratis per sempre). L\'altro richiede acquisto.'
+                      : 'At first launch choose your primary TCG (free forever). The other requires purchase.',
+                ),
+                const SizedBox(height: 12),
+                RadioGroup<TcgGame>(
+                  groupValue: current,
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setModalState(() {
+                      current = value;
+                    });
+                  },
+                  child: Column(
+                    children: [
+                      RadioListTile<TcgGame>(
+                        value: TcgGame.mtg,
+                        title: const Text('Magic'),
+                        subtitle: Text(
+                          isItalian ? 'Primario gratuito' : 'Primary free',
+                        ),
+                      ),
+                      RadioListTile<TcgGame>(
+                        value: TcgGame.pokemon,
+                        title: const Text('Pokemon'),
+                        subtitle: Text(
+                          isItalian ? 'Primario gratuito' : 'Primary free',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(current),
+                child: Text(isItalian ? 'Continua' : 'Continue'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   bool get _isMtgActiveGame => _selectedHomeGame == TcgGame.mtg;
   AppTcgGame get _activeSettingsGame =>
       _isMtgActiveGame ? AppTcgGame.mtg : AppTcgGame.pokemon;
   bool _isGameUnlocked(TcgGame game) {
-    if (game == TcgGame.mtg) {
-      return true;
-    }
-    return _pokemonUnlocked;
+    return _purchaseManager.canAccessGame(
+      game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
+    );
   }
 
   Future<void> _initializeForCurrentGame() async {
     if (_isMtgActiveGame) {
       await _initializeStartup();
+      return;
+    }
+    if (!_isGameUnlocked(TcgGame.pokemon)) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _checkingBulk = false;
+        _bulkUpdateAvailable = false;
+        _bulkDownloadError = null;
+        _cardsMissing = false;
+      });
       return;
     }
     await _initializePokemonStartup();
@@ -113,7 +208,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     setState(() {
-      _checkingBulk = true;
+      _checkingBulk = false;
       _bulkUpdateAvailable = false;
       _bulkDownloadUri = null;
       _bulkUpdatedAt = null;
@@ -122,15 +217,29 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _cardsMissing = false;
     });
     try {
-      await PokemonBulkService.instance.ensureInstalled(
-        onProgress: (progress) {},
-      );
+      await ScryfallDatabase.instance.repairMissingSetCodesFromCardIds();
+      unawaited(_backfillPokemonSetNamesInBackground());
+      unawaited(_repairPokemonColorsInBackground());
+      final installed = await PokemonBulkService.instance.isInstalled();
+      if (!installed) {
+        final selectedProfile = await _showPokemonProfilePickerForMissingDb();
+        if (selectedProfile == null || !mounted) {
+          return;
+        }
+        await AppSettings.savePokemonDatasetProfile(selectedProfile);
+        await _installPokemonDatasetWithFeedback();
+      }
       if (!mounted) {
         return;
       }
       setState(() {
         _checkingBulk = false;
+        _cardsMissing = false;
+        _bulkUpdateAvailable = false;
+        _bulkUpdatedAt = null;
+        _bulkUpdatedAtRaw = null;
       });
+      unawaited(_refreshPokemonUpdateStatusInBackground());
     } catch (error, stackTrace) {
       debugPrint('Pokemon dataset install failed: $error');
       if (kDebugMode) {
@@ -142,20 +251,279 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       setState(() {
         _checkingBulk = false;
         _cardsMissing = true;
-        _bulkDownloadError = AppLocalizations.of(context)!.downloadFailedGeneric;
+        _bulkUpdateAvailable = false;
+        _bulkDownloadError = error.toString();
       });
     }
   }
 
-  Future<void> _retryPokemonDatasetInstall() async {
-    if (_isMtgActiveGame || _checkingBulk || _bulkDownloading || _bulkImporting) {
+  Future<void> _refreshPokemonUpdateStatusInBackground() async {
+    try {
+      final updateStatus = await PokemonBulkService.instance
+          .checkForUpdate()
+          .timeout(const Duration(seconds: 8));
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cardsMissing = !updateStatus.installed;
+        // Keep "update available" sticky in background checks to avoid
+        // flickering from transient remote-check inconsistencies.
+        if (updateStatus.updateAvailable) {
+          _bulkUpdateAvailable = true;
+        } else if (_cardsMissing) {
+          _bulkUpdateAvailable = false;
+        }
+      });
+    } on TimeoutException {
+      // Keep UI responsive: silently skip slow update checks.
+    } catch (_) {
+      // Best effort only.
+    }
+  }
+
+  Future<void> _backfillPokemonSetNamesInBackground() async {
+    final updated = await PokemonBulkService.instance.backfillSetNames();
+    if (!mounted || updated <= 0) {
       return;
+    }
+    await _loadCollections();
+  }
+
+  Future<void> _repairPokemonColorsInBackground() async {
+    final repairedMissing = await ScryfallDatabase.instance
+        .repairMissingColorsFromTypeLine();
+    final normalizedLightning = await ScryfallDatabase.instance
+        .normalizePokemonLightningColors();
+    final repairedArtists = await ScryfallDatabase.instance
+        .backfillArtistsFromCardJson();
+    final updated = repairedMissing + normalizedLightning + repairedArtists;
+    if (!mounted || updated <= 0) {
+      return;
+    }
+    await _loadCollections();
+  }
+
+  Future<void> _installPokemonDatasetWithFeedback() async {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _checkingBulk = false;
+      _bulkDownloading = true;
+      _bulkDownloadProgress = 0;
+      _bulkDownloadReceived = 0;
+      _bulkDownloadTotal = 0;
+      _bulkImporting = false;
+      _bulkImportProgress = 0;
+      _bulkImportedCount = 0;
+      _pokemonSyncStatus = null;
+      _bulkDownloadError = null;
+    });
+
+    const downloadPhaseLimit = 0.84;
+    var lastUiTick = DateTime.fromMillisecondsSinceEpoch(0);
+    var lastAcceptedProgress = -1.0;
+    await PokemonBulkService.instance.installDataset(
+      onStatus: (status) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _pokemonSyncStatus = status.trim().isEmpty ? null : status.trim();
+        });
+      },
+      onProgress: (progress) {
+        if (!mounted) {
+          return;
+        }
+        final clamped = progress.clamp(0.0, 1.0);
+        final now = DateTime.now();
+        final progressedEnough = clamped - lastAcceptedProgress >= 0.004;
+        final isTerminal = clamped >= 1.0;
+        if (!isTerminal &&
+            !progressedEnough &&
+            now.difference(lastUiTick) < const Duration(milliseconds: 100)) {
+          return;
+        }
+        lastUiTick = now;
+        if (clamped > lastAcceptedProgress) {
+          lastAcceptedProgress = clamped;
+        }
+        setState(() {
+          if (!_isMtgActiveGame) {
+            _bulkDownloading = true;
+            _bulkImporting = false;
+            _bulkDownloadProgress = clamped;
+            _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
+            _bulkDownloadTotal = 10000;
+            _bulkImportProgress = 0;
+            _bulkImportedCount = 0;
+          } else if (clamped < downloadPhaseLimit) {
+            _bulkDownloading = true;
+            _bulkImporting = false;
+            _bulkDownloadProgress = (clamped / downloadPhaseLimit).clamp(
+              0.0,
+              1.0,
+            );
+            _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
+            _bulkDownloadTotal = 10000;
+          } else {
+            _bulkDownloading = false;
+            _bulkImporting = true;
+            _bulkImportProgress =
+                ((clamped - downloadPhaseLimit) / (1.0 - downloadPhaseLimit))
+                    .clamp(0.0, 1.0);
+            _bulkImportedCount = (_bulkImportProgress * 100).round();
+          }
+        });
+      },
+    );
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _bulkDownloading = false;
+      _bulkDownloadProgress = 1;
+      _bulkImporting = false;
+      _bulkImportProgress = _isMtgActiveGame ? 1 : 0;
+      _pokemonSyncStatus = null;
+    });
+  }
+
+  Future<void> _retryPokemonDatasetInstall() async {
+    if (_isMtgActiveGame ||
+        _checkingBulk ||
+        _bulkDownloading ||
+        _bulkImporting) {
+      return;
+    }
+    if (!_isGameUnlocked(TcgGame.pokemon)) {
+      await _showLockedGameDialog(TcgGame.pokemon);
+      return;
+    }
+    if (await PokemonBulkService.instance.isInstalled() == false) {
+      final selectedProfile = await _showPokemonProfilePickerForMissingDb();
+      if (selectedProfile == null || !mounted) {
+        return;
+      }
+      await AppSettings.savePokemonDatasetProfile(selectedProfile);
     }
     await _initializePokemonStartup();
     if (!mounted) {
       return;
     }
     await _loadCollections();
+  }
+
+  String _pokemonProfileLabelForHome(String profile) {
+    switch (profile.trim().toLowerCase()) {
+      case 'full':
+        return _isItalianUi() ? 'Full (tutte le carte)' : 'Full (all cards)';
+      case 'expanded':
+        return _isItalianUi() ? 'Expanded (10 set)' : 'Expanded (10 sets)';
+      case 'standard':
+        return _isItalianUi() ? 'Standard (6 set)' : 'Standard (6 sets)';
+      case 'starter':
+      default:
+        return _isItalianUi() ? 'Starter (3 set)' : 'Starter (3 sets)';
+    }
+  }
+
+  Future<String?> _showPokemonProfilePickerForMissingDb() async {
+    if (!mounted) {
+      return null;
+    }
+    final current = await AppSettings.loadPokemonDatasetProfile();
+    const options = <String>['starter', 'standard', 'expanded', 'full'];
+    if (!mounted) {
+      return null;
+    }
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        var selected = options.contains(current) ? current : options.first;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(
+              _isItalianUi()
+                  ? 'Scegli database Pokemon'
+                  : 'Choose Pokemon database',
+            ),
+            content: RadioGroup<String>(
+              groupValue: selected,
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setDialogState(() {
+                  selected = value;
+                });
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: options
+                    .map(
+                      (profile) => RadioListTile<String>(
+                        value: profile,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(_pokemonProfileLabelForHome(profile)),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+            actions: [
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(selected),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(
+                  _isItalianUi() ? 'Scarica database' : 'Download database',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showLockedGameDialog(TcgGame game) async {
+    if (!mounted) {
+      return;
+    }
+    final isItalian = _isItalianUi();
+    final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          isItalian ? '$gameLabel in versione Pro' : '$gameLabel in Pro',
+        ),
+        content: Text(
+          isItalian
+              ? '$gameLabel e disponibile come acquisto una tantum. Attivalo dalle Impostazioni.'
+              : '$gameLabel is available as a one-time unlock. Activate it from Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(isItalian ? 'Chiudi' : 'Close'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+            },
+            child: Text(isItalian ? 'Apri impostazioni' : 'Open settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _checkForAppUpdateOnStartup() async {
@@ -230,6 +598,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return AppLocalizations.of(context)!.basicLandsLabel;
     }
     return collection.name;
+  }
+
+  CollectionInfo? _findAllCardsCollection() {
+    CollectionInfo? fallbackByName;
+    for (final collection in _collections) {
+      if (collection.type == CollectionType.all) {
+        return collection;
+      }
+      if (collection.name == _allCardsCollectionName) {
+        fallbackByName ??= collection;
+      }
+    }
+    return fallbackByName;
   }
 
   int _userCollectionCount() {
@@ -422,9 +803,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final collections = await ScryfallDatabase.instance
           .fetchCollections()
           .timeout(const Duration(seconds: 15));
-      final owned = await ScryfallDatabase.instance
-          .countOwnedCards()
-          .timeout(const Duration(seconds: 15));
+      final owned = await ScryfallDatabase.instance.countOwnedCards().timeout(
+        const Duration(seconds: 15),
+      );
       if (!mounted) {
         return;
       }
@@ -522,9 +903,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           deckSideCounts[collection.id] = 0;
           continue;
         }
-        final sideCount = await ScryfallDatabase.instance.countCollectionQuantity(
-          sideboardCollectionId,
-        );
+        final sideCount = await ScryfallDatabase.instance
+            .countCollectionQuantity(sideboardCollectionId);
         deckSideCounts[collection.id] = sideCount;
       }
       if (!mounted) {
@@ -660,7 +1040,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _buildCreateCollectionCard(
             context,
             icon: Icons.tune,
-            title: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            title: AppLocalizations.of(
+              context,
+            )!.createYourCustomCollectionTitle,
             enabled: canCreateCustom,
             onTap: () => _addCustomCollection(context),
           ),
@@ -681,7 +1063,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         widgets.add(
           _buildCreateCollectionCard(
             context,
-            icon: Icons.style,
+            icon: Icons.view_carousel_rounded,
             title: AppLocalizations.of(context)!.createYourDeckTitle,
             enabled: canCreateDeck,
             onTap: () => _addDeckCollection(context),
@@ -692,7 +1074,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         widgets.add(
           _buildCreateCollectionCard(
             context,
-            icon: Icons.collections_bookmark,
+            icon: Icons.favorite_border_rounded,
             title: AppLocalizations.of(context)!.createYourWishlistTitle,
             enabled: canCreateWishlist,
             onTap: () => _addWishlistCollection(context),
@@ -720,7 +1102,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     addCreateCards(includeDeck: false);
 
     widgets.add(const SizedBox(height: 6));
-    widgets.add(_SectionDivider(label: AppLocalizations.of(context)!.deckCollectionTitle));
+    widgets.add(
+      _SectionDivider(label: AppLocalizations.of(context)!.deckCollectionTitle),
+    );
     widgets.add(const SizedBox(height: 12));
 
     for (final collection in deckCollections) {
@@ -745,7 +1129,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       widgets.add(
         _buildCreateCollectionCard(
           context,
-          icon: Icons.style,
+          icon: Icons.view_carousel_rounded,
           title: AppLocalizations.of(context)!.createYourDeckTitle,
           enabled: canCreateDeck,
           onTap: () => _addDeckCollection(context),
@@ -809,7 +1193,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               borderRadius: BorderRadius.circular(16),
               onTap: enabled ? onTap : null,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 18,
+                ),
                 child: Row(
                   children: [
                     Icon(icon, color: const Color(0xFFE9C46A), size: 20),
@@ -839,7 +1226,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         padding: const EdgeInsets.only(left: 10),
                         child: Text(
                           l10n.upgradeToPro,
-                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
                                 color: const Color(0xFFE9C46A),
                                 fontWeight: FontWeight.w700,
                               ),
@@ -877,7 +1265,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     var forceBootstrapDownload = false;
-    if (_cardsMissing && _selectedBulkType == null) {
+    if (_cardsMissing) {
       await Future<void>.delayed(Duration.zero);
       if (!mounted) {
         return;
@@ -998,7 +1386,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkUpdatedAtRaw = result.updatedAtRaw ?? _bulkUpdatedAtRaw;
       _bulkUpdateAvailable = true;
     });
-    await _maybeStartBulkDownload();
+    if (!_cardsMissing) {
+      await _maybeStartBulkDownload();
+    }
   }
 
   Future<void> _maybeStartBulkDownload({
@@ -1032,19 +1422,61 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _downloadAvailableDbUpdate() async {
-    if (!_isMtgActiveGame) {
+    if (_isMtgActiveGame) {
+      if (_bulkDownloading || _bulkImporting) {
+        return;
+      }
+      if (_bulkDownloadUri == null) {
+        await _checkScryfallBulk();
+      }
+      if (!mounted) {
+        return;
+      }
+      await _maybeStartBulkDownload(forceDownload: true);
       return;
     }
-    if (_bulkDownloading || _bulkImporting) {
+
+    if (!_isGameUnlocked(TcgGame.pokemon)) {
+      await _showLockedGameDialog(TcgGame.pokemon);
       return;
     }
-    if (_bulkDownloadUri == null) {
-      await _checkScryfallBulk();
+    if (_checkingBulk || _bulkDownloading || _bulkImporting) {
+      return;
     }
     if (!mounted) {
       return;
     }
-    await _maybeStartBulkDownload(forceDownload: true);
+    setState(() {
+      _checkingBulk = true;
+      _bulkDownloadError = null;
+    });
+    try {
+      await _installPokemonDatasetWithFeedback();
+      final updateStatus = await PokemonBulkService.instance
+          .checkForUpdate()
+          .timeout(const Duration(seconds: 8));
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _checkingBulk = false;
+        _cardsMissing = !updateStatus.installed;
+        _bulkUpdateAvailable = updateStatus.updateAvailable;
+      });
+      await _loadCollections();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _checkingBulk = false;
+        _bulkDownloadError = error is TimeoutException
+            ? (_isItalianUi()
+                  ? 'Controllo aggiornamenti troppo lento. Riprova.'
+                  : 'Update check timed out. Please retry.')
+            : error.toString();
+      });
+    }
   }
 
   bool _isAllowedBulkDownloadUri(String rawUri) {
@@ -1383,6 +1815,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final controller = TextEditingController();
+    final allowDeckImport = _isMtgActiveGame;
     String? selectedFormat;
     _DeckImportSource? importSource;
     final request = await showDialog<_DeckCreateRequest>(
@@ -1401,60 +1834,73 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     autofocus: true,
                     decoration: InputDecoration(hintText: l10n.deckNameHint),
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    initialValue: selectedFormat,
-                    decoration: InputDecoration(
-                      labelText: l10n.deckFormatOptionalLabel,
-                    ),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(l10n.noFormatOption),
-                      ),
-                      ...kSupportedDeckFormats.map(
-                        (value) => DropdownMenuItem<String?>(
-                          value: value,
-                          child: Text(deckFormatLabel(value)),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        selectedFormat = value;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final picked = await _pickDeckImportSource();
-                      if (!context.mounted) {
-                        return;
-                      }
-                      if (picked == null) {
-                        return;
-                      }
-                      setState(() {
-                        importSource = picked;
-                      });
-                    },
-                    icon: const Icon(Icons.upload_file),
-                    label: Text(_deckImportButtonLabel()),
-                  ),
-                  if (importSource != null) ...[
-                    const SizedBox(height: 8),
+                  if (!allowDeckImport) ...[
+                    const SizedBox(height: 10),
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        importSource!.fileName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        _pokemonDeckHintLabel(),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFBFAE95),
                         ),
                       ),
                     ),
+                  ],
+                  if (allowDeckImport) ...[
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String?>(
+                      initialValue: selectedFormat,
+                      decoration: InputDecoration(
+                        labelText: l10n.deckFormatOptionalLabel,
+                      ),
+                      items: [
+                        DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text(l10n.noFormatOption),
+                        ),
+                        ...kSupportedDeckFormats.map(
+                          (value) => DropdownMenuItem<String?>(
+                            value: value,
+                            child: Text(deckFormatLabel(value)),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          selectedFormat = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await _pickDeckImportSource();
+                        if (!context.mounted) {
+                          return;
+                        }
+                        if (picked == null) {
+                          return;
+                        }
+                        setState(() {
+                          importSource = picked;
+                        });
+                      },
+                      icon: const Icon(Icons.upload_file),
+                      label: Text(_deckImportButtonLabel()),
+                    ),
+                    if (importSource != null) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          importSource!.fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFBFAE95)),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -1473,8 +1919,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     Navigator.of(context).pop(
                       _DeckCreateRequest(
                         name: value,
-                        format: selectedFormat,
-                        importSource: importSource,
+                        format: allowDeckImport ? selectedFormat : null,
+                        importSource: allowDeckImport ? importSource : null,
                       ),
                     );
                   },
@@ -1547,13 +1993,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _isItalianUi() {
-    return Localizations.localeOf(context).languageCode.toLowerCase().startsWith(
-      'it',
-    );
+    return Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('it');
   }
 
   String _deckImportButtonLabel() {
     return _isItalianUi() ? 'Carica file Arena/MTGO' : 'Load Arena/MTGO file';
+  }
+
+  String _pokemonDeckHintLabel() {
+    if (_isItalianUi()) {
+      return 'Mazzo Pokemon: 60 carte esatte, max 4 copie per nome (tranne Energie Base), almeno 1 Pokemon Base.';
+    }
+    return 'Pokemon deck: exactly 60 cards, max 4 copies per name (except Basic Energy), at least 1 Basic Pokemon.';
   }
 
   String _deckImportMenuLabel() {
@@ -1576,7 +2029,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   String _deckImportingLabel() {
-    return _isItalianUi() ? 'Importazione mazzo in corso...' : 'Importing deck...';
+    return _isItalianUi()
+        ? 'Importazione mazzo in corso...'
+        : 'Importing deck...';
   }
 
   String _deckImportResultTitle() {
@@ -1618,7 +2073,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return null;
     }
     final file = result.files.first;
-    final fileName = file.name.trim().isEmpty ? 'decklist.txt' : file.name.trim();
+    final fileName = file.name.trim().isEmpty
+        ? 'decklist.txt'
+        : file.name.trim();
     String? content;
     if (file.bytes != null) {
       content = utf8.decode(file.bytes!, allowMalformed: true);
@@ -1637,7 +2094,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     var inSideboard = false;
     var pendingBlankSideboardSwitch = false;
     var switchedByBlank = false;
-    final lines = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').split('\n');
+    final lines = text
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n')
+        .split('\n');
     final cardXmlExp = RegExp(
       r'<Cards[^>]*Name="([^"]+)"[^>]*Quantity="(\d+)"[^>]*>',
       caseSensitive: false,
@@ -1700,15 +2160,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             r'Sideboard\s*=\s*"true"',
             caseSensitive: false,
           ).hasMatch(line);
-          final target =
-              (inSideboard || xmlIsSideboard) ? sideboard : mainboard;
+          final target = (inSideboard || xmlIsSideboard)
+              ? sideboard
+              : mainboard;
           target[name] = (target[name] ?? 0) + qty;
         }
         continue;
       }
 
-      final mainMatch = RegExp(r'^(\d+)\s*x?\s+(.+)$', caseSensitive: false)
-          .firstMatch(lineToParse);
+      final mainMatch = RegExp(
+        r'^(\d+)\s*x?\s+(.+)$',
+        caseSensitive: false,
+      ).firstMatch(lineToParse);
       if (mainMatch == null) {
         continue;
       }
@@ -1717,7 +2180,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         continue;
       }
       var name = (mainMatch.group(2) ?? '').trim();
-      name = name.replaceAll(RegExp(r'\s+\([A-Za-z0-9]+\)\s+[A-Za-z0-9]+$'), '');
+      name = name.replaceAll(
+        RegExp(r'\s+\([A-Za-z0-9]+\)\s+[A-Za-z0-9]+$'),
+        '',
+      );
       name = name.replaceAll(RegExp(r'\s+$'), '');
       if (name.isEmpty) {
         continue;
@@ -1734,7 +2200,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }) async {
     final parsed = _parseDeckListText(text);
     if (parsed.mainboard.isEmpty && parsed.sideboard.isEmpty) {
-      return const _DeckImportResult(imported: 0, skipped: 0, notFoundCards: []);
+      return const _DeckImportResult(
+        imported: 0,
+        skipped: 0,
+        notFoundCards: [],
+      );
     }
     final sideboardCollectionId = await ScryfallDatabase.instance
         .ensureDeckSideboardCollectionId(collectionId);
@@ -1791,9 +2261,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return null;
     }
 
-    final localId = await ScryfallDatabase.instance.fetchPreferredCardIdByExactName(
-      name,
-    );
+    final localId = await ScryfallDatabase.instance
+        .fetchPreferredCardIdByExactName(name);
     if (localId != null) {
       return localId;
     }
@@ -1878,7 +2347,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    final missingPreview = result.notFoundCards.take(12).toList(growable: false);
+    final missingPreview = result.notFoundCards
+        .take(12)
+        .toList(growable: false);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
@@ -1902,9 +2373,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     _isItalianUi()
                         ? '...e altre ${result.notFoundCards.length - missingPreview.length}'
                         : '...and ${result.notFoundCards.length - missingPreview.length} more',
-                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFFBFAE95),
-                    ),
+                    style: Theme.of(dialogContext).textTheme.bodySmall
+                        ?.copyWith(color: const Color(0xFFBFAE95)),
                   ),
               ],
             ],
@@ -1975,7 +2445,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final cards = await _fetchAllCardsForCollection(collection.id);
       final sideboardCollectionId = await ScryfallDatabase.instance
           .ensureDeckSideboardCollectionId(collection.id);
-      final sideboardCards = await _fetchAllCardsForCollection(sideboardCollectionId);
+      final sideboardCards = await _fetchAllCardsForCollection(
+        sideboardCollectionId,
+      );
       final buffer = StringBuffer();
       for (final entry in cards) {
         if (entry.quantity <= 0) {
@@ -2017,18 +2489,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           .replaceAll(RegExp(r'[^A-Za-z0-9_\- ]'), '')
           .trim()
           .replaceAll(RegExp(r'\s+'), '_');
-      final stamp = DateTime.now().toLocal().toIso8601String().replaceAll(
-        RegExp(r'[:\-]'),
-        '',
-      ).replaceAll('.', '');
-      final fileName = '${safeName.isEmpty ? 'deck' : safeName}_${ext}_$stamp.txt';
+      final stamp = DateTime.now()
+          .toLocal()
+          .toIso8601String()
+          .replaceAll(RegExp(r'[:\-]'), '')
+          .replaceAll('.', '');
+      final fileName =
+          '${safeName.isEmpty ? 'deck' : safeName}_${ext}_$stamp.txt';
       final file = File(path.join(exportDir.path, fileName));
       await file.writeAsString(buffer.toString(), flush: true);
       await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(file.path)],
-          text: fileName,
-        ),
+        ShareParams(files: [XFile(file.path)], text: fileName),
       );
       if (!mounted) {
         return;
@@ -2107,19 +2578,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _onSearchCardPressed() async {
-    CollectionInfo? allCards;
-    for (final collection in _collections) {
-      if (collection.name == _allCardsCollectionName) {
-        allCards = collection;
-        break;
-      }
-    }
+    CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      final allCardsId = await ScryfallDatabase.instance
+          .ensureAllCardsCollectionId();
+      allCards = CollectionInfo(
+        id: allCardsId,
+        name: _allCardsCollectionName,
+        cardCount: _totalCardCount,
+        type: CollectionType.all,
+        filter: null,
       );
-      return;
+      await _loadCollections();
+      if (!mounted) {
+        return;
+      }
     }
     await showModalBottomSheet<void>(
       context: context,
@@ -2448,19 +2921,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<bool> _addCardToAllCards(String cardId) async {
-    CollectionInfo? allCards;
-    for (final collection in _collections) {
-      if (collection.name == _allCardsCollectionName) {
-        allCards = collection;
-        break;
-      }
-    }
+    CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      final allCardsId = await ScryfallDatabase.instance
+          .ensureAllCardsCollectionId();
+      allCards = CollectionInfo(
+        id: allCardsId,
+        name: _allCardsCollectionName,
+        cardCount: _totalCardCount,
+        type: CollectionType.all,
+        filter: null,
       );
-      return false;
+      await _loadCollections();
+      if (!mounted) {
+        return false;
+      }
     }
     await ScryfallDatabase.instance.addCardToCollection(allCards.id, cardId);
     if (!mounted) {
@@ -3277,19 +3752,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String? initialSetCode,
     String? initialCollectorNumber,
   }) async {
-    CollectionInfo? allCards;
-    for (final collection in _collections) {
-      if (collection.name == _allCardsCollectionName) {
-        allCards = collection;
-        break;
-      }
-    }
+    CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      final allCardsId = await ScryfallDatabase.instance
+          .ensureAllCardsCollectionId();
+      allCards = CollectionInfo(
+        id: allCardsId,
+        name: _allCardsCollectionName,
+        cardCount: _totalCardCount,
+        type: CollectionType.all,
+        filter: null,
       );
-      return false;
+      await _loadCollections();
+      if (!mounted) {
+        return false;
+      }
     }
     final selection = await showModalBottomSheet<_CardSearchSelection>(
       context: context,
@@ -3350,19 +3827,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
-    CollectionInfo? allCards;
-    for (final collection in _collections) {
-      if (collection.name == _allCardsCollectionName) {
-        allCards = collection;
-        break;
-      }
-    }
+    CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.allCardsCollectionNotFound,
+      final allCardsId = await ScryfallDatabase.instance
+          .ensureAllCardsCollectionId();
+      allCards = CollectionInfo(
+        id: allCardsId,
+        name: _allCardsCollectionName,
+        cardCount: _totalCardCount,
+        type: CollectionType.all,
+        filter: null,
       );
-      return;
+      await _loadCollections();
+      if (!context.mounted) {
+        return;
+      }
     }
     final resolved = allCards;
     if (!mounted) {
@@ -3428,7 +3907,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       }
     }
-    if (isDeckCollection) {
+    if (isDeckCollection && _isMtgActiveGame) {
       menuItems.add(
         PopupMenuItem(
           value: _CollectionAction.importDeckFile,
@@ -3622,7 +4101,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     await ScryfallDatabase.instance.deleteCollection(collection.id);
     if (collection.type == CollectionType.deck) {
-      await ScryfallDatabase.instance.deleteDeckSideboardCollection(collection.id);
+      await ScryfallDatabase.instance.deleteDeckSideboardCollection(
+        collection.id,
+      );
     }
     if (!mounted) {
       return;
@@ -3901,19 +4382,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (selected == _selectedHomeGame) {
           return;
         }
-        final selectedConfig = TcgEnvironmentController.instance.configFor(
-          selected,
-        );
-        if (selectedConfig.requiresPurchase && !_isGameUnlocked(selected)) {
+        if (!_isGameUnlocked(selected)) {
           if (!mounted) {
             return;
           }
           await Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
-          if (!mounted || !_isGameUnlocked(selected)) {
-            return;
-          }
+          return;
         }
         await TcgEnvironmentController.instance.setGame(selected);
         if (!mounted) {
@@ -3924,8 +4400,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _initialCollectionsLoading = true;
           _collections.clear();
         });
-        await _initializeForCurrentGame();
         await _loadCollections();
+        unawaited(_initializeForCurrentGame());
       },
       itemBuilder: (_) => const [
         PopupMenuItem(
@@ -3934,10 +4410,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             children: [
               _GameMenuBadge(label: 'M'),
               SizedBox(width: 10),
-              Text(
-                'Magic',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              Text('Magic', style: TextStyle(fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -3947,10 +4420,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             children: [
               _GameMenuBadge(label: 'P'),
               SizedBox(width: 10),
-              Text(
-                'Pokemon',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
+              Text('Pokemon', style: TextStyle(fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -3992,6 +4462,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final pokemonLocked =
+        !_isMtgActiveGame && !_isGameUnlocked(TcgGame.pokemon);
     final isBlockingSync = _bulkDownloading || _bulkImporting;
     final blockingLabel = _bulkDownloading
         ? (_bulkDownloadTotal > 0
@@ -4055,27 +4527,53 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           ],
                         )
                       else if (_bulkDownloading)
-                        Text(
-                          _bulkDownloadTotal > 0
-                              ? l10n.downloadingUpdateWithTotal(
-                                  (_bulkDownloadProgress * 100)
-                                      .clamp(0, 100)
-                                      .round(),
-                                  _formatBytes(_bulkDownloadReceived),
-                                  _formatBytes(_bulkDownloadTotal),
-                                )
-                              : l10n.downloadingUpdateNoTotal(
-                                  _formatBytes(_bulkDownloadReceived),
-                                ),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFFE3B55C)),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _isMtgActiveGame
+                                  ? (_bulkDownloadTotal > 0
+                                        ? l10n.downloadingUpdateWithTotal(
+                                            (_bulkDownloadProgress * 100)
+                                                .clamp(0, 100)
+                                                .round(),
+                                            _formatBytes(_bulkDownloadReceived),
+                                            _formatBytes(_bulkDownloadTotal),
+                                          )
+                                        : l10n.downloadingUpdateNoTotal(
+                                            _formatBytes(_bulkDownloadReceived),
+                                          ))
+                                  : (_isItalianUi()
+                                        ? 'Download database Pokemon ${(_bulkDownloadProgress * 100).clamp(0, 100).round()}%'
+                                        : 'Downloading Pokemon database ${(_bulkDownloadProgress * 100).clamp(0, 100).round()}%'),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFE3B55C)),
+                            ),
+                            if (!_isMtgActiveGame &&
+                                _pokemonSyncStatus != null &&
+                                _pokemonSyncStatus!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _pokemonSyncStatus!,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFFBFAE95)),
+                              ),
+                            ],
+                          ],
                         )
                       else if (_bulkImporting)
                         Text(
-                          l10n.importingCardsWithCount(
-                            (_bulkImportProgress * 100).clamp(0, 100).round(),
-                            _bulkImportedCount,
-                          ),
+                          _isMtgActiveGame
+                              ? l10n.importingCardsWithCount(
+                                  (_bulkImportProgress * 100)
+                                      .clamp(0, 100)
+                                      .round(),
+                                  _bulkImportedCount,
+                                )
+                              : (_isItalianUi()
+                                    ? 'Import carte Pokemon ${(_bulkImportProgress * 100).clamp(0, 100).round()}%'
+                                    : 'Importing Pokemon cards ${(_bulkImportProgress * 100).clamp(0, 100).round()}%'),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: const Color(0xFFE3B55C)),
                         )
@@ -4083,7 +4581,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         Text(
                           _isMtgActiveGame
                               ? l10n.downloadFailedTapUpdate
-                              : l10n.downloadFailedGeneric,
+                              : (_bulkDownloadError!.trim().isEmpty
+                                    ? l10n.downloadFailedGeneric
+                                    : _bulkDownloadError!),
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: const Color(0xFFE38B5C)),
                         )
@@ -4101,34 +4601,50 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: const Color(0xFFE38B5C)),
                         )
-                      else if (_bulkUpdateAvailable && _isMtgActiveGame)
+                      else if (_bulkUpdateAvailable)
                         Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             FilledButton.tonalIcon(
                               onPressed: _downloadAvailableDbUpdate,
-                              icon: const Icon(Icons.download_rounded, size: 18),
+                              icon: const Icon(
+                                Icons.download_rounded,
+                                size: 18,
+                              ),
                               label: Text(l10n.dbUpdateAvailableTapHere),
                               style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFFE9C46A),
+                                foregroundColor: const Color(0xFF1C1510),
+                                elevation: 7,
+                                shadowColor: const Color(0xAA000000),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 14,
                                   vertical: 8,
                                 ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(999),
+                                  side: const BorderSide(
+                                    color: Color(0xFFF5DEA0),
+                                    width: 1,
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              l10n.updateReadyWithDate(
-                                _bulkUpdatedAt
-                                        ?.toLocal()
-                                        .toIso8601String()
-                                        .split('T')
-                                        .first ??
-                                    l10n.unknownDate,
+                            if (_bulkUpdatedAt != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                l10n.updateReadyWithDate(
+                                  _bulkUpdatedAt
+                                          ?.toLocal()
+                                          .toIso8601String()
+                                          .split('T')
+                                          .first ??
+                                      l10n.unknownDate,
+                                ),
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFFE3B55C)),
                               ),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFE3B55C)),
-                            ),
+                            ],
                           ],
                         )
                       else
@@ -4138,6 +4654,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               ?.copyWith(color: const Color(0xFF908676)),
                         ),
                       if (!_isMtgActiveGame &&
+                          !pokemonLocked &&
                           !_checkingBulk &&
                           !_bulkDownloading &&
                           !_bulkImporting &&
@@ -4181,25 +4698,94 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ],
             ),
           ),
+          if (pokemonLocked)
+            Positioned.fill(
+              child: Container(
+                color: const Color(0xC20E0A08),
+                alignment: Alignment.center,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1B1511),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF5D4731)),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.lock_outline_rounded,
+                            color: Color(0xFFE9C46A),
+                            size: 30,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            _isItalianUi()
+                                ? 'Pokemon disponibile nella versione Pro'
+                                : 'Pokemon available in Pro',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _isItalianUi()
+                                ? 'Sblocca Pokemon dalle impostazioni per usare collezioni, ricerca e download del database dedicato.'
+                                : 'Unlock Pokemon from Settings to use collections, search, and dedicated database download.',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const SettingsPage(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.workspace_premium_outlined),
+                            label: Text(
+                              _isItalianUi()
+                                  ? 'Apri impostazioni'
+                                  : 'Open settings',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           if (isBlockingSync) ...[
             const ModalBarrier(dismissible: false, color: Color(0x880E0A08)),
-            Center(
-              child: Chip(
-                avatar: const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                label: Text('$blockingLabel ${l10n.pleaseWait}'),
-                backgroundColor: const Color(0xFFE9C46A),
-                labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: const Color(0xFF1C1510),
-                  fontWeight: FontWeight.w700,
-                ),
-                side: BorderSide.none,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 86),
+                  child: Chip(
+                    avatar: const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    label: Text(blockingLabel),
+                    backgroundColor: const Color(0xFFE9C46A),
+                    labelStyle: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(
+                          color: const Color(0xFF1C1510),
+                          fontWeight: FontWeight.w700,
+                        ),
+                    side: BorderSide.none,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -4261,10 +4847,7 @@ class _GameMenuBadge extends StatelessWidget {
 }
 
 class _DashedRoundedRectPainter extends CustomPainter {
-  const _DashedRoundedRectPainter({
-    required this.color,
-    required this.radius,
-  });
+  const _DashedRoundedRectPainter({required this.color, required this.radius});
 
   final Color color;
   final double radius;
@@ -4467,7 +5050,7 @@ class _HomeAddSheet extends StatelessWidget {
           Opacity(
             opacity: canCreateWishlist ? 1.0 : 0.55,
             child: ListTile(
-              leading: const Icon(Icons.bookmark_add_outlined),
+              leading: const Icon(Icons.favorite_border_rounded),
               title: Text(l10n.addWishlist),
               subtitle: canCreateWishlist
                   ? Text(l10n.addWishlistSubtitle)
@@ -4497,10 +5080,15 @@ class _HomeAddSheet extends StatelessWidget {
 }
 
 class _CollectionFilterBuilderPage extends StatefulWidget {
-  const _CollectionFilterBuilderPage({required this.name, this.initialFilter});
+  const _CollectionFilterBuilderPage({
+    required this.name,
+    this.initialFilter,
+    this.submitLabel,
+  });
 
   final String name;
   final CollectionFilter? initialFilter;
+  final String? submitLabel;
 
   @override
   State<_CollectionFilterBuilderPage> createState() =>
@@ -4509,24 +5097,38 @@ class _CollectionFilterBuilderPage extends StatefulWidget {
 
 class _CollectionFilterBuilderPageState
     extends State<_CollectionFilterBuilderPage> {
-  static const List<String> _knownTypes = [
-    'Artifact',
-    'Creature',
-    'Enchantment',
-    'Instant',
-    'Land',
-    'Planeswalker',
-    'Sorcery',
-    'Battle',
-    'Tribal',
-  ];
-  static const List<String> _rarityOrder = [
-    'common',
-    'uncommon',
-    'rare',
-    'mythic',
-  ];
-  static const List<String> _colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+  bool get _isPokemonActive =>
+      TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
+
+  List<String> get _knownTypes => _isPokemonActive
+      ? const [
+          'Pokemon',
+          'Trainer',
+          'Energy',
+          'Item',
+          'Supporter',
+          'Stadium',
+          'Tool',
+        ]
+      : const [
+          'Artifact',
+          'Creature',
+          'Enchantment',
+          'Instant',
+          'Land',
+          'Planeswalker',
+          'Sorcery',
+          'Battle',
+          'Tribal',
+        ];
+
+  List<String> get _rarityOrder => _isPokemonActive
+      ? const ['common', 'uncommon', 'rare', 'holo rare', 'ultra rare', 'promo']
+      : const ['common', 'uncommon', 'rare', 'mythic'];
+
+  List<String> get _colorOrder => _isPokemonActive
+      ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
+      : const ['W', 'U', 'B', 'R', 'G', 'C'];
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _artistController = TextEditingController();
@@ -4541,7 +5143,6 @@ class _CollectionFilterBuilderPageState
   List<SetInfo> _availableSets = [];
   bool _loadingSets = true;
   String _setQuery = '';
-  String _typeQuery = '';
 
   bool _previewLoading = false;
   int? _previewTotal;
@@ -4695,6 +5296,34 @@ class _CollectionFilterBuilderPageState
 
   String _colorLabel(String code) {
     final l10n = AppLocalizations.of(context)!;
+    if (_isPokemonActive) {
+      switch (code.toUpperCase()) {
+        case 'G':
+          return _isItalianUi() ? 'Erba' : 'Grass';
+        case 'R':
+          return _isItalianUi() ? 'Fuoco' : 'Fire';
+        case 'U':
+          return _isItalianUi() ? 'Acqua' : 'Water';
+        case 'L':
+          return _isItalianUi() ? 'Lampo' : 'Lightning';
+        case 'B':
+          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+        case 'F':
+          return _isItalianUi() ? 'Lotta' : 'Fighting';
+        case 'D':
+          return _isItalianUi() ? 'Drago' : 'Dragon';
+        case 'W':
+          return _isItalianUi() ? 'Folletto' : 'Fairy';
+        case 'C':
+          return _isItalianUi() ? 'Incolore' : 'Colorless';
+        case 'M':
+          return _isItalianUi() ? 'Metallo' : 'Metal';
+        case 'N':
+          return _isItalianUi() ? 'Nessuno' : 'None';
+        default:
+          return code.toUpperCase();
+      }
+    }
     switch (code.toUpperCase()) {
       case 'W':
         return l10n.colorWhite;
@@ -4713,6 +5342,36 @@ class _CollectionFilterBuilderPageState
     }
   }
 
+  String _typeLabel(String value) {
+    if (!_isPokemonActive) {
+      return value;
+    }
+    final isIt = _isItalianUi();
+    switch (value) {
+      case 'Pokemon':
+        return 'Pokemon';
+      case 'Trainer':
+        return isIt ? 'Allenatore' : 'Trainer';
+      case 'Energy':
+        return isIt ? 'Energia' : 'Energy';
+      case 'Item':
+        return isIt ? 'Oggetto' : 'Item';
+      case 'Supporter':
+        return isIt ? 'Aiuto' : 'Supporter';
+      case 'Stadium':
+        return isIt ? 'Stadio' : 'Stadium';
+      case 'Tool':
+        return isIt ? 'Strumento Pokemon' : 'Pokemon Tool';
+      default:
+        return value;
+    }
+  }
+
+  bool _isItalianUi() {
+    final code = Localizations.localeOf(context).languageCode.toLowerCase();
+    return code.startsWith('it');
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -4728,16 +5387,6 @@ class _CollectionFilterBuilderPageState
                     set.code.toLowerCase().contains(_setQuery.toLowerCase()),
               )
               .toList();
-    final filteredTypes =
-        _typeQuery.isEmpty
-              ? <String>[]
-              : _knownTypes
-                    .where(
-                      (type) =>
-                          type.toLowerCase().contains(_typeQuery.toLowerCase()),
-                    )
-                    .toList()
-          ..sort();
     final sortedRarities = _rarityOrder;
     final sortedColors = _colorOrder;
 
@@ -4785,11 +5434,6 @@ class _CollectionFilterBuilderPageState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         children: [
-          Text(
-            l10n.advancedFiltersTitle,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
           Text(
             l10n.searchCardsHint,
             style: Theme.of(context).textTheme.titleSmall,
@@ -4869,7 +5513,12 @@ class _CollectionFilterBuilderPageState
             (value) => _formatRarity(value),
           ),
           const SizedBox(height: 16),
-          Text(l10n.colorLabel, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            _isPokemonActive
+                ? (_isItalianUi() ? 'Tipo energia' : 'Energy type')
+                : l10n.colorLabel,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
           buildChipRow<String>(
             sortedColors,
@@ -4883,55 +5532,33 @@ class _CollectionFilterBuilderPageState
             (value) => _colorLabel(value),
           ),
           const SizedBox(height: 16),
-          Text(l10n.typeLabel, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          if (_selectedTypes.isNotEmpty) ...[
-            buildSelectedChips(_selectedTypes, (value) {
-              _selectedTypes.remove(value);
-              _schedulePreviewUpdate();
-            }),
-            const SizedBox(height: 8),
-          ],
-          TextField(
-            decoration: InputDecoration(
-              hintText: l10n.searchHint,
-              prefixIcon: const Icon(Icons.search),
-            ),
-            onChanged: (value) {
-              setState(() {
-                _typeQuery = value.trim();
-              });
-            },
+          Text(
+            _isPokemonActive
+                ? (_isItalianUi() ? 'Categoria carta' : 'Card category')
+                : l10n.typeLabel,
+            style: Theme.of(context).textTheme.titleSmall,
           ),
-          if (_typeQuery.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            if (filteredTypes.isEmpty)
-              Text(l10n.noResultsFound)
-            else
-              SizedBox(
-                height: filteredTypes.length > 8 ? 200 : null,
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: filteredTypes.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final type = filteredTypes[index];
-                    return ListTile(
-                      title: Text(type),
-                      onTap: () {
-                        setState(() {
-                          _selectedTypes.add(type);
-                          _typeQuery = '';
-                        });
-                        _schedulePreviewUpdate();
-                      },
-                    );
-                  },
-                ),
-              ),
-          ],
+          const SizedBox(height: 8),
+          buildChipRow<String>(
+            _knownTypes,
+            (value) => _selectedTypes.contains(value),
+            (value) {
+              if (!_selectedTypes.add(value)) {
+                _selectedTypes.remove(value);
+              }
+              _schedulePreviewUpdate();
+            },
+            (value) => _typeLabel(value),
+          ),
           const SizedBox(height: 16),
-          Text(l10n.manaValue, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            _isPokemonActive
+                ? (_isItalianUi()
+                      ? 'Costo energia (attacco)'
+                      : 'Attack energy cost')
+                : l10n.manaValue,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -5008,7 +5635,9 @@ class _CollectionFilterBuilderPageState
               const Spacer(),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(_buildFilter()),
-                child: Text(isEditing ? l10n.save : l10n.create),
+                child: Text(
+                  widget.submitLabel ?? (isEditing ? l10n.save : l10n.create),
+                ),
               ),
             ],
           ),
@@ -5135,11 +5764,12 @@ class _CreateCollectionSheet extends StatelessWidget {
           ),
           _buildCreateOption(
             context,
-            icon: Icons.style,
+            icon: Icons.view_carousel_rounded,
             title: l10n.deckCollectionTitle,
             subtitle: l10n.deckCollectionSubtitle,
             enabled: canCreateDeck,
-            onTap: () => Navigator.of(context).pop(_CollectionCreateAction.deck),
+            onTap: () =>
+                Navigator.of(context).pop(_CollectionCreateAction.deck),
           ),
         ],
       ),
@@ -6408,10 +7038,7 @@ class _ScanFieldStatusBox extends StatelessWidget {
 }
 
 class _DeckImportSource {
-  const _DeckImportSource({
-    required this.fileName,
-    required this.content,
-  });
+  const _DeckImportSource({required this.fileName, required this.content});
 
   final String fileName;
   final String content;
@@ -6442,10 +7069,7 @@ class _DeckImportResult {
 }
 
 class _ParsedDeckList {
-  const _ParsedDeckList({
-    required this.mainboard,
-    required this.sideboard,
-  });
+  const _ParsedDeckList({required this.mainboard, required this.sideboard});
 
   final Map<String, int> mainboard;
   final Map<String, int> sideboard;

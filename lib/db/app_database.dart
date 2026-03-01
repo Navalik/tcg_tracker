@@ -257,6 +257,45 @@ class ScryfallDatabase {
     return fallback?.read<int>('id');
   }
 
+  Future<int> ensureAllCardsCollectionId() async {
+    final existingId = await fetchAllCardsCollectionId();
+    if (existingId != null) {
+      final db = await open();
+      await (db.update(
+        db.collections,
+      )..where((tbl) => tbl.id.equals(existingId))).write(
+        CollectionsCompanion(type: Value(collectionTypeToDb(CollectionType.all))),
+      );
+      return existingId;
+    }
+    final db = await open();
+    final legacy = await db
+        .customSelect(
+          '''
+          SELECT id AS id
+          FROM collections
+          WHERE lower(trim(name)) IN (?, ?, ?)
+          LIMIT 1
+          ''',
+          variables: [
+            Variable.withString('all cards'),
+            Variable.withString('tutte le carte'),
+            Variable.withString('my collection'),
+          ],
+        )
+        .getSingleOrNull();
+    if (legacy != null) {
+      final legacyId = legacy.read<int>('id');
+      await (db.update(
+        db.collections,
+      )..where((tbl) => tbl.id.equals(legacyId))).write(
+        CollectionsCompanion(type: Value(collectionTypeToDb(CollectionType.all))),
+      );
+      return legacyId;
+    }
+    return addCollection('All cards', type: CollectionType.all);
+  }
+
   Future<int?> fetchBasicLandsCollectionId() async {
     final db = await open();
     final typed =
@@ -291,12 +330,15 @@ class ScryfallDatabase {
 
   Future<int?> fetchDeckSideboardCollectionId(int deckCollectionId) async {
     final db = await open();
-    final row = await (db.select(db.collections)
-          ..where(
-            (tbl) => tbl.name.equals(deckSideboardCollectionName(deckCollectionId)),
-          )
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (db.select(db.collections)
+              ..where(
+                (tbl) => tbl.name.equals(
+                  deckSideboardCollectionName(deckCollectionId),
+                ),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     return row?.id;
   }
 
@@ -323,13 +365,14 @@ class ScryfallDatabase {
     final existingId = await fetchBasicLandsCollectionId();
     if (existingId != null) {
       final db = await open();
-      await (db.update(db.collections)..where((tbl) => tbl.id.equals(existingId)))
-          .write(
-            CollectionsCompanion(
-              name: Value(_basicLandsCollectionInternalName),
-              type: Value(collectionTypeToDb(CollectionType.basicLands)),
-            ),
-          );
+      await (db.update(
+        db.collections,
+      )..where((tbl) => tbl.id.equals(existingId))).write(
+        CollectionsCompanion(
+          name: Value(_basicLandsCollectionInternalName),
+          type: Value(collectionTypeToDb(CollectionType.basicLands)),
+        ),
+      );
       return existingId;
     }
     return addCollection(
@@ -392,6 +435,12 @@ class ScryfallDatabase {
     }
     for (final row in rows) {
       if (row.name.trim().toLowerCase() == 'all cards') {
+        return row.id;
+      }
+    }
+    for (final row in rows) {
+      final normalized = row.name.trim().toLowerCase();
+      if (normalized == 'tutte le carte' || normalized == 'my collection') {
         return row.id;
       }
     }
@@ -875,9 +924,6 @@ class ScryfallDatabase {
       if (normalized.isNotEmpty) {
         final colorClauses = <String>[];
         for (final color in normalized) {
-          if (color == 'C') {
-            continue;
-          }
           colorClauses.add(
             r'(cards.colors LIKE ? OR cards.color_identity LIKE ?)',
           );
@@ -887,7 +933,10 @@ class ScryfallDatabase {
             Variable.withString(normalizedLike),
           ]);
         }
-        if (normalized.contains('C')) {
+        // Compatibility fallback:
+        // - MTG colorless cards may be stored without explicit color codes.
+        // - Legacy Pokemon "none" cards may have empty colors.
+        if (normalized.contains('C') || normalized.contains('N')) {
           colorClauses.add('''
             (
               COALESCE(cards.colors, '') = ''
@@ -903,7 +952,17 @@ class ScryfallDatabase {
 
     final artist = filter.artist?.trim();
     if (artist != null && artist.isNotEmpty) {
-      whereClauses.add('LOWER(COALESCE(cards.artist, \'\')) LIKE ?');
+      whereClauses.add('''
+        LOWER(
+          TRIM(
+            COALESCE(
+              NULLIF(cards.artist, ''),
+              json_extract(cards.card_json, '\$.artist'),
+              ''
+            )
+          )
+        ) LIKE ?
+      ''');
       final like = '%${artist.toLowerCase()}%';
       variables.add(Variable.withString(like));
     }
@@ -919,14 +978,12 @@ class ScryfallDatabase {
 
     final format = filter.format?.trim().toLowerCase();
     if (format != null && format.isNotEmpty) {
-      whereClauses.add(
-        '''
+      whereClauses.add('''
         (
           LOWER(COALESCE(json_extract(cards.card_json, ?), '')) IN (?, ?)
           OR COALESCE(json_extract(cards.card_json, ?), '') = ''
         )
-        ''',
-      );
+        ''');
       variables.addAll([
         Variable.withString(r'$.legalities.' + format),
         Variable.withString('legal'),
@@ -1620,18 +1677,27 @@ class ScryfallDatabase {
     int limit = 40,
   }) async {
     final db = await open();
-    final where = <String>["artist IS NOT NULL", "artist != ''"];
+    const artistExpr = '''
+      TRIM(
+        COALESCE(
+          NULLIF(cards.artist, ''),
+          json_extract(cards.card_json, '\$.artist'),
+          ''
+        )
+      )
+    ''';
+    final where = <String>['$artistExpr != \'\''];
     final variables = <Variable>[];
     final resolvedQuery = query?.trim().toLowerCase();
     if (resolvedQuery != null && resolvedQuery.isNotEmpty) {
-      where.add('LOWER(artist) LIKE ?');
+      where.add('LOWER($artistExpr) LIKE ?');
       variables.add(Variable.withString('%$resolvedQuery%'));
     }
     final whereSql = where.isEmpty ? '' : 'WHERE ${where.join(' AND ')}';
     final rows = await db
         .customSelect(
           '''
-      SELECT DISTINCT artist
+      SELECT DISTINCT $artistExpr AS artist
       FROM cards
       $whereSql
       ORDER BY artist ASC
@@ -2003,8 +2069,9 @@ class ScryfallDatabase {
       return null;
     }
     final db = await open();
-    final rows = await db.customSelect(
-      '''
+    final rows = await db
+        .customSelect(
+          '''
       SELECT id AS id
       FROM cards
       WHERE LOWER(name) = ?
@@ -2020,8 +2087,9 @@ class ScryfallDatabase {
         END ASC
       LIMIT 1
       ''',
-      variables: [Variable.withString(normalizedName)],
-    ).get();
+          variables: [Variable.withString(normalizedName)],
+        )
+        .get();
     if (rows.isEmpty) {
       return null;
     }
@@ -2042,8 +2110,9 @@ class ScryfallDatabase {
       return null;
     }
     final db = await open();
-    final strictRows = await db.customSelect(
-      '''
+    final strictRows = await db
+        .customSelect(
+          '''
       SELECT id AS id
       FROM cards
       WHERE
@@ -2063,14 +2132,16 @@ class ScryfallDatabase {
         COALESCE(set_code, '') ASC
       LIMIT 1
       ''',
-      variables: [Variable.withString(basicName)],
-    ).get();
+          variables: [Variable.withString(basicName)],
+        )
+        .get();
     if (strictRows.isNotEmpty) {
       return strictRows.first.read<String>('id');
     }
 
-    final fallbackRows = await db.customSelect(
-      '''
+    final fallbackRows = await db
+        .customSelect(
+          '''
       SELECT id AS id
       FROM cards
       WHERE
@@ -2088,8 +2159,9 @@ class ScryfallDatabase {
         END ASC
       LIMIT 1
       ''',
-      variables: [Variable.withString(basicName)],
-    ).get();
+          variables: [Variable.withString(basicName)],
+        )
+        .get();
     if (fallbackRows.isEmpty) {
       return null;
     }
@@ -2113,8 +2185,9 @@ class ScryfallDatabase {
       return null;
     }
     final db = await open();
-    final rows = await db.customSelect(
-      '''
+    final rows = await db
+        .customSelect(
+          '''
       SELECT collection_cards.card_id AS card_id
       FROM collection_cards
       JOIN cards ON cards.id = collection_cards.card_id
@@ -2135,13 +2208,14 @@ class ScryfallDatabase {
         COALESCE(cards.released_at, '') DESC
       LIMIT 1
       ''',
-      variables: [
-        Variable.withInt(collectionId),
-        Variable.withString(basicName),
-        Variable.withString('["$normalizedMana"]'),
-        Variable.withString(basicName),
-      ],
-    ).get();
+          variables: [
+            Variable.withInt(collectionId),
+            Variable.withString(basicName),
+            Variable.withString('["$normalizedMana"]'),
+            Variable.withString(basicName),
+          ],
+        )
+        .get();
     if (rows.isEmpty) {
       return null;
     }
@@ -2399,6 +2473,134 @@ class ScryfallDatabase {
 
   Future<void> deleteAllCards(AppDatabase db) async {
     await db.customStatement('DELETE FROM cards');
+  }
+
+  Future<int> repairMissingSetCodesFromCardIds() async {
+    final db = await open();
+    await db.customStatement('''
+      UPDATE cards
+      SET set_code = LOWER(SUBSTR(id, 1, INSTR(id, '-') - 1))
+      WHERE (set_code IS NULL OR TRIM(set_code) = '')
+        AND INSTR(id, '-') > 1
+    ''');
+    final row = await db
+        .customSelect('SELECT changes() AS count')
+        .getSingleOrNull();
+    return row?.read<int>('count') ?? 0;
+  }
+
+  Future<int> backfillSetNames(Map<String, String> setNamesByCode) async {
+    if (setNamesByCode.isEmpty) {
+      return 0;
+    }
+    final db = await open();
+    var updated = 0;
+    await db.transaction(() async {
+      for (final entry in setNamesByCode.entries) {
+        final code = entry.key.trim().toLowerCase();
+        final name = entry.value.trim();
+        if (code.isEmpty || name.isEmpty) {
+          continue;
+        }
+        await db.customStatement(
+          '''
+          UPDATE cards
+          SET set_name = ?
+          WHERE LOWER(COALESCE(set_code, '')) = ?
+            AND (set_name IS NULL OR TRIM(set_name) = '')
+          ''',
+          [name, code],
+        );
+        final row = await db
+            .customSelect('SELECT changes() AS count')
+            .getSingleOrNull();
+        updated += row?.read<int>('count') ?? 0;
+      }
+    });
+    return updated;
+  }
+
+  Future<int> repairMissingColorsFromTypeLine() async {
+    final db = await open();
+    final rows = await db.customSelect('''
+      SELECT id AS id, type_line AS type_line
+      FROM cards
+      WHERE (colors IS NULL OR TRIM(colors) = '')
+        AND (type_line IS NOT NULL AND TRIM(type_line) != '')
+      ''').get();
+    if (rows.isEmpty) {
+      return 0;
+    }
+    var updated = 0;
+    await db.transaction(() async {
+      for (final row in rows) {
+        final id = row.read<String>('id');
+        final typeLine = row.readNullable<String>('type_line') ?? '';
+        final inferred = _inferColorCodesFromTypeLine(typeLine);
+        if (inferred.isEmpty) {
+          continue;
+        }
+        final encoded = _encodeColorList(inferred);
+        if (encoded == null || encoded.isEmpty) {
+          continue;
+        }
+        await db.customStatement(
+          '''
+          UPDATE cards
+          SET colors = ?, color_identity = COALESCE(NULLIF(color_identity, ''), ?)
+          WHERE id = ?
+          ''',
+          [encoded, encoded, id],
+        );
+        final changed = await db
+            .customSelect('SELECT changes() AS count')
+            .getSingleOrNull();
+        updated += changed?.read<int>('count') ?? 0;
+      }
+    });
+    return updated;
+  }
+
+  Future<int> normalizePokemonLightningColors() async {
+    final db = await open();
+    await db.customStatement('''
+      UPDATE cards
+      SET
+        colors = CASE
+          WHEN colors IS NULL OR TRIM(colors) = '' THEN 'L'
+          ELSE REPLACE(UPPER(colors), 'R', 'L')
+        END,
+        color_identity = CASE
+          WHEN color_identity IS NULL OR TRIM(color_identity) = '' THEN 'L'
+          ELSE REPLACE(UPPER(color_identity), 'R', 'L')
+        END
+      WHERE (
+        LOWER(COALESCE(type_line, '')) LIKE '%lightning%' OR
+        LOWER(COALESCE(type_line, '')) LIKE '%electric%'
+      )
+        AND (
+          UPPER(COALESCE(colors, '')) LIKE '%R%' OR
+          UPPER(COALESCE(color_identity, '')) LIKE '%R%'
+        )
+    ''');
+    final row = await db
+        .customSelect('SELECT changes() AS count')
+        .getSingleOrNull();
+    return row?.read<int>('count') ?? 0;
+  }
+
+  Future<int> backfillArtistsFromCardJson() async {
+    final db = await open();
+    await db.customStatement('''
+      UPDATE cards
+      SET artist = TRIM(json_extract(card_json, '\$.artist'))
+      WHERE (artist IS NULL OR TRIM(artist) = '')
+        AND TRIM(COALESCE(json_extract(card_json, '\$.artist'), '')) != ''
+    ''');
+    final row = await db
+        .customSelect('SELECT changes() AS count')
+        .getSingleOrNull();
+    return row?.read<int>('count') ?? 0;
   }
 
   Future<void> insertCardsBatch(
@@ -2930,13 +3132,23 @@ class ScryfallDatabase {
     final name = (card['name'] as String?)?.trim() ?? '';
     final setCode = (card['set_code'] as String?)?.trim().toLowerCase() ?? '';
     final setName = (card['set_name'] as String?)?.trim() ?? '';
-    final collectorNumber =
-        (card['collector_number'] as String?)?.trim() ?? '';
+    final setTotal = (card['set_total'] as num?)?.toInt();
+    final collectorNumber = (card['collector_number'] as String?)?.trim() ?? '';
     final rarity = (card['rarity'] as String?)?.trim() ?? '';
     final typeLine = (card['type_line'] as String?)?.trim() ?? '';
     final releasedAt = (card['released_at'] as String?)?.trim() ?? '';
+    final manaValueRaw = card['mana_value'];
+    double? manaValue;
+    if (manaValueRaw is num) {
+      manaValue = manaValueRaw.toDouble();
+    } else if (manaValueRaw is String) {
+      manaValue = double.tryParse(manaValueRaw.trim());
+    }
     final imageSmall = (card['image_small'] as String?)?.trim() ?? '';
     final imageLarge = (card['image_large'] as String?)?.trim() ?? '';
+    final artist = (card['artist'] as String?)?.trim() ?? '';
+    final colors = _readPokemonColorCodes(card['colors']);
+    final colorIdentity = _readPokemonColorCodes(card['color_identity']);
     final imageUris = <String, String>{};
     if (imageSmall.isNotEmpty) {
       imageUris['small'] = imageSmall;
@@ -2952,16 +3164,16 @@ class ScryfallDatabase {
       name: Value(normalizedName),
       setCode: Value(setCode),
       setName: Value(setName),
-      setTotal: const Value(null),
+      setTotal: Value(setTotal),
       collectorNumber: Value(collectorNumber),
       rarity: Value(rarity),
       typeLine: Value(typeLine),
       manaCost: const Value(''),
       oracleText: const Value(''),
-      cmc: const Value(null),
-      colors: const Value(''),
-      colorIdentity: const Value(''),
-      artist: const Value(''),
+      cmc: Value(manaValue),
+      colors: Value(_encodeColorList(colors)),
+      colorIdentity: Value(_encodeColorList(colorIdentity)),
+      artist: Value(artist),
       power: const Value(''),
       toughness: const Value(''),
       loyalty: const Value(''),
@@ -3096,6 +3308,79 @@ List<String> _normalizeColorList(List<String> colors) {
     normalized.add(value);
   }
   return normalized;
+}
+
+List<String> _readPokemonColorCodes(dynamic raw) {
+  if (raw is List) {
+    return _normalizeColorList(raw.whereType<String>().toList());
+  }
+  if (raw is String) {
+    final parts = raw
+        .split(',')
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    return _normalizeColorList(parts);
+  }
+  return const [];
+}
+
+List<String> _inferColorCodesFromTypeLine(String typeLine) {
+  final value = typeLine.trim().toLowerCase();
+  if (value.isEmpty) {
+    return const [];
+  }
+  final tokens = value
+      .split(RegExp(r'[^a-z]+'))
+      .map((it) => it.trim())
+      .where((it) => it.isNotEmpty)
+      .toSet();
+  final codes = <String>{};
+  for (final token in tokens) {
+    switch (token) {
+      case 'grass':
+        codes.add('G');
+        break;
+      case 'fire':
+        codes.add('R');
+        break;
+      case 'fighting':
+        codes.add('F');
+        break;
+      case 'dragon':
+        codes.add('D');
+        break;
+      case 'lightning':
+      case 'electric':
+        codes.add('L');
+        break;
+      case 'water':
+      case 'ice':
+        codes.add('U');
+        break;
+      case 'psychic':
+      case 'darkness':
+      case 'dark':
+      case 'ghost':
+        codes.add('B');
+        break;
+      case 'fairy':
+      case 'white':
+        codes.add('W');
+        break;
+      case 'metal':
+      case 'steel':
+        codes.add('M');
+        break;
+      case 'colorless':
+        codes.add('C');
+        break;
+    }
+  }
+  if (codes.isEmpty) {
+    return const [];
+  }
+  return codes.toList(growable: false);
 }
 
 String? _encodeColorList(List<String> colors) {

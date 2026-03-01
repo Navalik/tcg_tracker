@@ -1961,7 +1961,7 @@ abstract class AppLocalizations {
   /// No description provided for @allArtworks.
   ///
   /// In en, this message translates to:
-  /// **'All artworks'**
+  /// **'Search online'**
   String get allArtworks;
 
   /// No description provided for @ownedLabel.
@@ -2303,7 +2303,7 @@ abstract class AppLocalizations {
   /// No description provided for @limitedCoverageTapAllArtworks.
   ///
   /// In en, this message translates to:
-  /// **'Limited coverage for the active database'**
+  /// **'Limited local coverage\nTap \"Search online\" to see more cards'**
   String get limitedCoverageTapAllArtworks;
 
   /// No description provided for @planSelectedPreview.

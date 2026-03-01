@@ -1,9 +1,7 @@
 part of 'package:tcg_tracker/main.dart';
 
 class _BulkOption {
-  const _BulkOption({
-    required this.type,
-  });
+  const _BulkOption({required this.type});
 
   final String type;
 }
@@ -12,19 +10,13 @@ const String _allCardsCollectionName = 'All cards';
 const String _legacyMyCollectionName = 'My collection';
 const String _setPrefix = 'Set: ';
 const String _basicLandsCollectionName = '__basic_lands__';
+const String _bulkPickerResetAction = '__reset_db__';
 
 const List<_BulkOption> _bulkOptions = [
-  _BulkOption(
-    type: 'default_cards',
-  ),
-  _BulkOption(
-    type: 'oracle_cards',
-  ),
-  _BulkOption(
-    type: 'unique_artwork',
-  ),
+  _BulkOption(type: 'default_cards'),
+  _BulkOption(type: 'oracle_cards'),
+  _BulkOption(type: 'unique_artwork'),
 ];
-
 
 String _bulkTypeLabel(AppLocalizations l10n, String? type) {
   if (type == null) {
@@ -81,6 +73,8 @@ Future<String?> _showBulkTypePicker(
   String? selectedType,
   bool requireConfirmation = true,
   String? confirmLabel,
+  bool allowResetAction = false,
+  String? resetLabel,
 }) {
   return showDialog<String>(
     context: context,
@@ -89,7 +83,8 @@ Future<String?> _showBulkTypePicker(
       final l10n = AppLocalizations.of(context)!;
       final theme = Theme.of(context);
       String currentSelection =
-          selectedType ?? (_bulkOptions.isNotEmpty ? _bulkOptions.first.type : '');
+          selectedType ??
+          (_bulkOptions.isNotEmpty ? _bulkOptions.first.type : '');
       return StatefulBuilder(
         builder: (context, setModalState) {
           return Dialog(
@@ -168,6 +163,29 @@ Future<String?> _showBulkTypePicker(
                   ),
                   if (requireConfirmation) ...[
                     const SizedBox(height: 8),
+                    if (allowResetAction) ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFF5D4731)),
+                            foregroundColor: const Color(0xFFE9C46A),
+                          ),
+                          onPressed: () =>
+                              Navigator.of(context).pop(_bulkPickerResetAction),
+                          icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                          label: Text(
+                            resetLabel ??
+                                (Localizations.localeOf(context).languageCode
+                                        .toLowerCase()
+                                        .startsWith('it')
+                                    ? 'Reset database'
+                                    : 'Reset database'),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
@@ -211,10 +229,12 @@ Widget _buildBulkOptionTile({
   required VoidCallback onTap,
 }) {
   final theme = Theme.of(context);
-  final borderColor =
-      selected ? const Color(0xFFE9C46A) : const Color(0xFF3A2F24);
-  final backgroundColor =
-      selected ? const Color(0x332A1E10) : const Color(0x221D1712);
+  final borderColor = selected
+      ? const Color(0xFFE9C46A)
+      : const Color(0xFF3A2F24);
+  final backgroundColor = selected
+      ? const Color(0x332A1E10)
+      : const Color(0x221D1712);
 
   return Material(
     color: Colors.transparent,
@@ -235,7 +255,9 @@ Widget _buildBulkOptionTile({
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
               size: 18,
-              color: selected ? const Color(0xFFE9C46A) : const Color(0xFFBFAE95),
+              color: selected
+                  ? const Color(0xFFE9C46A)
+                  : const Color(0xFFBFAE95),
             ),
             const SizedBox(width: 10),
             Expanded(

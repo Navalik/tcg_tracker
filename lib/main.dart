@@ -54,7 +54,9 @@ Future<void> main() async {
     try {
       await Firebase.initializeApp().timeout(const Duration(seconds: 8));
       _firebaseReady = true;
-      await AnalyticsService.instance.init().timeout(const Duration(seconds: 5));
+      await AnalyticsService.instance.init().timeout(
+        const Duration(seconds: 5),
+      );
     } catch (_) {
       _firebaseReady = false;
     }
@@ -156,9 +158,402 @@ class _TCGTrackerState extends State<TCGTracker> {
           supportedLocales: AppLocalizations.supportedLocales,
           locale: locale,
           themeMode: ThemeMode.dark,
-          home: const _AuthGate(),
+          home: const _StartupSplashGate(),
         );
       },
+    );
+  }
+}
+
+class _StartupSplashGate extends StatefulWidget {
+  const _StartupSplashGate();
+
+  @override
+  State<_StartupSplashGate> createState() => _StartupSplashGateState();
+}
+
+class _StartupSplashGateState extends State<_StartupSplashGate>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  bool _showAuthGate = false;
+  String _versionLabel = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    )..forward();
+    _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    unawaited(_loadVersionLabel());
+    unawaited(_scheduleTransition());
+  }
+
+  Future<void> _loadVersionLabel() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _versionLabel = 'v${info.version}+${info.buildNumber}';
+      });
+    } catch (_) {
+      // Keep splash resilient even if version is unavailable.
+    }
+  }
+
+  Future<void> _scheduleTransition() async {
+    await Future<void>.delayed(const Duration(milliseconds: 2600));
+    if (!mounted) {
+      return;
+    }
+    await _controller.reverse();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _showAuthGate = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showAuthGate) {
+      return const _AuthGate();
+    }
+    return FadeTransition(
+      opacity: _opacity,
+      child: _UniversalSplashScreen(versionLabel: _versionLabel),
+    );
+  }
+}
+
+class _UniversalSplashScreen extends StatelessWidget {
+  const _UniversalSplashScreen({required this.versionLabel});
+
+  final String versionLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          const _AppBackground(),
+          SafeArea(
+            child: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildColorTitle(context),
+                      const SizedBox(height: 34),
+                      const _SplashCardMark(),
+                    ],
+                  ),
+                ),
+                if (versionLabel.trim().isNotEmpty)
+                  Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 18),
+                      child: Text(
+                        versionLabel,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFC9BDA4),
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildColorTitle(BuildContext context) {
+    const name = 'BinderVault';
+    const palette = <Color>[
+      Color(0xFFE9C46A),
+      Color(0xFFC26A4A),
+      Color(0xFF667E99),
+      Color(0xFF6F8670),
+    ];
+    const cardPalette = <Color>[
+      Color(0xFF2C231C),
+      Color(0xFF2A1F19),
+      Color(0xFF1F2630),
+      Color(0xFF222C24),
+    ];
+    const cardStrokePalette = <Color>[
+      Color(0xFF7A614A),
+      Color(0xFF7A5544),
+      Color(0xFF556B84),
+      Color(0xFF5C7560),
+    ];
+    const angles = <double>[
+      -0.11,
+      0.06,
+      -0.08,
+      0.09,
+      -0.05,
+      0.07,
+      -0.1,
+      0.05,
+      -0.07,
+      0.08,
+      -0.04,
+    ];
+    const yOffsets = <double>[1, -2, 2, -1, 3, -1, 2, -2, 1, -1, 2];
+    final letters = <Widget>[];
+    for (var i = 0; i < name.length; i++) {
+      final char = name[i];
+      final emphasis = char == 'B' || char == 'V';
+      letters.add(
+        _SplashTitleLetter(
+          char: char,
+          color: palette[i % palette.length],
+          emphasized: emphasis,
+          insideCard: true,
+          cardFill: cardPalette[i % cardPalette.length],
+          cardStroke: cardStrokePalette[i % cardStrokePalette.length],
+          angle: angles[i % angles.length],
+          yOffset: yOffsets[i % yOffsets.length],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(mainAxisSize: MainAxisSize.min, children: letters),
+      ),
+    );
+  }
+}
+
+class _SplashTitleLetter extends StatelessWidget {
+  const _SplashTitleLetter({
+    required this.char,
+    required this.color,
+    required this.emphasized,
+    required this.insideCard,
+    required this.cardFill,
+    required this.cardStroke,
+    required this.angle,
+    required this.yOffset,
+  });
+
+  final String char;
+  final Color color;
+  final bool emphasized;
+  final bool insideCard;
+  final Color cardFill;
+  final Color cardStroke;
+  final double angle;
+  final double yOffset;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = emphasized ? 70.0 : 60.0;
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = emphasized ? 4.8 : 3.8
+      ..color = const Color(0xFF150F0B);
+    final letter = Stack(
+      alignment: Alignment.center,
+      children: [
+        Text(
+          char,
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w900,
+            foreground: stroke,
+            letterSpacing: 0.25,
+          ),
+        ),
+        Text(
+          char,
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: FontWeight.w900,
+            color: color,
+            letterSpacing: 0.25,
+            shadows: [
+              Shadow(
+                color: const Color(0xC0000000),
+                offset: Offset(emphasized ? 0 : 0, emphasized ? 3 : 2),
+                blurRadius: emphasized ? 9 : 6,
+              ),
+              if (emphasized)
+                Shadow(
+                  color: color.withValues(alpha: 0.55),
+                  offset: const Offset(0, 0),
+                  blurRadius: 12,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1.4),
+      child: insideCard
+          ? Transform.translate(
+              offset: Offset(0, yOffset),
+              child: Transform.rotate(
+                angle: angle,
+                child: Container(
+                  width: emphasized ? 66 : 58,
+                  height: emphasized ? 86 : 78,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: cardFill,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(
+                      color: cardStroke,
+                      width: emphasized ? 1.8 : 1.4,
+                    ),
+                    boxShadow: [
+                      const BoxShadow(
+                        color: Color(0x66000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 5),
+                      ),
+                      if (emphasized)
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.36),
+                          blurRadius: 10,
+                          offset: const Offset(0, 0),
+                        ),
+                    ],
+                  ),
+                  child: letter,
+                ),
+              ),
+            )
+          : letter,
+    );
+  }
+}
+
+class _SplashCardMark extends StatelessWidget {
+  const _SplashCardMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 250,
+      height: 272,
+      child: Stack(
+        alignment: Alignment.center,
+        children: const [
+          _SplashCard(
+            offset: Offset(-44, 24),
+            angle: -0.22,
+            fill: Color(0xFF6A4A45),
+            stroke: Color(0xFF8B655F),
+          ),
+          _SplashCard(
+            offset: Offset(44, 24),
+            angle: 0.22,
+            fill: Color(0xFF465B72),
+            stroke: Color(0xFF667E99),
+          ),
+          _SplashCard(
+            offset: Offset(0, 10),
+            angle: 0,
+            fill: Color(0xFF4E624F),
+            stroke: Color(0xFF6F8670),
+          ),
+          _SplashDiamondShadow(),
+          _SplashDiamond(),
+        ],
+      ),
+    );
+  }
+}
+
+class _SplashCard extends StatelessWidget {
+  const _SplashCard({
+    required this.offset,
+    required this.angle,
+    required this.fill,
+    required this.stroke,
+  });
+
+  final Offset offset;
+  final double angle;
+  final Color fill;
+  final Color stroke;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: offset,
+      child: Transform.rotate(
+        angle: angle,
+        child: Container(
+          width: 102,
+          height: 148,
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(color: stroke, width: 1.3),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashDiamondShadow extends StatelessWidget {
+  const _SplashDiamondShadow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: const Offset(0, 90),
+      child: Transform.rotate(
+        angle: 0.785398,
+        child: Container(width: 44, height: 44, color: const Color(0x82000000)),
+      ),
+    );
+  }
+}
+
+class _SplashDiamond extends StatelessWidget {
+  const _SplashDiamond();
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.translate(
+      offset: const Offset(0, 82),
+      child: Transform.rotate(
+        angle: 0.785398,
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: const Color(0xFFD4B86A),
+            border: Border.all(color: const Color(0xFFB26A39), width: 2),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -197,7 +592,7 @@ class _AuthGateState extends State<_AuthGate> {
         return l10n.authGoogleSignInConfigError;
       }
       if (blob.contains('network_error')) {
-        return l10n.authNetworkErrorDuringGoogleSignIn;
+        return l10n.authGoogleSignInFailedWithCode(error.code);
       }
       if (blob.contains('sign_in_canceled') || blob.contains('cancel')) {
         return l10n.authGoogleSignInCancelled;

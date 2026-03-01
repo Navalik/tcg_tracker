@@ -502,7 +502,7 @@
   "noCardTextRecognizedTryLightFocus": "No card text recognized. Try better light and focus.",
   "dailyScanLimitReachedTitle": "Daily scan limit reached",
   "freePlan20ScansUpgradePlusBody": "Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.",
-  "allArtworks": "All artworks",
+  "allArtworks": "Search online",
   "ownedLabel": "Owned",
   "searchingOnlinePrintings": "Searching online printings...",
   "addToCollection": "Add to collection",
@@ -566,7 +566,7 @@
   "scryfallProviderLabel": "Scryfall",
   "currencyEurCode": "EUR",
   "currencyUsdCode": "USD",
-  "limitedCoverageTapAllArtworks": "Limited coverage for the active database",
+  "limitedCoverageTapAllArtworks": "Limited local coverage\nTap \"Search online\" to see more cards",
   "planSelectedPreview": "{plan} plan selected. Billing will be enabled in a next step.",
   "@planSelectedPreview": {
     "placeholders": {

@@ -1053,7 +1053,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.';
 
   @override
-  String get allArtworks => 'All artworks';
+  String get allArtworks => 'Search online';
 
   @override
   String get ownedLabel => 'Owned';
@@ -1233,7 +1233,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get limitedCoverageTapAllArtworks =>
-      'Limited coverage for the active database';
+      'Limited local coverage\nTap \"Search online\" to see more cards';
 
   @override
   String planSelectedPreview(Object plan) {

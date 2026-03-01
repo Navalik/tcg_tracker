@@ -83,22 +83,43 @@ List<Color> _manaAccentColors(Set<String> colors) {
   if (colors.isEmpty) {
     return const [];
   }
-  if (colors.length == 1 && colors.contains('C')) {
+  if (colors.length == 1 && (colors.contains('C') || colors.contains('N'))) {
     return const [Color(0xFFB9B1A5)];
   }
   return colors.map(_manaColorFromCode).toList();
 }
 
-Set<String> _parseColorSet(String colors, String colorIdentity) {
+List<Color> _accentColorsForCard({
+  required String colors,
+  required String colorIdentity,
+  required String typeLine,
+}) {
+  if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+    return _pokemonAccentColors(
+      _parsePokemonTypeTokens(
+        colors: colors,
+        colorIdentity: colorIdentity,
+        typeLine: typeLine,
+      ),
+    );
+  }
+  return _manaAccentColors(_parseColorSet(colors, colorIdentity, typeLine));
+}
+
+Set<String> _parseColorSet(
+  String colors,
+  String colorIdentity, [
+  String typeLine = '',
+]) {
   final values = <String>{};
   void addFrom(String raw) {
     if (raw.trim().isEmpty) {
       return;
     }
     for (final part in raw.split(',')) {
-      final value = part.trim().toUpperCase();
-      if (value.isNotEmpty) {
-        values.add(value);
+      final code = _normalizeTcgColorCode(part);
+      if (code != null) {
+        values.add(code);
       }
     }
   }
@@ -106,9 +127,243 @@ Set<String> _parseColorSet(String colors, String colorIdentity) {
   addFrom(colors);
   addFrom(colorIdentity);
   if (values.isEmpty) {
-    return {'C'};
+    for (final token in typeLine.split(RegExp(r'[^A-Za-z]+'))) {
+      final code = _normalizeTcgColorCode(token);
+      if (code != null) {
+        values.add(code);
+      }
+    }
+  }
+  if (values.isEmpty) {
+    if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+      return const {'N'};
+    }
+    return const {'C'};
   }
   return values;
+}
+
+String? _normalizeTcgColorCode(String raw) {
+  final token = raw.trim().toUpperCase();
+  if (token.isEmpty) {
+    return null;
+  }
+  switch (token) {
+    case 'W':
+    case 'U':
+    case 'B':
+    case 'F':
+    case 'D':
+    case 'R':
+    case 'G':
+    case 'L':
+    case 'C':
+    case 'M':
+    case 'N':
+      return token;
+  }
+  final clean = token.replaceAll(RegExp(r'[^A-Z]'), '');
+  switch (clean) {
+    case 'WHITE':
+    case 'FAIRY':
+      return 'W';
+    case 'BLUE':
+    case 'WATER':
+    case 'ICE':
+      return 'U';
+    case 'BLACK':
+    case 'DARK':
+    case 'DARKNESS':
+    case 'PSYCHIC':
+      return 'B';
+    case 'RED':
+    case 'FIRE':
+      return 'R';
+    case 'FIGHTING':
+      return 'F';
+    case 'DRAGON':
+      return 'D';
+    case 'ELECTRIC':
+    case 'LIGHTNING':
+      return 'L';
+    case 'GREEN':
+    case 'GRASS':
+      return 'G';
+    case 'COLORLESS':
+      return 'C';
+    case 'METAL':
+    case 'STEEL':
+      return 'M';
+    case 'NONE':
+    case 'NOENERGY':
+      return 'N';
+    default:
+      return null;
+  }
+}
+
+Set<String> _parsePokemonTypeTokens({
+  required String colors,
+  required String colorIdentity,
+  required String typeLine,
+}) {
+  final values = <String>{};
+
+  void addToken(String raw) {
+    final normalized = _normalizePokemonTypeToken(raw);
+    if (normalized != null) {
+      values.add(normalized);
+    }
+  }
+
+  void addFromRaw(String raw) {
+    if (raw.trim().isEmpty) {
+      return;
+    }
+    for (final part in raw.split(',')) {
+      addToken(part);
+    }
+    for (final token in raw.split(RegExp(r'[^A-Za-z]+'))) {
+      addToken(token);
+    }
+  }
+
+  addFromRaw(typeLine);
+  addFromRaw(colors);
+  addFromRaw(colorIdentity);
+  if (values.isEmpty) {
+    values.add('none');
+  }
+  return values;
+}
+
+String? _normalizePokemonTypeToken(String raw) {
+  final token = raw.trim().toLowerCase();
+  if (token.isEmpty) {
+    return null;
+  }
+  switch (token) {
+    case 'grass':
+      return 'grass';
+    case 'fire':
+      return 'fire';
+    case 'water':
+      return 'water';
+    case 'lightning':
+    case 'electric':
+      return 'lightning';
+    case 'psychic':
+      return 'psychic';
+    case 'fighting':
+      return 'fighting';
+    case 'darkness':
+    case 'dark':
+      return 'darkness';
+    case 'metal':
+    case 'steel':
+      return 'metal';
+    case 'fairy':
+      return 'fairy';
+    case 'dragon':
+      return 'dragon';
+    case 'colorless':
+      return 'colorless';
+    case 'ice':
+      return 'ice';
+    case 'ghost':
+      return 'ghost';
+    case 'l':
+      return 'lightning';
+    case 'u':
+      return 'water';
+    case 'g':
+      return 'grass';
+    case 'b':
+      return 'psychic';
+    case 'f':
+      return 'fighting';
+    case 'd':
+      return 'dragon';
+    case 'w':
+      return 'fairy';
+    case 'c':
+      return 'colorless';
+    case 'n':
+    case 'none':
+      return 'none';
+    case 'r':
+      return 'fire';
+    default:
+      return null;
+  }
+}
+
+const List<String> _pokemonTypeOrder = <String>[
+  'grass',
+  'fire',
+  'water',
+  'lightning',
+  'psychic',
+  'fighting',
+  'darkness',
+  'metal',
+  'fairy',
+  'dragon',
+  'ice',
+  'ghost',
+  'colorless',
+  'none',
+];
+
+List<Color> _pokemonAccentColors(Set<String> types) {
+  final normalized = types.isEmpty ? {'colorless'} : types;
+  final sorted = normalized.toList(growable: false)
+    ..sort((a, b) {
+      final ai = _pokemonTypeOrder.indexOf(a);
+      final bi = _pokemonTypeOrder.indexOf(b);
+      if (ai == -1 && bi == -1) {
+        return a.compareTo(b);
+      }
+      if (ai == -1) {
+        return 1;
+      }
+      if (bi == -1) {
+        return -1;
+      }
+      return ai.compareTo(bi);
+    });
+  return sorted.map(_pokemonColorFromType).toList(growable: false);
+}
+
+Color _pokemonColorFromType(String type) {
+  switch (type) {
+    case 'grass':
+      return const Color(0xFF6DBF5B);
+    case 'fire':
+      return const Color(0xFFF0803C);
+    case 'water':
+      return const Color(0xFF4A90E2);
+    case 'lightning':
+      return const Color(0xFFF2C94C);
+    case 'psychic':
+      return const Color(0xFFA66DD4);
+    case 'fighting':
+      return const Color(0xFFC26A4A);
+    case 'darkness':
+      return const Color(0xFF4F5663);
+    case 'metal':
+      return const Color(0xFF9AA5B1);
+    case 'fairy':
+      return const Color(0xFFE68ACF);
+    case 'dragon':
+      return const Color(0xFF6F5BD6);
+    case 'ice':
+      return const Color(0xFF7EC8E3);
+    case 'ghost':
+      return const Color(0xFF5C4B8A);
+    default:
+      return const Color(0xFFB9B1A5);
+  }
 }
 
 Color _manaColorFromCode(String code) {
@@ -119,8 +374,14 @@ Color _manaColorFromCode(String code) {
       return const Color(0xFF7FB4FF);
     case 'B':
       return const Color(0xFF8A7CA8);
+    case 'F':
+      return const Color(0xFFC26A4A);
+    case 'D':
+      return const Color(0xFF6F5BD6);
     case 'R':
       return const Color(0xFFEF8A5A);
+    case 'L':
+      return const Color(0xFFF2D35A);
     case 'G':
       return const Color(0xFF7FCF9B);
     default:
@@ -130,8 +391,10 @@ Color _manaColorFromCode(String code) {
 
 Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) {
   final base = Theme.of(context).colorScheme.surface;
-  final accents = _manaAccentColors(
-    _parseColorSet(entry.colors, entry.colorIdentity),
+  final accents = _accentColorsForCard(
+    colors: entry.colors,
+    colorIdentity: entry.colorIdentity,
+    typeLine: entry.typeLine,
   );
   if (accents.isEmpty) {
     return BoxDecoration(
@@ -168,8 +431,10 @@ Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) 
 
 Decoration _priceBadgeDecoration(BuildContext context, CollectionCardEntry entry) {
   final base = Theme.of(context).colorScheme.surface;
-  final accents = _manaAccentColors(
-    _parseColorSet(entry.colors, entry.colorIdentity),
+  final accents = _accentColorsForCard(
+    colors: entry.colors,
+    colorIdentity: entry.colorIdentity,
+    typeLine: entry.typeLine,
   );
   if (accents.isEmpty) {
     return BoxDecoration(

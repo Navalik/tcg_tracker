@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 android {
     namespace = "com.navalik.bindervault"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersionve
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

@@ -35,12 +35,16 @@ class PurchaseManager extends ChangeNotifier {
 
   // Google Play subscription product id configured in Play Console.
   static const String plusProductId = 'bindervault_plus';
+  static const String additionalTcgProductId = 'unlock_additional_tcg';
+  static const String magicOwnershipKey = 'magic';
+  static const String pokemonOwnershipKey = 'pokemon';
   static const String _billingMonthlyPeriod = 'P1M';
   static const String _billingYearlyPeriod = 'P1Y';
-  static const bool _requireServerEntitlementVerification = bool.fromEnvironment(
-    'REQUIRE_SERVER_ENTITLEMENT_VERIFICATION',
-    defaultValue: false,
-  );
+  static const bool _requireServerEntitlementVerification =
+      bool.fromEnvironment(
+        'REQUIRE_SERVER_ENTITLEMENT_VERIFICATION',
+        defaultValue: false,
+      );
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -48,6 +52,9 @@ class PurchaseManager extends ChangeNotifier {
 
   UserTier _userTier = UserTier.free;
   Set<String> _ownedTcgs = const <String>{};
+  bool _pokemonUnlocked = false;
+  AppTcgGame _primaryGame = AppTcgGame.mtg;
+  int _extraTcgSlots = 0;
   bool _storeAvailable = false;
   bool _initialized = false;
   bool _loadingPlans = false;
@@ -56,10 +63,30 @@ class PurchaseManager extends ChangeNotifier {
   String? _lastError;
   PlusPlanOption? _monthlyPlan;
   PlusPlanOption? _yearlyPlan;
+  ProductDetails? _additionalTcgProduct;
 
   UserTier get userTier => _userTier;
   bool get isPro => _userTier == UserTier.plus;
   Set<String> get ownedTcgs => _ownedTcgs;
+  ProductDetails? get additionalTcgProduct => _additionalTcgProduct;
+  String? get additionalTcgPriceLabel => _additionalTcgProduct?.price;
+  int get extraTcgSlots => _extraTcgSlots;
+  bool get hasExtraTcgSlots => _extraTcgSlots > 0;
+  bool canAccessGame(AppTcgGame game) {
+    if (game == _primaryGame) {
+      return true;
+    }
+    if (_ownedTcgs.contains(_ownershipKeyForGame(game))) {
+      return true;
+    }
+    final secondaryGames = _knownGames
+        .where((candidate) => candidate != _primaryGame)
+        .toList(growable: false);
+    final index = secondaryGames.indexOf(game);
+    return index >= 0 && index < _extraTcgSlots;
+  }
+
+  bool canAccessPokemon() => canAccessGame(AppTcgGame.pokemon);
   bool get storeAvailable => _storeAvailable;
   bool get isInitialized => _initialized;
   bool get loadingPlans => _loadingPlans;
@@ -80,6 +107,14 @@ class PurchaseManager extends ChangeNotifier {
         ? UserTier.free
         : _tierFromStored(await AppSettings.loadUserTier());
     _ownedTcgs = await AppSettings.loadOwnedTcgs();
+    _pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
+    _primaryGame =
+        await AppSettings.loadPrimaryTcgGameOrNull() ?? AppTcgGame.mtg;
+    _extraTcgSlots = await AppSettings.loadExtraTcgSlots();
+    if (_pokemonUnlocked && !_ownedTcgs.contains(pokemonOwnershipKey)) {
+      _ownedTcgs = {..._ownedTcgs, pokemonOwnershipKey};
+      await AppSettings.saveOwnedTcgs(_ownedTcgs);
+    }
 
     if (_supportsStore()) {
       _storeAvailable = await _inAppPurchase.isAvailable();
@@ -126,14 +161,25 @@ class PurchaseManager extends ChangeNotifier {
         _lastError = 'store_unavailable';
         return;
       }
-      final response = await _inAppPurchase.queryProductDetails({plusProductId});
+      final response = await _inAppPurchase.queryProductDetails({
+        plusProductId,
+        additionalTcgProductId,
+      });
       if (response.error != null) {
         _lastError = 'plans_unavailable';
         _monthlyPlan = null;
         _yearlyPlan = null;
+        _additionalTcgProduct = null;
       } else {
         _resolvePlansFromResponse(response);
-        if (!hasPlans) {
+        _additionalTcgProduct = null;
+        for (final details in response.productDetails) {
+          if (details.id == additionalTcgProductId) {
+            _additionalTcgProduct = details;
+            break;
+          }
+        }
+        if (!hasPlans && _additionalTcgProduct == null) {
           _lastError = 'plans_unavailable';
         }
       }
@@ -141,14 +187,56 @@ class PurchaseManager extends ChangeNotifier {
       _lastError = 'catalog_load_failed';
       _monthlyPlan = null;
       _yearlyPlan = null;
+      _additionalTcgProduct = null;
     } finally {
       _loadingPlans = false;
       notifyListeners();
     }
   }
 
+  Future<void> purchaseAdditionalTcgUnlock() async {
+    final product = _additionalTcgProduct;
+    if (!_supportsStore() || !_storeAvailable || product == null) {
+      return;
+    }
+    _lastError = null;
+    _purchasePending = true;
+    _startPurchaseWatchdog();
+    notifyListeners();
+    try {
+      final param = PurchaseParam(productDetails: product);
+      final started = await _inAppPurchase.buyNonConsumable(
+        purchaseParam: param,
+      );
+      if (!started) {
+        _lastError = 'purchase_start_failed';
+        _purchasePending = false;
+        _purchaseWatchdog?.cancel();
+        notifyListeners();
+      }
+    } catch (error) {
+      if (_isAlreadyOwnedError(error)) {
+        _lastError = 'already_owned';
+        _purchasePending = false;
+        _purchaseWatchdog?.cancel();
+        await refreshEntitlementFromStore();
+        if (_extraTcgSlots > 0 || _ownedTcgs.isNotEmpty) {
+          _lastError = null;
+        }
+        notifyListeners();
+        return;
+      }
+      _lastError = 'purchase_start_failed';
+      _purchasePending = false;
+      _purchaseWatchdog?.cancel();
+      notifyListeners();
+    }
+  }
+
   Future<void> purchasePlus(PlusPlanPeriod period) async {
-    final selected = period == PlusPlanPeriod.monthly ? _monthlyPlan : _yearlyPlan;
+    final selected = period == PlusPlanPeriod.monthly
+        ? _monthlyPlan
+        : _yearlyPlan;
     if (!_supportsStore() || !_storeAvailable || selected == null) {
       return;
     }
@@ -174,7 +262,9 @@ class PurchaseManager extends ChangeNotifier {
       } else {
         param = PurchaseParam(productDetails: selected.productDetails);
       }
-      final started = await _inAppPurchase.buyNonConsumable(purchaseParam: param);
+      final started = await _inAppPurchase.buyNonConsumable(
+        purchaseParam: param,
+      );
       if (!started) {
         _lastError = 'purchase_start_failed';
         _purchasePending = false;
@@ -216,12 +306,20 @@ class PurchaseManager extends ChangeNotifier {
           .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
       final response = await addition.queryPastPurchases();
       var plusActive = false;
+      var additionalTcgUnlocked = false;
       for (final purchase in response.pastPurchases) {
-        if (purchase.productID == plusProductId &&
-            (purchase.status == PurchaseStatus.purchased ||
-                purchase.status == PurchaseStatus.restored)) {
+        final activePurchase =
+            purchase.status == PurchaseStatus.purchased ||
+            purchase.status == PurchaseStatus.restored;
+        if (!activePurchase) {
+          continue;
+        }
+        if (purchase.productID == plusProductId) {
           plusActive = true;
-          break;
+          continue;
+        }
+        if (purchase.productID == additionalTcgProductId) {
+          additionalTcgUnlocked = true;
         }
       }
       if (plusActive && _requireServerEntitlementVerification) {
@@ -231,16 +329,24 @@ class PurchaseManager extends ChangeNotifier {
         }
       }
       await _setTier(plusActive ? UserTier.plus : UserTier.free);
+      _extraTcgSlots = additionalTcgUnlocked ? 1 : 0;
+      await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
+      notifyListeners();
     } catch (_) {
       _lastError = 'entitlement_refresh_failed';
       await _setTier(UserTier.free);
+      _extraTcgSlots = 0;
+      await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
       notifyListeners();
     }
   }
 
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (purchase.productID != plusProductId) {
+      final isKnownProduct =
+          purchase.productID == plusProductId ||
+          purchase.productID == additionalTcgProductId;
+      if (!isKnownProduct) {
         if (purchase.pendingCompletePurchase) {
           await _inAppPurchase.completePurchase(purchase);
         }
@@ -255,7 +361,15 @@ class PurchaseManager extends ChangeNotifier {
       }
 
       if (purchase.status == PurchaseStatus.error) {
-        _lastError = 'purchase_failed';
+        if (_isAlreadyOwnedIapError(purchase.error)) {
+          _lastError = 'already_owned';
+          await refreshEntitlementFromStore();
+          if (_extraTcgSlots > 0 || _ownedTcgs.isNotEmpty) {
+            _lastError = null;
+          }
+        } else {
+          _lastError = 'purchase_failed';
+        }
         _purchasePending = false;
         _purchaseWatchdog?.cancel();
         notifyListeners();
@@ -270,7 +384,11 @@ class PurchaseManager extends ChangeNotifier {
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
         await refreshEntitlementFromStore();
-        if (_userTier != UserTier.plus) {
+        if (purchase.productID == plusProductId && _userTier != UserTier.plus) {
+          _lastError = 'entitlement_verification_failed';
+        }
+        if (purchase.productID == additionalTcgProductId &&
+            _extraTcgSlots <= 0) {
           _lastError = 'entitlement_verification_failed';
         }
         _purchasePending = false;
@@ -338,10 +456,7 @@ class PurchaseManager extends ChangeNotifier {
     );
   }
 
-  (
-    SubscriptionOfferDetailsWrapper,
-    PricingPhaseWrapper
-  )? _selectOffer(
+  (SubscriptionOfferDetailsWrapper, PricingPhaseWrapper)? _selectOffer(
     List<SubscriptionOfferDetailsWrapper>? offers,
     String targetBillingPeriod,
   ) {
@@ -410,8 +525,65 @@ class PurchaseManager extends ChangeNotifier {
   Future<void> setOwnedTcgs(Set<String> values) async {
     _ownedTcgs = values;
     await AppSettings.saveOwnedTcgs(values);
+    _pokemonUnlocked = values.contains(pokemonOwnershipKey);
+    await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
     notifyListeners();
   }
+
+  Future<void> setPokemonUnlockedForTest(bool value) async {
+    await setGameUnlockedForTest(AppTcgGame.pokemon, value);
+  }
+
+  Future<void> setGameUnlockedForTest(AppTcgGame game, bool value) async {
+    final key = _ownershipKeyForGame(game);
+    final next = <String>{..._ownedTcgs};
+    if (value) {
+      next.add(key);
+    } else {
+      next.remove(key);
+    }
+    _ownedTcgs = next;
+    _pokemonUnlocked = next.contains(pokemonOwnershipKey);
+    await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
+    await AppSettings.saveOwnedTcgs(next);
+    notifyListeners();
+  }
+
+  Future<void> setExtraTcgSlotsForTest(int slots) async {
+    _extraTcgSlots = slots < 0 ? 0 : slots;
+    await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
+    notifyListeners();
+  }
+
+  Future<void> resetPurchaseStateForTest() async {
+    _userTier = UserTier.free;
+    _ownedTcgs = const <String>{};
+    _pokemonUnlocked = false;
+    _extraTcgSlots = 0;
+    _lastError = null;
+    _purchasePending = false;
+    _restoringPurchases = false;
+    await AppSettings.saveUserTier(_tierToStorage(_userTier));
+    await AppSettings.saveOwnedTcgs(_ownedTcgs);
+    await AppSettings.savePokemonUnlocked(false);
+    await AppSettings.saveExtraTcgSlots(0);
+    notifyListeners();
+  }
+
+  Future<void> syncPrimaryGameFromSettings() async {
+    _primaryGame =
+        await AppSettings.loadPrimaryTcgGameOrNull() ?? AppTcgGame.mtg;
+    notifyListeners();
+  }
+
+  String _ownershipKeyForGame(AppTcgGame game) {
+    return game == AppTcgGame.pokemon ? pokemonOwnershipKey : magicOwnershipKey;
+  }
+
+  static const List<AppTcgGame> _knownGames = [
+    AppTcgGame.mtg,
+    AppTcgGame.pokemon,
+  ];
 
   String _tierToStorage(UserTier tier) {
     return tier == UserTier.plus ? 'plus' : 'free';
@@ -434,4 +606,23 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   bool _supportsStore() => Platform.isAndroid || Platform.isIOS;
+
+  bool _isAlreadyOwnedIapError(IAPError? error) {
+    if (error == null) {
+      return false;
+    }
+    return _isAlreadyOwnedError('${error.code} ${error.message} ${error.details}');
+  }
+
+  bool _isAlreadyOwnedError(Object error) {
+    final raw = error.toString().toLowerCase();
+    return raw.contains('already owned') ||
+        raw.contains('already_owned') ||
+        raw.contains('item_already_owned') ||
+        raw.contains('itemalreadyowned') ||
+        raw.contains('billingresponse.item_already_owned') ||
+        raw.contains('you already own this item') ||
+        raw.contains('possiedi gia') ||
+        raw.contains('possiedi già');
+  }
 }

@@ -90,6 +90,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _onlineArtworkLoading = false;
   bool _addingFromPreview = false;
   bool _limitedPrintCoverage = false;
+  AppTcgGame _activeSearchGame = AppTcgGame.mtg;
   bool _showPrices = true;
   String _priceCurrency = 'eur';
   final Map<String, _SearchPriceData> _priceDataByCardId = {};
@@ -103,6 +104,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     return format;
   }
+
+  bool get _isPokemonSearch => _activeSearchGame == AppTcgGame.pokemon;
 
   @override
   void initState() {
@@ -151,6 +154,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       return;
     }
     setState(() {
+      _activeSearchGame = selectedGame;
       _limitedPrintCoverage = _isLimitedPrintCoverage(bulkType);
     });
   }
@@ -720,8 +724,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return CollectionFilter(
       name: null,
       artist: artist.isEmpty ? null : artist,
-      manaMin: _manaValueMin,
-      manaMax: _manaValueMax,
+      manaMin: _isPokemonSearch ? null : _manaValueMin,
+      manaMax: _isPokemonSearch ? null : _manaValueMax,
       sets: _selectedSetCodes,
       rarities: _selectedRarities,
       colors: _selectedColors,
@@ -842,7 +846,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Set<String> _resultColors(CardSearchResult card) {
-    return _parseColorSet(card.colors, card.colorIdentity);
+    return _parseColorSet(card.colors, card.colorIdentity, card.typeLine);
   }
 
   Set<String> _resultTypes(CardSearchResult card) {
@@ -850,17 +854,38 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (typeLine.isEmpty) {
       return {};
     }
-    const knownTypes = [
-      'Artifact',
-      'Creature',
-      'Enchantment',
-      'Instant',
-      'Land',
-      'Planeswalker',
-      'Sorcery',
-      'Battle',
-      'Tribal',
-    ];
+    final knownTypes = _isPokemonSearch
+        ? const [
+            'Pokemon',
+            'Trainer',
+            'Energy',
+            'Item',
+            'Supporter',
+            'Stadium',
+            'Tool',
+            'Grass',
+            'Fire',
+            'Water',
+            'Lightning',
+            'Psychic',
+            'Fighting',
+            'Darkness',
+            'Metal',
+            'Dragon',
+            'Fairy',
+            'Colorless',
+          ]
+        : const [
+            'Artifact',
+            'Creature',
+            'Enchantment',
+            'Instant',
+            'Land',
+            'Planeswalker',
+            'Sorcery',
+            'Battle',
+            'Tribal',
+          ];
     final matches = <String>{};
     for (final type in knownTypes) {
       if (typeLine.toLowerCase().contains(type.toLowerCase())) {
@@ -877,8 +902,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _artistQuery.trim().isNotEmpty ||
-        _manaValueMin != null ||
-        _manaValueMax != null;
+        (!_isPokemonSearch &&
+            (_manaValueMin != null || _manaValueMax != null));
   }
 
   bool _hasNarrowingFilters() {
@@ -892,6 +917,34 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   String _colorLabel(String code) {
     final l10n = AppLocalizations.of(context)!;
+    if (_isPokemonSearch) {
+      switch (code.toUpperCase()) {
+        case 'G':
+          return _isItalianUi() ? 'Erba' : 'Grass';
+        case 'R':
+          return _isItalianUi() ? 'Fuoco' : 'Fire';
+        case 'U':
+          return _isItalianUi() ? 'Acqua' : 'Water';
+        case 'L':
+          return _isItalianUi() ? 'Lampo' : 'Lightning';
+        case 'B':
+          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+        case 'F':
+          return _isItalianUi() ? 'Lotta' : 'Fighting';
+        case 'D':
+          return _isItalianUi() ? 'Drago' : 'Dragon';
+        case 'W':
+          return _isItalianUi() ? 'Folletto' : 'Fairy';
+        case 'C':
+          return _isItalianUi() ? 'Incolore' : 'Colorless';
+        case 'M':
+          return _isItalianUi() ? 'Metallo' : 'Metal';
+        case 'N':
+          return _isItalianUi() ? 'Nessuno' : 'None';
+        default:
+          return code.toUpperCase();
+      }
+    }
     switch (code.toUpperCase()) {
       case 'W':
         return l10n.colorWhite;
@@ -910,25 +963,61 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
   }
 
+  bool _isItalianUi() {
+    final code = Localizations.localeOf(context).languageCode.toLowerCase();
+    return code.startsWith('it');
+  }
+
   Future<void> _showAdvancedFilters() async {
     final availableRarities = <String>{};
     final availableSetCodes = <String, String>{};
     final availableColors = <String>{};
     final availableTypes = <String>{};
 
-    const fallbackRarities = ['common', 'uncommon', 'rare', 'mythic'];
-    const fallbackColors = ['W', 'U', 'B', 'R', 'G', 'C'];
-    const fallbackTypes = [
-      'Artifact',
-      'Creature',
-      'Enchantment',
-      'Instant',
-      'Land',
-      'Planeswalker',
-      'Sorcery',
-      'Battle',
-      'Tribal',
-    ];
+    final fallbackRarities = _isPokemonSearch
+        ? const [
+            'common',
+            'uncommon',
+            'rare',
+            'holo rare',
+            'ultra rare',
+            'promo',
+          ]
+        : const ['common', 'uncommon', 'rare', 'mythic'];
+    final fallbackColors = _isPokemonSearch
+        ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
+        : const ['W', 'U', 'B', 'R', 'G', 'C'];
+    final fallbackTypes = _isPokemonSearch
+        ? const [
+            'Pokemon',
+            'Trainer',
+            'Energy',
+            'Item',
+            'Supporter',
+            'Stadium',
+            'Tool',
+            'Grass',
+            'Fire',
+            'Water',
+            'Lightning',
+            'Psychic',
+            'Fighting',
+            'Darkness',
+            'Metal',
+            'Dragon',
+            'Colorless',
+          ]
+        : const [
+            'Artifact',
+            'Creature',
+            'Enchantment',
+            'Instant',
+            'Land',
+            'Planeswalker',
+            'Sorcery',
+            'Battle',
+            'Tribal',
+          ];
 
     if (_results.isEmpty) {
       availableRarities.addAll(fallbackRarities);
@@ -1051,12 +1140,24 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               return entry.value.toLowerCase().contains(setQuery) ||
                   entry.key.toLowerCase().contains(setQuery);
             }).toList();
-            const colorOrder = ['W', 'U', 'B', 'R', 'G', 'C'];
+            final colorOrder = _isPokemonSearch
+                ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
+                : const ['W', 'U', 'B', 'R', 'G', 'C'];
             final sortedColors = availableColors.toList()
-              ..sort(
-                (a, b) =>
-                    colorOrder.indexOf(a).compareTo(colorOrder.indexOf(b)),
-              );
+              ..sort((a, b) {
+                final ai = colorOrder.indexOf(a);
+                final bi = colorOrder.indexOf(b);
+                if (ai == -1 && bi == -1) {
+                  return a.compareTo(b);
+                }
+                if (ai == -1) {
+                  return 1;
+                }
+                if (bi == -1) {
+                  return -1;
+                }
+                return ai.compareTo(bi);
+              });
             final sortedTypes = availableTypes.toList()..sort();
             final filteredRarities = sortedRarities;
             final filteredColors = sortedColors;
@@ -1212,35 +1313,37 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ],
                     ],
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.manaValue,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: minController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              hintText: l10n.minLabel,
+                    if (!_isPokemonSearch) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.manaValue,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: minController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: l10n.minLabel,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: maxController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              hintText: l10n.maxLabel,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: maxController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: l10n.maxLabel,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Text(
                       l10n.detailArtist,
@@ -1572,18 +1675,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.warning_amber_rounded,
-            size: 15,
-            color: Color(0xFFE9C46A),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            l10n.limitedCoverageTapAllArtworks,
-            style: const TextStyle(
-              color: Color(0xFFEFDDBA),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w700,
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.72,
+            ),
+            child: Text(
+              l10n.limitedCoverageTapAllArtworks,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFFEFDDBA),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -2048,8 +2151,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Decoration _cardTintDecorationForSearch(CardSearchResult card) {
     final base = Theme.of(context).colorScheme.surface;
-    final accents = _manaAccentColors(
-      _parseColorSet(card.colors, card.colorIdentity),
+    final accents = _accentColorsForCard(
+      colors: card.colors,
+      colorIdentity: card.colorIdentity,
+      typeLine: card.typeLine,
     );
     if (accents.isEmpty) {
       return BoxDecoration(
@@ -2086,8 +2191,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Decoration _priceBadgeDecorationForSearch(CardSearchResult card) {
     final base = Theme.of(context).colorScheme.surface;
-    final accents = _manaAccentColors(
-      _parseColorSet(card.colors, card.colorIdentity),
+    final accents = _accentColorsForCard(
+      colors: card.colors,
+      colorIdentity: card.colorIdentity,
+      typeLine: card.typeLine,
     );
     if (accents.isEmpty) {
       return BoxDecoration(
@@ -2349,7 +2456,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 visualDensity: VisualDensity.compact,
                                 iconSize: 32,
                                 icon: const Icon(
-                                  Icons.add_circle_outline,
+                                  Icons.add_circle,
                                   size: 32,
                                 ),
                                 color: const Color(0xFFE9C46A),
@@ -2359,7 +2466,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               )
                             else if (canSelectCards)
                               const Icon(
-                                Icons.add_circle_outline,
+                                Icons.add_circle,
                                 size: 32,
                                 color: Color(0xFFE9C46A),
                               ),
@@ -2381,6 +2488,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final isMissing = _isMissingCard(card);
     final statusBadge = _statusBadgeLabel(card, l10n);
     final hasStatusBadge = statusBadge != null;
+    final canSelectCards = widget.selectionEnabled;
+    final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
+    final showMissingQuickAdd = isMissing && showAdd;
     final imageUrl = card.imageUri?.trim() ?? '';
     final setLabel = _setLabelForSearch(card);
     final hasRarity = card.rarity.trim().isNotEmpty;
@@ -2465,6 +2575,29 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                         ),
                                       ),
                                 ),
+                          if (showMissingQuickAdd)
+                            Positioned(
+                              bottom: 2,
+                              left: 2,
+                              child: IconButton(
+                                tooltip: l10n.addOne,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints.tightFor(
+                                  width: 40,
+                                  height: 40,
+                                ),
+                                visualDensity: VisualDensity.compact,
+                                iconSize: 32,
+                                icon: const Icon(
+                                  Icons.add_circle,
+                                  size: 32,
+                                ),
+                                color: const Color(0xFFE9C46A),
+                                onPressed: _addingFromPreview
+                                    ? null
+                                    : () => _addCardFromPreview(card),
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -2591,7 +2724,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 6),
                         child: Align(
-                          alignment: Alignment.centerLeft,
+                          alignment: Alignment.center,
                           child: _buildLimitedCoverageBadge(),
                         ),
                       ),
@@ -3309,3 +3442,4 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         .toList(growable: false);
   }
 }
+
