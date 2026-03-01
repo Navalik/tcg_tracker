@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 enum _CardSortMode { name, color, type }
 
@@ -1213,7 +1213,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     if (_isPokemonActive) {
       final normalized = typeLine.toLowerCase().replaceAll(
-        'pokémon',
+        'pokÃ©mon',
         'pokemon',
       );
       final matches = <String>{};
@@ -1273,22 +1273,22 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (!_isPokemonActive) {
       return value;
     }
-    final isIt = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     switch (value) {
       case 'Pokemon':
         return 'Pokemon';
       case 'Trainer':
-        return isIt ? 'Allenatore' : 'Trainer';
+        return l10n.pokemonTypeTrainer;
       case 'Energy':
-        return isIt ? 'Energia' : 'Energy';
+        return l10n.pokemonTypeEnergy;
       case 'Item':
-        return isIt ? 'Oggetto' : 'Item';
+        return l10n.pokemonTypeItem;
       case 'Supporter':
-        return isIt ? 'Aiuto' : 'Supporter';
+        return l10n.pokemonTypeSupporter;
       case 'Stadium':
-        return isIt ? 'Stadio' : 'Stadium';
+        return l10n.pokemonTypeStadium;
       case 'Tool':
-        return isIt ? 'Strumento Pokemon' : 'Pokemon Tool';
+        return l10n.pokemonTypeTool;
       default:
         return value;
     }
@@ -1326,14 +1326,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   String _deckSectionLabel(String typeKey, AppLocalizations l10n) {
     if (_isPokemonDeck) {
-      final isIt = _isItalianUi();
       switch (typeKey) {
         case 'Pokemon':
           return 'Pokemon';
         case 'Trainer':
-          return isIt ? 'Allenatore' : 'Trainer';
+          return l10n.pokemonTypeTrainer;
         case 'Energy':
-          return isIt ? 'Energia' : 'Energy';
+          return l10n.pokemonTypeEnergy;
         default:
           return l10n.deckSectionOther;
       }
@@ -1464,7 +1463,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final currency = _priceCurrency.trim().toLowerCase() == 'usd'
         ? 'usd'
         : 'eur';
-    final symbol = currency == 'usd' ? r'$' : '€';
+    final symbol = currency == 'usd' ? r'$' : 'â‚¬';
     final baseValue = _normalizePriceValue(
       currency == 'usd' ? entry.priceUsd : entry.priceEur,
     );
@@ -1779,7 +1778,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       const SizedBox(height: 16),
                       Text(
                         _isPokemonActive
-                            ? (_isItalianUi() ? 'Tipo energia' : 'Energy type')
+                            ? l10n.pokemonEnergyTypeLabel
                             : l10n.colorLabel,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
@@ -1816,9 +1815,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     const SizedBox(height: 16),
                     Text(
                       _isPokemonActive
-                          ? (_isItalianUi()
-                                ? 'Costo energia (attacco)'
-                                : 'Attack energy cost')
+                          ? l10n.pokemonAttackEnergyCostLabel
                           : l10n.manaValue,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
@@ -1945,27 +1942,27 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (_isPokemonActive) {
       switch (code.toUpperCase()) {
         case 'G':
-          return _isItalianUi() ? 'Erba' : 'Grass';
+          return l10n.pokemonEnergyGrass;
         case 'R':
-          return _isItalianUi() ? 'Fuoco' : 'Fire';
+          return l10n.pokemonEnergyFire;
         case 'U':
-          return _isItalianUi() ? 'Acqua' : 'Water';
+          return l10n.pokemonEnergyWater;
         case 'L':
-          return _isItalianUi() ? 'Lampo' : 'Lightning';
+          return l10n.pokemonEnergyLightning;
         case 'B':
-          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+          return l10n.pokemonEnergyPsychicDarkness;
         case 'F':
-          return _isItalianUi() ? 'Lotta' : 'Fighting';
+          return l10n.pokemonEnergyFighting;
         case 'D':
-          return _isItalianUi() ? 'Drago' : 'Dragon';
+          return l10n.pokemonEnergyDragon;
         case 'W':
-          return _isItalianUi() ? 'Folletto' : 'Fairy';
+          return l10n.pokemonEnergyFairy;
         case 'C':
-          return _isItalianUi() ? 'Incolore' : 'Colorless';
+          return l10n.pokemonEnergyColorless;
         case 'M':
-          return _isItalianUi() ? 'Metallo' : 'Metal';
+          return l10n.pokemonEnergyMetal;
         case 'N':
-          return _isItalianUi() ? 'Nessuno' : 'None';
+          return l10n.pokemonEnergyNone;
         default:
           return code.toUpperCase();
       }
@@ -1986,11 +1983,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       default:
         return code.toUpperCase();
     }
-  }
-
-  bool _isItalianUi() {
-    final code = Localizations.localeOf(context).languageCode.toLowerCase();
-    return code.startsWith('it');
   }
 
   Widget _buildSearchHeader({required bool showOwnedMissing}) {
@@ -2257,14 +2249,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     BuildContext context,
     int ownedCollectionId,
   ) async {
-    final title = _isItalianUi()
-        ? 'Aggiungi piu carte da filtro'
-        : 'Add multiple cards by filter';
+    final l10n = AppLocalizations.of(context)!;
+    final title = l10n.addMultipleCardsByFilterTitle;
     final selectedFilter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(
         builder: (_) => _CollectionFilterBuilderPage(
           name: title,
-          submitLabel: _isItalianUi() ? 'Aggiungi' : 'Add',
+          submitLabel: l10n.addLabel,
         ),
       ),
     );
@@ -2315,9 +2306,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           context,
           added > 0
               ? AppLocalizations.of(context)!.addedCards(added)
-              : (_isItalianUi()
-                    ? 'Tutte gia possedute.'
-                    : 'All selected cards are already owned.'),
+              : l10n.allSelectedCardsOwned,
         );
         await _loadCards();
         return;
@@ -2348,7 +2337,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         showAppSnackBar(
           context,
           skipped > 0
-              ? '${l10n.addedCards(added)} • ${_isItalianUi() ? 'Saltate' : 'Skipped'}: $skipped'
+              ? '${l10n.addedCards(added)} • : $skipped'
               : l10n.addedCards(added),
         );
         await _loadCards();
@@ -2424,16 +2413,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               ),
               ListTile(
                 leading: const Icon(Icons.tune_rounded),
-                title: Text(
-                  _isItalianUi()
-                      ? 'Aggiungi piu carte da filtro'
-                      : 'Add multiple cards by filter',
-                ),
-                subtitle: Text(
-                  _isItalianUi()
-                      ? 'Seleziona filtri e aggiungi tutte le carte trovate'
-                      : 'Apply filters and add all matching cards',
-                ),
+                title: Text(l10n.addMultipleCardsByFilterTitle),
+                subtitle: Text(l10n.addMultipleCardsByFilterSubtitle),
                 onTap: () =>
                     Navigator.of(context).pop(_AddCardEntryMode.byFilter),
               ),
@@ -3626,7 +3607,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final foil = _normalizePriceValue(entry.priceEurFoil);
     final selected = entry.foil ? (foil ?? base) : base;
     if (selected == null) {
-      return '—';
+      return 'â€”';
     }
     return 'EUR $selected';
   }
@@ -3636,7 +3617,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final foil = _normalizePriceValue(entry.priceUsdFoil);
     final selected = entry.foil ? (foil ?? base) : base;
     if (selected == null) {
-      return '—';
+      return 'â€”';
     }
     return 'USD $selected';
   }
@@ -4023,7 +4004,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return false;
     }
     final normalized = entry.typeLine.toLowerCase().replaceAll(
-      'pokÃ©mon',
+      'pokÃƒÂ©mon',
       'pokemon',
     );
     return normalized.contains('basic');
@@ -4047,7 +4028,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       if (types.contains('Pokemon')) {
         pokemon += qty;
         final normalized = entry.typeLine.toLowerCase().replaceAll(
-          'pokÃ©mon',
+          'pokÃƒÂ©mon',
           'pokemon',
         );
         if (normalized.contains('basic')) {
@@ -4253,7 +4234,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     AppLocalizations l10n,
   ) {
     final stats = _buildPokemonDeckStats(cards);
-    final isIt = _isItalianUi();
     Widget statCell(String label, int value) {
       return Container(
         decoration: BoxDecoration(
@@ -4319,12 +4299,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final hasBasicPokemon = stats.basicPokemon > 0;
     final copyLimitOk = stats.overLimitNames == 0;
     final totalFailLabel = stats.total < 60
-        ? (isIt
-              ? 'Mancano ${60 - stats.total} carte per arrivare a 60.'
-              : 'Add ${60 - stats.total} cards to reach 60.')
-        : (isIt
-              ? 'Rimuovi ${stats.total - 60} carte per tornare a 60.'
-              : 'Remove ${stats.total - 60} cards to get back to 60.');
+        ? l10n.deckAddCardsToReach60(60 - stats.total)
+        : l10n.deckRemoveCardsToReturn60(stats.total - 60);
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(14),
@@ -4350,32 +4326,26 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             children: [
-              statCell(isIt ? 'Totale' : 'Total', stats.total),
+              statCell(l10n.totalLabel, stats.total),
               statCell('Pokemon', stats.pokemon),
-              statCell(isIt ? 'Allenatore' : 'Trainer', stats.trainer),
-              statCell(isIt ? 'Energie' : 'Energy', stats.energy),
+              statCell(l10n.pokemonTypeTrainer, stats.trainer),
+              statCell(l10n.pokemonEnergyPluralLabel, stats.energy),
             ],
           ),
           ruleRow(
             ok: totalOk,
-            okLabel: isIt ? 'Regola 60 carte: OK' : '60-card rule: OK',
+            okLabel: l10n.deckRule60Ok,
             failLabel: totalFailLabel,
           ),
           ruleRow(
             ok: hasBasicPokemon,
-            okLabel: isIt
-                ? 'Pokemon Base presente: OK'
-                : 'Basic Pokemon present: OK',
-            failLabel: isIt
-                ? 'Manca almeno 1 Pokemon Base.'
-                : 'At least 1 Basic Pokemon is required.',
+            okLabel: l10n.deckBasicPokemonPresentOk,
+            failLabel: l10n.deckBasicPokemonRequired,
           ),
           ruleRow(
             ok: copyLimitOk,
-            okLabel: isIt ? 'Limite copie: OK' : 'Copy limit: OK',
-            failLabel: isIt
-                ? '${stats.overLimitNames} carte superano 4 copie (escluse Energie Base).'
-                : '${stats.overLimitNames} card names exceed 4 copies (Basic Energy excluded).',
+            okLabel: l10n.deckCopyLimitOk,
+            failLabel: l10n.deckCopyLimitExceeded(stats.overLimitNames),
           ),
         ],
       ),

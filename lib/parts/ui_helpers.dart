@@ -139,36 +139,27 @@ String _formatRarity(String raw) {
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.4.5+6';
+const String _latestReleaseNotesId = '0.4.6+7';
 
 String _whatsNewLabel(BuildContext context) {
-  final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
-  if (languageCode.startsWith('it')) {
-    return 'Novita';
-  }
-  return "What's new";
+  final l10n = AppLocalizations.of(context)!;
+  return l10n.whatsNewButtonLabel;
 }
 
 Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
-  final languageCode = Localizations.localeOf(context).languageCode.toLowerCase();
-  final isItalian = languageCode.startsWith('it');
-  final title = isItalian ? 'Novita versione 0.4.5' : "What's new in 0.4.5";
-  final lines = isItalian
-      ? const <String>[
-          'Wishlist migliorata: le carte non sono piu marcate come Mancanti.',
-          'Vista galleria: aggiunti tasti rapidi + e - per gestire le quantita piu velocemente.',
-          'Nei mazzi i tasti rapidi non applicano il foil.',
-          "Export Arena piu compatibile: rimossa la riga 'Sideboard'.",
-          'Scansione OCR piu fluida: ridotta l\'attesa prima della scelta stampa.',
-        ]
-      : const <String>[
-          'Wishlist improved: cards are no longer shown as Missing.',
-          'Gallery view: quick + and - actions to manage quantities faster.',
-          'In decks, quick actions do not apply foil.',
-          "Arena export compatibility improved: removed the 'Sideboard' line.",
-          'OCR scanning feels faster before opening the printing picker.',
-        ];
-  final closeLabel = isItalian ? 'Chiudi' : 'Close';
+  final l10n = AppLocalizations.of(context)!;
+  final title = l10n.whatsNewDialogTitle;
+  final lines = <String>[
+    l10n.whatsNewLine1,
+    l10n.whatsNewLine2,
+    l10n.whatsNewLine3,
+    l10n.whatsNewLine4,
+    l10n.whatsNewLine5,
+    l10n.whatsNewLine6,
+    l10n.whatsNewLine7,
+    l10n.whatsNewLine8,
+    l10n.whatsNewLine9,
+  ];
 
   await showDialog<void>(
     context: context,
@@ -192,7 +183,7 @@ Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(closeLabel),
+            child: Text(l10n.closeLabel),
           ),
         ],
       );

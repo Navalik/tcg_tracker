@@ -556,46 +556,6 @@ class PurchaseManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setPokemonUnlockedForTest(bool value) async {
-    await setGameUnlockedForTest(AppTcgGame.pokemon, value);
-  }
-
-  Future<void> setGameUnlockedForTest(AppTcgGame game, bool value) async {
-    final key = _ownershipKeyForGame(game);
-    final next = <String>{..._ownedTcgs};
-    if (value) {
-      next.add(key);
-    } else {
-      next.remove(key);
-    }
-    _ownedTcgs = next;
-    _pokemonUnlocked = next.contains(pokemonOwnershipKey);
-    await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
-    await AppSettings.saveOwnedTcgs(next);
-    notifyListeners();
-  }
-
-  Future<void> setExtraTcgSlotsForTest(int slots) async {
-    _extraTcgSlots = slots < 0 ? 0 : slots;
-    await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
-    notifyListeners();
-  }
-
-  Future<void> resetPurchaseStateForTest() async {
-    _userTier = UserTier.free;
-    _ownedTcgs = const <String>{};
-    _pokemonUnlocked = false;
-    _extraTcgSlots = 0;
-    _lastError = null;
-    _purchasePending = false;
-    _restoringPurchases = false;
-    await AppSettings.saveUserTier(_tierToStorage(_userTier));
-    await AppSettings.saveOwnedTcgs(_ownedTcgs);
-    await AppSettings.savePokemonUnlocked(false);
-    await AppSettings.saveExtraTcgSlots(0);
-    notifyListeners();
-  }
-
   Future<void> syncPrimaryGameFromSettings() async {
     _primaryGame =
         await AppSettings.loadPrimaryTcgGameOrNull() ?? AppTcgGame.mtg;

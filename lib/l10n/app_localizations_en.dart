@@ -213,19 +213,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get supportFuturePremiumFeatures => 'Support future premium features';
 
   @override
-  String get switchToBaseTest => 'Switch to Base (test)';
-
-  @override
-  String get switchToProTest => 'Switch to Pro (test)';
-
-  @override
   String get restorePurchases => 'Restore purchases';
-
-  @override
-  String get testMode => 'Test mode';
-
-  @override
-  String get testModeSubtitle => 'When enabled, Upgrade toggles Pro locally.';
 
   @override
   String get manage => 'Manage';
@@ -1329,5 +1317,519 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String backupShareFailed(Object error) {
     return 'Unable to share backup: $error';
+  }
+
+  @override
+  String get primaryGamePickerTitle => 'Choose your primary game';
+
+  @override
+  String get primaryGamePickerBody =>
+      'Select your main game. The other game will be available with Pro.';
+
+  @override
+  String get primaryFreeLabel => 'Included in free plan';
+
+  @override
+  String get continueLabel => 'Continue';
+
+  @override
+  String get latestAddsLabel => 'Latest adds';
+
+  @override
+  String get homeStartCollectionPrompt =>
+      'Start your collection now: tap + and add your first cards.';
+
+  @override
+  String get unlockOtherGameToSwitch =>
+      'Unlock the other game in Pro to switch.';
+
+  @override
+  String get scannerTutorialTitle => 'Scanner tutorial';
+
+  @override
+  String get scannerTutorialIntro =>
+      'Use these controls to speed up recognition:';
+
+  @override
+  String get scannerTutorialSet => '• Set: limits search to the selected set.';
+
+  @override
+  String get scannerTutorialFoil =>
+      '• Foil: marks the card as foil when you add it.';
+
+  @override
+  String get scannerTutorialCheck =>
+      '• Check: if frame is green and name matches, tap to confirm and speed up scanning.';
+
+  @override
+  String get scannerTutorialFlash => '• Flash: useful in low-light conditions.';
+
+  @override
+  String get doNotShowAgain => 'Do not show again';
+
+  @override
+  String get scannerSetAnyLabel => 'Set: any';
+
+  @override
+  String get scannerAnySetOption => 'Any set';
+
+  @override
+  String get closeLabel => 'Close';
+
+  @override
+  String get openSettingsLabel => 'Open settings';
+
+  @override
+  String gameInProTitle(Object game) {
+    return '$game in Pro';
+  }
+
+  @override
+  String gameOneTimeUnlockBody(Object game) {
+    return '$game is available as a one-time unlock. Activate it from Settings.';
+  }
+
+  @override
+  String get pokemonInProTitle => 'Pokemon available in Pro';
+
+  @override
+  String get pokemonInProBody =>
+      'Unlock Pokemon from Settings to use collections, search, and dedicated database download.';
+
+  @override
+  String get customLabel => 'Custom';
+
+  @override
+  String get smartLabel => 'Smart';
+
+  @override
+  String get homeSetHelp =>
+      'Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.';
+
+  @override
+  String get homeCustomHelp =>
+      'Create manual collections and include only cards you already own in inventory.';
+
+  @override
+  String get homeSmartHelp =>
+      'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.';
+
+  @override
+  String get homeWishHelp =>
+      'Create a wishlist with advanced filters to track the missing cards you are looking for.';
+
+  @override
+  String get homeDeckHelp =>
+      'Track your decks and update mainboard/sideboard: deck cards stay in the deck and are not added to collections.';
+
+  @override
+  String get smartCollectionDefaultName => 'Smart collection';
+
+  @override
+  String get newSmartCollectionTitle => 'New smart collection';
+
+  @override
+  String get smartCollectionNeedFilterToCreate =>
+      'Choose at least one filter to create a smart collection.';
+
+  @override
+  String get smartCollectionNeedAtLeastOneFilter =>
+      'Choose at least one filter.';
+
+  @override
+  String get saveFilterLabel => 'Save filter';
+
+  @override
+  String get loadArenaMtgoFileLabel => 'Load Arena/MTGO file';
+
+  @override
+  String get pokemonDeckHintLabel =>
+      'Pokemon deck: exactly 60 cards, max 4 copies per name (except Basic Energy), at least 1 Basic Pokemon.';
+
+  @override
+  String get importDeckListLabel => 'Import deck list';
+
+  @override
+  String get exportForArenaLabel => 'Export for Arena';
+
+  @override
+  String get exportForMtgoLabel => 'Export for MTGO';
+
+  @override
+  String deckImportedSummary(int imported, int skipped) {
+    return 'Deck imported: $imported cards, $skipped not found';
+  }
+
+  @override
+  String get deckImportingLabel => 'Importing deck...';
+
+  @override
+  String get deckImportResultTitle => 'Import result';
+
+  @override
+  String get deckImportCardsNotFoundTitle => 'Cards not found';
+
+  @override
+  String deckExportedSummary(Object fileName) {
+    return 'Deck exported: $fileName';
+  }
+
+  @override
+  String deckImportFailed(Object error) {
+    return 'Deck import failed: $error';
+  }
+
+  @override
+  String deckExportFailed(Object error) {
+    return 'Deck export failed: $error';
+  }
+
+  @override
+  String get pokemonDbProfileFullTitle => 'Full (all cards)';
+
+  @override
+  String get pokemonDbProfileExpandedTitle => 'Expanded (10 sets)';
+
+  @override
+  String get pokemonDbProfileStandardTitle => 'Standard (6 sets)';
+
+  @override
+  String get pokemonDbProfileStarterTitle => 'Starter (3 sets)';
+
+  @override
+  String get pokemonDbProfileFullDescription => 'Complete Pokemon catalog.';
+
+  @override
+  String get pokemonDbProfileExpandedDescription =>
+      'Wide coverage for search and scanning.';
+
+  @override
+  String get pokemonDbProfileStandardDescription =>
+      'Recent sets, balanced size/coverage.';
+
+  @override
+  String get pokemonDbProfileStarterDescription =>
+      'Quick start with essential sets.';
+
+  @override
+  String get pokemonDbPickerTitle => 'Choose Pokemon database';
+
+  @override
+  String get pokemonDbPickerSubtitle =>
+      'Pokemon database: choose which version to download.';
+
+  @override
+  String get primaryGameFixedMessage => 'Primary game is fixed.';
+
+  @override
+  String get primaryFreeForever => 'Primary free (forever)';
+
+  @override
+  String get purchasedLabel => 'Purchased';
+
+  @override
+  String get secondaryPurchaseRequired => 'Secondary: purchase required';
+
+  @override
+  String buyGameLabel(Object game, Object price) {
+    return 'Buy $game $price';
+  }
+
+  @override
+  String get purchasesRestoredMessage => 'Purchases restored.';
+
+  @override
+  String get restorePurchasesTimeoutMessage =>
+      'Restore purchases is taking too long. Try again.';
+
+  @override
+  String get restorePurchasesErrorMessage =>
+      'Error while restoring purchases. Please retry.';
+
+  @override
+  String get playStoreProductUnavailable =>
+      'Product not available on Google Play.';
+
+  @override
+  String buyGameTitle(Object game) {
+    return 'Buy $game';
+  }
+
+  @override
+  String buyGameBody(Object game, Object price) {
+    return 'You unlock $game with a one-time purchase, forever on this account. Price is $price. Purchases are handled by Google Play.';
+  }
+
+  @override
+  String get continuePurchaseLabel => 'Continue purchase';
+
+  @override
+  String get purchaseAlreadyOwnedSynced =>
+      'Purchase already owned on Google Play. Entitlement synced.';
+
+  @override
+  String get storeConnectionTimeout =>
+      'Store connection is taking too long. Try again.';
+
+  @override
+  String get purchaseFailedRetry => 'Error during purchase. Please retry.';
+
+  @override
+  String get themeVaultDescription =>
+      'Steel-blue palette with a technical mood.';
+
+  @override
+  String get themeMagicDescription => 'Classic BinderVault gold/brown look.';
+
+  @override
+  String get visualThemeTitle => 'Visual theme';
+
+  @override
+  String get themeMagicSubtitle => 'Default: original style';
+
+  @override
+  String get themeVaultSubtitle => 'Alternative steel-blue look';
+
+  @override
+  String get issueCategoryCrash => 'Crash';
+
+  @override
+  String get issueCategoryUi => 'UI';
+
+  @override
+  String get issueCategoryPurchase => 'Purchases';
+
+  @override
+  String get issueCategoryDatabase => 'Database';
+
+  @override
+  String get issueCategoryOther => 'Other';
+
+  @override
+  String get reportIssueLabel => 'Report issue';
+
+  @override
+  String get issueCategoryLabel => 'Category';
+
+  @override
+  String get issueDescribeHint =>
+      'Describe what happened and how to reproduce it.';
+
+  @override
+  String get sendLabel => 'Send';
+
+  @override
+  String get reportSentThanks => 'Report sent. Thanks.';
+
+  @override
+  String get reportSendUnavailable =>
+      'Sending is not available right now. Please retry.';
+
+  @override
+  String get diagnosticsCopied => 'Diagnostics copied to clipboard.';
+
+  @override
+  String get resetMagicDatabaseLabel => 'Reset Magic database';
+
+  @override
+  String resetGameDatabaseTitle(Object game) {
+    return 'Reset $game database';
+  }
+
+  @override
+  String resetGameDatabaseBody(Object game) {
+    return 'Only $game cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.';
+  }
+
+  @override
+  String get resetInProgressTitle => 'Reset in progress';
+
+  @override
+  String cleaningGameDatabase(Object game) {
+    return 'Cleaning $game database...';
+  }
+
+  @override
+  String gameDatabaseResetDone(Object game) {
+    return '$game database reset. It will be downloaded again cleanly.';
+  }
+
+  @override
+  String get applyProfileLabel => 'Apply profile';
+
+  @override
+  String get pokemonProfileUpdatedTapUpdate =>
+      'Pokemon profile updated. Tap Update available in Home to apply.';
+
+  @override
+  String get gamesSelectionSubtitle =>
+      'The first selected game stays free forever. The other requires purchase.';
+
+  @override
+  String get primaryGameLabel => 'Primary game';
+
+  @override
+  String get configureBothDatabasesSubtitle =>
+      'Configure Magic and Pokemon databases separately.';
+
+  @override
+  String get toolsAndDiagnosticsTitle => 'Tools & diagnostics';
+
+  @override
+  String get checkCoherenceLabel => 'Check coherence';
+
+  @override
+  String get copyDiagnosticsLabel => 'Copy diagnostics';
+
+  @override
+  String get whatsNewButtonLabel => 'What\'s new';
+
+  @override
+  String get whatsNewDialogTitle => 'What\'s new in 0.4.6';
+
+  @override
+  String get whatsNewLine1 =>
+      'Collections logic updated: Inventory is now the single source of truth for quantities.';
+
+  @override
+  String get whatsNewLine2 =>
+      'Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.';
+
+  @override
+  String get whatsNewLine3 =>
+      'Improved multi-TCG support: data is isolated between Magic and Pokemon.';
+
+  @override
+  String get whatsNewLine4 =>
+      'Home updated: under All cards you now see the latest additions in gallery mode.';
+
+  @override
+  String get whatsNewLine5 =>
+      'Better first-open onboarding message to help users start faster.';
+
+  @override
+  String get whatsNewLine6 =>
+      'Scanner upgraded: set filter by active game, foil toggle, and check button to confirm recognized name.';
+
+  @override
+  String get whatsNewLine7 =>
+      'Scanner UX improved: startup tutorial with \"do not show again\" and a dedicated tutorial button.';
+
+  @override
+  String get whatsNewLine8 =>
+      'Visual consistency improved: golden icons and Pokemon database selector aligned with Magic style.';
+
+  @override
+  String get whatsNewLine9 =>
+      'Release cleanup: removed test/dev toggles and helper flows from production build.';
+
+  @override
+  String get createSmartCollectionTitle => 'Create your smart collection';
+
+  @override
+  String get pokemonEnergyGrass => 'Grass';
+
+  @override
+  String get pokemonEnergyFire => 'Fire';
+
+  @override
+  String get pokemonEnergyWater => 'Water';
+
+  @override
+  String get pokemonEnergyLightning => 'Lightning';
+
+  @override
+  String get pokemonEnergyPsychicDarkness => 'Psychic/Darkness';
+
+  @override
+  String get pokemonEnergyFighting => 'Fighting';
+
+  @override
+  String get pokemonEnergyDragon => 'Dragon';
+
+  @override
+  String get pokemonEnergyFairy => 'Fairy';
+
+  @override
+  String get pokemonEnergyColorless => 'Colorless';
+
+  @override
+  String get pokemonEnergyMetal => 'Metal';
+
+  @override
+  String get pokemonEnergyNone => 'None';
+
+  @override
+  String get pokemonTypeTrainer => 'Trainer';
+
+  @override
+  String get pokemonTypeEnergy => 'Energy';
+
+  @override
+  String get pokemonTypeItem => 'Item';
+
+  @override
+  String get pokemonTypeSupporter => 'Supporter';
+
+  @override
+  String get pokemonTypeStadium => 'Stadium';
+
+  @override
+  String get pokemonTypeTool => 'Pokemon Tool';
+
+  @override
+  String get pokemonEnergyTypeLabel => 'Energy type';
+
+  @override
+  String get pokemonCardCategoryLabel => 'Card category';
+
+  @override
+  String get pokemonAttackEnergyCostLabel => 'Attack energy cost';
+
+  @override
+  String get addMultipleCardsByFilterTitle => 'Add multiple cards by filter';
+
+  @override
+  String get addMultipleCardsByFilterSubtitle =>
+      'Apply filters and add all matching cards';
+
+  @override
+  String get allSelectedCardsOwned => 'All selected cards are already owned.';
+
+  @override
+  String get skippedLabel => 'Skipped';
+
+  @override
+  String get totalLabel => 'Total';
+
+  @override
+  String get pokemonEnergyPluralLabel => 'Energy';
+
+  @override
+  String get deckRule60Ok => '60-card rule: OK';
+
+  @override
+  String get deckBasicPokemonPresentOk => 'Basic Pokemon present: OK';
+
+  @override
+  String get deckBasicPokemonRequired =>
+      'At least 1 Basic Pokemon is required.';
+
+  @override
+  String get deckCopyLimitOk => 'Copy limit: OK';
+
+  @override
+  String deckCopyLimitExceeded(int count) {
+    return '$count card names exceed 4 copies (Basic Energy excluded).';
+  }
+
+  @override
+  String deckAddCardsToReach60(int count) {
+    return 'Add $count cards to reach 60.';
+  }
+
+  @override
+  String deckRemoveCardsToReturn60(int count) {
+    return 'Remove $count cards to get back to 60.';
   }
 }

@@ -18,6 +18,13 @@ const List<_BulkOption> _bulkOptions = [
   _BulkOption(type: 'unique_artwork'),
 ];
 
+const List<String> _pokemonDatasetProfiles = [
+  'starter',
+  'standard',
+  'expanded',
+  'full',
+];
+
 String _bulkTypeLabel(AppLocalizations l10n, String? type) {
   if (type == null) {
     return l10n.notSelected;
@@ -67,6 +74,173 @@ bool _isLimitedPrintCoverage(String? bulkType) {
       bulkType.trim().toLowerCase() != 'default_cards';
 }
 
+String _pokemonDatasetProfileTitle(BuildContext context, String profile) {
+  final l10n = AppLocalizations.of(context)!;
+  switch (profile.trim().toLowerCase()) {
+    case 'full':
+      return l10n.pokemonDbProfileFullTitle;
+    case 'expanded':
+      return l10n.pokemonDbProfileExpandedTitle;
+    case 'standard':
+      return l10n.pokemonDbProfileStandardTitle;
+    case 'starter':
+    default:
+      return l10n.pokemonDbProfileStarterTitle;
+  }
+}
+
+String _pokemonDatasetProfileDescription(BuildContext context, String profile) {
+  final l10n = AppLocalizations.of(context)!;
+  switch (profile.trim().toLowerCase()) {
+    case 'full':
+      return l10n.pokemonDbProfileFullDescription;
+    case 'expanded':
+      return l10n.pokemonDbProfileExpandedDescription;
+    case 'standard':
+      return l10n.pokemonDbProfileStandardDescription;
+    case 'starter':
+    default:
+      return l10n.pokemonDbProfileStarterDescription;
+  }
+}
+
+Future<String?> _showPokemonDatasetProfilePicker(
+  BuildContext context, {
+  required bool allowCancel,
+  String? selectedProfile,
+  bool requireConfirmation = true,
+  String? confirmLabel,
+}) {
+  return showDialog<String>(
+    context: context,
+    barrierDismissible: allowCancel,
+    builder: (context) {
+      final l10n = AppLocalizations.of(context)!;
+      final theme = Theme.of(context);
+      final validInitial = _pokemonDatasetProfiles.contains(selectedProfile);
+      String currentSelection = validInitial
+          ? selectedProfile!
+          : _pokemonDatasetProfiles.first;
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 24,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF171411),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF3A2F24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.storage_rounded,
+                        color: Color(0xFFE9C46A),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          l10n.pokemonDbPickerTitle,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.pokemonDbPickerSubtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFFBFAE95),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: _pokemonDatasetProfiles
+                            .map(
+                              (profile) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _buildSelectableInfoTile(
+                                  context: context,
+                                  title: _pokemonDatasetProfileTitle(
+                                    context,
+                                    profile,
+                                  ),
+                                  description: _pokemonDatasetProfileDescription(
+                                    context,
+                                    profile,
+                                  ),
+                                  selected: profile == currentSelection,
+                                  onTap: () {
+                                    setModalState(() {
+                                      currentSelection = profile;
+                                    });
+                                    if (!requireConfirmation) {
+                                      Navigator.of(context).pop(profile);
+                                    }
+                                  },
+                                ),
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+                    ),
+                  ),
+                  if (requireConfirmation) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE9C46A),
+                          foregroundColor: const Color(0xFF1C1510),
+                        ),
+                        onPressed: currentSelection.isEmpty
+                            ? null
+                            : () =>
+                                  Navigator.of(context).pop(currentSelection),
+                        icon: const Icon(Icons.download_rounded, size: 18),
+                        label: Text(confirmLabel ?? l10n.downloadUpdate),
+                      ),
+                    ),
+                  ],
+                  if (allowCancel) ...[
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text(l10n.cancel),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
 Future<String?> _showBulkTypePicker(
   BuildContext context, {
   required bool allowCancel,
@@ -82,6 +256,19 @@ Future<String?> _showBulkTypePicker(
     builder: (context) {
       final l10n = AppLocalizations.of(context)!;
       final theme = Theme.of(context);
+      final isItalian = Localizations.localeOf(context)
+          .languageCode
+          .toLowerCase()
+          .startsWith('it');
+      final isPokemonActive =
+          TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
+      final subtitle = isPokemonActive
+          ? (isItalian
+                ? 'Database Pokemon: scegli quale versione scaricare da Scryfall.'
+                : 'Pokemon database: choose which version to download from Scryfall.')
+          : (isItalian
+                ? 'Database Magic: scegli quale versione scaricare da Scryfall.'
+                : 'Magic database: choose which version to download from Scryfall.');
       String currentSelection =
           selectedType ??
           (_bulkOptions.isNotEmpty ? _bulkOptions.first.type : '');
@@ -128,7 +315,7 @@ Future<String?> _showBulkTypePicker(
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    l10n.cardDatabaseSubtitle,
+                    subtitle,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: const Color(0xFFBFAE95),
                     ),
@@ -143,7 +330,6 @@ Future<String?> _showBulkTypePicker(
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: _buildBulkOptionTile(
                                   context: context,
-                                  l10n: l10n,
                                   option: option,
                                   selected: option.type == currentSelection,
                                   onTap: () {
@@ -223,8 +409,24 @@ Future<String?> _showBulkTypePicker(
 
 Widget _buildBulkOptionTile({
   required BuildContext context,
-  required AppLocalizations l10n,
   required _BulkOption option,
+  required bool selected,
+  required VoidCallback onTap,
+}) {
+  final l10n = AppLocalizations.of(context)!;
+  return _buildSelectableInfoTile(
+    context: context,
+    title: _bulkTypeTitle(l10n, option.type),
+    description: _bulkTypeDescription(l10n, option.type),
+    selected: selected,
+    onTap: onTap,
+  );
+}
+
+Widget _buildSelectableInfoTile({
+  required BuildContext context,
+  required String title,
+  required String description,
   required bool selected,
   required VoidCallback onTap,
 }) {
@@ -239,13 +441,13 @@ Widget _buildBulkOptionTile({
   return Material(
     color: Colors.transparent,
     child: InkWell(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: borderColor),
         ),
         child: Row(
@@ -254,23 +456,23 @@ Widget _buildBulkOptionTile({
               selected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              size: 18,
+              size: 17,
               color: selected
                   ? const Color(0xFFE9C46A)
                   : const Color(0xFFBFAE95),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _bulkTypeTitle(l10n, option.type),
+                    title,
                     style: theme.textTheme.titleSmall,
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    _bulkTypeDescription(l10n, option.type),
+                    description,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: const Color(0xFFBFAE95),
                     ),

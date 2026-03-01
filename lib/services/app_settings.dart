@@ -22,14 +22,17 @@ class AppSettings {
   static const _prefsKeyFreeScanLastSeenEpochMs =
       'free_scan_last_seen_epoch_ms';
   static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
+  static const _prefsKeyHideScannerTutorial = 'hide_scanner_tutorial';
   static const _prefsKeyLastSeenReleaseNotesId = 'last_seen_release_notes_id';
   static const _prefsKeySelectedTcg = 'selected_tcg';
   static const _prefsKeyPrimaryTcg = 'primary_tcg';
   static const _prefsKeyPokemonUnlocked = 'pokemon_unlocked';
   static const _prefsKeyExtraTcgSlots = 'extra_tcg_slots';
   static const _prefsKeyPokemonDatasetProfile = 'pokemon_dataset_profile';
+  static const _prefsKeyAppFirstOpenFlag = 'app_first_open_flag';
   static const _prefsKeyCollectionCoherenceCheckVersionPrefix =
       'collection_coherence_check_version';
+  static const _prefsKeyPrimaryGamePromptVersion = 'primary_game_prompt_version';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
       'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
   static String _prefsKeyCollectionCoherenceCheckVersionForGame(
@@ -381,17 +384,47 @@ class AppSettings {
     await prefs.remove(_prefsKeyPokemonUnlocked);
     await prefs.remove(_prefsKeyExtraTcgSlots);
     await prefs.remove(_prefsKeyPokemonDatasetProfile);
+    await prefs.remove(_prefsKeyAppFirstOpenFlag);
     await prefs.remove(
       _prefsKeyCollectionCoherenceCheckVersionForGame(AppTcgGame.mtg),
     );
     await prefs.remove(
       _prefsKeyCollectionCoherenceCheckVersionForGame(AppTcgGame.pokemon),
     );
+    await prefs.remove(_prefsKeyPrimaryGamePromptVersion);
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
     await prefs.remove(_prefsKeyFreeScanLastSeenEpochMs);
     await prefs.remove(_prefsKeyFreeScanClockTampered);
+    await prefs.remove(_prefsKeyHideScannerTutorial);
+  }
+
+  static Future<bool> loadHideScannerTutorial() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefsKeyHideScannerTutorial) ?? false;
+  }
+
+  static Future<void> saveHideScannerTutorial(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyHideScannerTutorial, value);
+  }
+
+  static Future<int> loadAppFirstOpenFlag() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getInt(_prefsKeyAppFirstOpenFlag);
+    if (value == 0 || value == 1) {
+      return value!;
+    }
+    const fallback = 1;
+    await prefs.setInt(_prefsKeyAppFirstOpenFlag, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveAppFirstOpenFlag(int value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value == 0 ? 0 : 1;
+    await prefs.setInt(_prefsKeyAppFirstOpenFlag, normalized);
   }
 
   static Future<CollectionViewMode> loadCollectionViewMode() async {
@@ -544,5 +577,24 @@ class AppSettings {
       _prefsKeyCollectionCoherenceCheckVersionForGame(game),
       normalized,
     );
+  }
+
+  static Future<String?> loadPrimaryGamePromptVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyPrimaryGamePromptVersion)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> savePrimaryGamePromptVersion(String version) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = version.trim();
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyPrimaryGamePromptVersion);
+      return;
+    }
+    await prefs.setString(_prefsKeyPrimaryGamePromptVersion, normalized);
   }
 }

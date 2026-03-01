@@ -77,11 +77,7 @@
   "whatYouGet": "What you get",
   "unlimitedCollectionsFeature": "Unlimited collections",
   "supportFuturePremiumFeatures": "Support future premium features",
-  "switchToBaseTest": "Switch to Base (test)",
-  "switchToProTest": "Switch to Pro (test)",
   "restorePurchases": "Restore purchases",
-  "testMode": "Test mode",
-  "testModeSubtitle": "When enabled, Upgrade toggles Pro locally.",
   "manage": "Manage",
   "reset": "Reset",
   "resetSubtitle": "Remove all collections and the card database.",
@@ -621,6 +617,246 @@
   "@backupShareFailed": {
     "placeholders": {
       "error": {}
+    }
+  },
+  "primaryGamePickerTitle": "Choose your primary game",
+  "primaryGamePickerBody": "Select your main game. The other game will be available with Pro.",
+  "primaryFreeLabel": "Included in free plan",
+  "continueLabel": "Continue",
+  "latestAddsLabel": "Latest adds",
+  "homeStartCollectionPrompt": "Start your collection now: tap + and add your first cards.",
+  "unlockOtherGameToSwitch": "Unlock the other game in Pro to switch.",
+  "scannerTutorialTitle": "Scanner tutorial",
+  "scannerTutorialIntro": "Use these controls to speed up recognition:",
+  "scannerTutorialSet": "• Set: limits search to the selected set.",
+  "scannerTutorialFoil": "• Foil: marks the card as foil when you add it.",
+  "scannerTutorialCheck": "• Check: if frame is green and name matches, tap to confirm and speed up scanning.",
+  "scannerTutorialFlash": "• Flash: useful in low-light conditions.",
+  "doNotShowAgain": "Do not show again",
+  "scannerSetAnyLabel": "Set: any",
+  "scannerAnySetOption": "Any set",
+  "closeLabel": "Close",
+  "openSettingsLabel": "Open settings",
+  "gameInProTitle": "{game} in Pro",
+  "@gameInProTitle": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "gameOneTimeUnlockBody": "{game} is available as a one-time unlock. Activate it from Settings.",
+  "@gameOneTimeUnlockBody": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "pokemonInProTitle": "Pokemon available in Pro",
+  "pokemonInProBody": "Unlock Pokemon from Settings to use collections, search, and dedicated database download.",
+  "customLabel": "Custom",
+  "smartLabel": "Smart",
+  "homeSetHelp": "Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.",
+  "homeCustomHelp": "Create manual collections and include only cards you already own in inventory.",
+  "homeSmartHelp": "Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.",
+  "homeWishHelp": "Create a wishlist with advanced filters to track the missing cards you are looking for.",
+  "homeDeckHelp": "Track your decks and update mainboard/sideboard: deck cards stay in the deck and are not added to collections.",
+  "smartCollectionDefaultName": "Smart collection",
+  "newSmartCollectionTitle": "New smart collection",
+  "smartCollectionNeedFilterToCreate": "Choose at least one filter to create a smart collection.",
+  "smartCollectionNeedAtLeastOneFilter": "Choose at least one filter.",
+  "saveFilterLabel": "Save filter",
+  "loadArenaMtgoFileLabel": "Load Arena/MTGO file",
+  "pokemonDeckHintLabel": "Pokemon deck: exactly 60 cards, max 4 copies per name (except Basic Energy), at least 1 Basic Pokemon.",
+  "importDeckListLabel": "Import deck list",
+  "exportForArenaLabel": "Export for Arena",
+  "exportForMtgoLabel": "Export for MTGO",
+  "deckImportedSummary": "Deck imported: {imported} cards, {skipped} not found",
+  "@deckImportedSummary": {
+    "placeholders": {
+      "imported": {
+        "type": "int"
+      },
+      "skipped": {
+        "type": "int"
+      }
+    }
+  },
+  "deckImportingLabel": "Importing deck...",
+  "deckImportResultTitle": "Import result",
+  "deckImportCardsNotFoundTitle": "Cards not found",
+  "deckExportedSummary": "Deck exported: {fileName}",
+  "@deckExportedSummary": {
+    "placeholders": {
+      "fileName": {}
+    }
+  },
+  "deckImportFailed": "Deck import failed: {error}",
+  "@deckImportFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "deckExportFailed": "Deck export failed: {error}",
+  "@deckExportFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "pokemonDbProfileFullTitle": "Full (all cards)",
+  "pokemonDbProfileExpandedTitle": "Expanded (10 sets)",
+  "pokemonDbProfileStandardTitle": "Standard (6 sets)",
+  "pokemonDbProfileStarterTitle": "Starter (3 sets)",
+  "pokemonDbProfileFullDescription": "Complete Pokemon catalog.",
+  "pokemonDbProfileExpandedDescription": "Wide coverage for search and scanning.",
+  "pokemonDbProfileStandardDescription": "Recent sets, balanced size/coverage.",
+  "pokemonDbProfileStarterDescription": "Quick start with essential sets.",
+  "pokemonDbPickerTitle": "Choose Pokemon database",
+  "pokemonDbPickerSubtitle": "Pokemon database: choose which version to download.",
+  "primaryGameFixedMessage": "Primary game is fixed.",
+  "primaryFreeForever": "Primary free (forever)",
+  "purchasedLabel": "Purchased",
+  "secondaryPurchaseRequired": "Secondary: purchase required",
+  "buyGameLabel": "Buy {game} {price}",
+  "@buyGameLabel": {
+    "placeholders": {
+      "game": {},
+      "price": {}
+    }
+  },
+  "purchasesRestoredMessage": "Purchases restored.",
+  "restorePurchasesTimeoutMessage": "Restore purchases is taking too long. Try again.",
+  "restorePurchasesErrorMessage": "Error while restoring purchases. Please retry.",
+  "playStoreProductUnavailable": "Product not available on Google Play.",
+  "buyGameTitle": "Buy {game}",
+  "@buyGameTitle": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "buyGameBody": "You unlock {game} with a one-time purchase, forever on this account. Price is {price}. Purchases are handled by Google Play.",
+  "@buyGameBody": {
+    "placeholders": {
+      "game": {},
+      "price": {}
+    }
+  },
+  "continuePurchaseLabel": "Continue purchase",
+  "purchaseAlreadyOwnedSynced": "Purchase already owned on Google Play. Entitlement synced.",
+  "storeConnectionTimeout": "Store connection is taking too long. Try again.",
+  "purchaseFailedRetry": "Error during purchase. Please retry.",
+  "themeVaultDescription": "Steel-blue palette with a technical mood.",
+  "themeMagicDescription": "Classic BinderVault gold/brown look.",
+  "visualThemeTitle": "Visual theme",
+  "themeMagicSubtitle": "Default: original style",
+  "themeVaultSubtitle": "Alternative steel-blue look",
+  "issueCategoryCrash": "Crash",
+  "issueCategoryUi": "UI",
+  "issueCategoryPurchase": "Purchases",
+  "issueCategoryDatabase": "Database",
+  "issueCategoryOther": "Other",
+  "reportIssueLabel": "Report issue",
+  "issueCategoryLabel": "Category",
+  "issueDescribeHint": "Describe what happened and how to reproduce it.",
+  "sendLabel": "Send",
+  "reportSentThanks": "Report sent. Thanks.",
+  "reportSendUnavailable": "Sending is not available right now. Please retry.",
+  "diagnosticsCopied": "Diagnostics copied to clipboard.",
+  "resetMagicDatabaseLabel": "Reset Magic database",
+  "resetGameDatabaseTitle": "Reset {game} database",
+  "@resetGameDatabaseTitle": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "resetGameDatabaseBody": "Only {game} cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.",
+  "@resetGameDatabaseBody": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "resetInProgressTitle": "Reset in progress",
+  "cleaningGameDatabase": "Cleaning {game} database...",
+  "@cleaningGameDatabase": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "gameDatabaseResetDone": "{game} database reset. It will be downloaded again cleanly.",
+  "@gameDatabaseResetDone": {
+    "placeholders": {
+      "game": {}
+    }
+  },
+  "applyProfileLabel": "Apply profile",
+  "pokemonProfileUpdatedTapUpdate": "Pokemon profile updated. Tap Update available in Home to apply.",
+  "gamesSelectionSubtitle": "The first selected game stays free forever. The other requires purchase.",
+  "primaryGameLabel": "Primary game",
+  "configureBothDatabasesSubtitle": "Configure Magic and Pokemon databases separately.",
+  "toolsAndDiagnosticsTitle": "Tools & diagnostics",
+  "checkCoherenceLabel": "Check coherence",
+  "copyDiagnosticsLabel": "Copy diagnostics",
+  "whatsNewButtonLabel": "What's new",
+  "whatsNewDialogTitle": "What's new in 0.4.6",
+  "whatsNewLine1": "Collections logic updated: Inventory is now the single source of truth for quantities.",
+  "whatsNewLine2": "Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.",
+  "whatsNewLine3": "Improved multi-TCG support: data is isolated between Magic and Pokemon.",
+  "whatsNewLine4": "Home updated: under All cards you now see the latest additions in gallery mode.",
+  "whatsNewLine5": "Better first-open onboarding message to help users start faster.",
+  "whatsNewLine6": "Scanner upgraded: set filter by active game, foil toggle, and check button to confirm recognized name.",
+  "whatsNewLine7": "Scanner UX improved: startup tutorial with \"do not show again\" and a dedicated tutorial button.",
+  "whatsNewLine8": "Visual consistency improved: golden icons and Pokemon database selector aligned with Magic style.",
+  "whatsNewLine9": "Release cleanup: removed test/dev toggles and helper flows from production build.",
+  "createSmartCollectionTitle": "Create your smart collection",
+  "pokemonEnergyGrass": "Grass",
+  "pokemonEnergyFire": "Fire",
+  "pokemonEnergyWater": "Water",
+  "pokemonEnergyLightning": "Lightning",
+  "pokemonEnergyPsychicDarkness": "Psychic/Darkness",
+  "pokemonEnergyFighting": "Fighting",
+  "pokemonEnergyDragon": "Dragon",
+  "pokemonEnergyFairy": "Fairy",
+  "pokemonEnergyColorless": "Colorless",
+  "pokemonEnergyMetal": "Metal",
+  "pokemonEnergyNone": "None",
+  "pokemonTypeTrainer": "Trainer",
+  "pokemonTypeEnergy": "Energy",
+  "pokemonTypeItem": "Item",
+  "pokemonTypeSupporter": "Supporter",
+  "pokemonTypeStadium": "Stadium",
+  "pokemonTypeTool": "Pokemon Tool",
+  "pokemonEnergyTypeLabel": "Energy type",
+  "pokemonCardCategoryLabel": "Card category",
+  "pokemonAttackEnergyCostLabel": "Attack energy cost",
+  "addMultipleCardsByFilterTitle": "Add multiple cards by filter",
+  "addMultipleCardsByFilterSubtitle": "Apply filters and add all matching cards",
+  "allSelectedCardsOwned": "All selected cards are already owned.",
+  "skippedLabel": "Skipped",
+  "totalLabel": "Total",
+  "pokemonEnergyPluralLabel": "Energy",
+  "deckRule60Ok": "60-card rule: OK",
+  "deckBasicPokemonPresentOk": "Basic Pokemon present: OK",
+  "deckBasicPokemonRequired": "At least 1 Basic Pokemon is required.",
+  "deckCopyLimitOk": "Copy limit: OK",
+  "deckCopyLimitExceeded": "{count} card names exceed 4 copies (Basic Energy excluded).",
+  "@deckCopyLimitExceeded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deckAddCardsToReach60": "Add {count} cards to reach 60.",
+  "@deckAddCardsToReach60": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "deckRemoveCardsToReturn60": "Remove {count} cards to get back to 60.",
+  "@deckRemoveCardsToReturn60": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
     }
   }
 }

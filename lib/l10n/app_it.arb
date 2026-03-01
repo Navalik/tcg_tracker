@@ -363,11 +363,7 @@
     "whatYouGet":  "Cosa ottieni",
     "unlimitedCollectionsFeature":  "Collezioni illimitate",
     "supportFuturePremiumFeatures":  "Supporta le future funzioni premium",
-    "switchToBaseTest":  "Passa a Base (test)",
-    "switchToProTest":  "Passa a Pro (test)",
     "restorePurchases":  "Ripristina acquisti",
-    "testMode":  "Modalita test",
-    "testModeSubtitle":  "Quando abilitata, Upgrade attiva Pro localmente.",
     "manage":  "Gestisci",
     "reset":  "Ripristina",
     "resetSubtitle":  "Rimuovi tutte le collezioni e il database carte.",
@@ -674,6 +670,246 @@
     "@backupShareFailed":  {
         "placeholders":  {
             "error":  {}
+        }
+    },
+    "primaryGamePickerTitle":  "Scegli il gioco principale",
+    "primaryGamePickerBody":  "Seleziona il tuo gioco principale. L'altro gioco sara disponibile con Pro.",
+    "primaryFreeLabel":  "Incluso nel piano free",
+    "continueLabel":  "Continua",
+    "latestAddsLabel":  "Ultimi inserimenti",
+    "homeStartCollectionPrompt":  "Inizia ora la tua collezione: premi + e aggiungi le prime carte.",
+    "unlockOtherGameToSwitch":  "Sblocca l'altro gioco con Pro per poter cambiare.",
+    "scannerTutorialTitle":  "Tutorial scanner",
+    "scannerTutorialIntro":  "Usa questi controlli per velocizzare il riconoscimento:",
+    "scannerTutorialSet":  "• Set: limita la ricerca al set selezionato.",
+    "scannerTutorialFoil":  "• Foil: marca la carta come foil quando la aggiungi.",
+    "scannerTutorialCheck":  "• Check: se il riquadro e verde e il nome coincide, premi per confermare e velocizzare la scansione.",
+    "scannerTutorialFlash":  "• Flash: utile in ambienti poco illuminati.",
+    "doNotShowAgain":  "Non mostrare in seguito",
+    "scannerSetAnyLabel":  "Set: tutti",
+    "scannerAnySetOption":  "Tutti i set",
+    "closeLabel":  "Chiudi",
+    "openSettingsLabel":  "Apri impostazioni",
+    "gameInProTitle":  "{game} in versione Pro",
+    "@gameInProTitle":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "gameOneTimeUnlockBody":  "{game} e disponibile come acquisto una tantum. Attivalo dalle Impostazioni.",
+    "@gameOneTimeUnlockBody":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "pokemonInProTitle":  "Pokemon disponibile nella versione Pro",
+    "pokemonInProBody":  "Sblocca Pokemon dalle impostazioni per usare collezioni, ricerca e download del database dedicato.",
+    "customLabel":  "Custom",
+    "smartLabel":  "Smart",
+    "homeSetHelp":  "Scegli un set specifico e segui la checklist in modo chiaro: vedi subito le carte presenti e quelle che ti mancano.",
+    "homeCustomHelp":  "Crea raccolte manuali aggiungendo solo carte possedute dalla tua inventory.",
+    "homeSmartHelp":  "Salva un filtro dinamico: la smart collection mostra automaticamente solo le carte possedute che rispettano i criteri.",
+    "homeWishHelp":  "Crea una wishlist con filtri avanzati per tenere sotto controllo le carte mancanti che vuoi trovare.",
+    "homeDeckHelp":  "Tieni traccia dei tuoi mazzi e aggiorna mainboard/sideboard: le carte del deck restano nel mazzo e non vengono aggiunte alle collezioni.",
+    "smartCollectionDefaultName":  "Collezione smart",
+    "newSmartCollectionTitle":  "Nuova collezione smart",
+    "smartCollectionNeedFilterToCreate":  "Imposta almeno un filtro per creare una smart collection.",
+    "smartCollectionNeedAtLeastOneFilter":  "Imposta almeno un filtro.",
+    "saveFilterLabel":  "Salva filtro",
+    "loadArenaMtgoFileLabel":  "Carica file Arena/MTGO",
+    "pokemonDeckHintLabel":  "Mazzo Pokemon: 60 carte esatte, max 4 copie per nome (tranne Energie Base), almeno 1 Pokemon Base.",
+    "importDeckListLabel":  "Importa lista mazzo",
+    "exportForArenaLabel":  "Esporta per Arena",
+    "exportForMtgoLabel":  "Esporta per MTGO",
+    "deckImportedSummary":  "Mazzo importato: {imported} carte, {skipped} non trovate",
+    "@deckImportedSummary":  {
+        "placeholders":  {
+            "imported":  {
+                "type":  "int"
+            },
+            "skipped":  {
+                "type":  "int"
+            }
+        }
+    },
+    "deckImportingLabel":  "Importazione mazzo in corso...",
+    "deckImportResultTitle":  "Risultato import",
+    "deckImportCardsNotFoundTitle":  "Carte non trovate",
+    "deckExportedSummary":  "Mazzo esportato: {fileName}",
+    "@deckExportedSummary":  {
+        "placeholders":  {
+            "fileName":  {}
+        }
+    },
+    "deckImportFailed":  "Import mazzo non riuscito: {error}",
+    "@deckImportFailed":  {
+        "placeholders":  {
+            "error":  {}
+        }
+    },
+    "deckExportFailed":  "Export mazzo non riuscito: {error}",
+    "@deckExportFailed":  {
+        "placeholders":  {
+            "error":  {}
+        }
+    },
+    "pokemonDbProfileFullTitle":  "Full (tutte le carte)",
+    "pokemonDbProfileExpandedTitle":  "Expanded (10 set)",
+    "pokemonDbProfileStandardTitle":  "Standard (6 set)",
+    "pokemonDbProfileStarterTitle":  "Starter (3 set)",
+    "pokemonDbProfileFullDescription":  "Catalogo completo Pokemon.",
+    "pokemonDbProfileExpandedDescription":  "Copertura ampia per ricerca e scansione.",
+    "pokemonDbProfileStandardDescription":  "Set recenti, buon compromesso dimensione/copertura.",
+    "pokemonDbProfileStarterDescription":  "Avvio rapido con set essenziali.",
+    "pokemonDbPickerTitle":  "Scegli database Pokemon",
+    "pokemonDbPickerSubtitle":  "Database Pokemon: scegli quale versione scaricare.",
+    "primaryGameFixedMessage":  "Il gioco primario e fisso.",
+    "primaryFreeForever":  "Primario gratuito (per sempre)",
+    "purchasedLabel":  "Acquistato",
+    "secondaryPurchaseRequired":  "Secondario: acquisto richiesto",
+    "buyGameLabel":  "Acquista {game} {price}",
+    "@buyGameLabel":  {
+        "placeholders":  {
+            "game":  {},
+            "price":  {}
+        }
+    },
+    "purchasesRestoredMessage":  "Ripristino acquisti completato.",
+    "restorePurchasesTimeoutMessage":  "Ripristino acquisti troppo lento. Riprova.",
+    "restorePurchasesErrorMessage":  "Errore durante il ripristino acquisti. Riprova.",
+    "playStoreProductUnavailable":  "Prodotto non disponibile su Google Play.",
+    "buyGameTitle":  "Acquista {game}",
+    "@buyGameTitle":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "buyGameBody":  "Sblocchi {game} una sola volta, per sempre su questo account. Il prezzo e {price}. Gli acquisti sono gestiti da Google Play.",
+    "@buyGameBody":  {
+        "placeholders":  {
+            "game":  {},
+            "price":  {}
+        }
+    },
+    "continuePurchaseLabel":  "Continua acquisto",
+    "purchaseAlreadyOwnedSynced":  "Acquisto gia presente su Google Play. Entitlement sincronizzato.",
+    "storeConnectionTimeout":  "Connessione allo store troppo lenta. Riprova.",
+    "purchaseFailedRetry":  "Errore durante l'acquisto. Riprova.",
+    "themeVaultDescription":  "Blu acciaio e atmosfera tecnica.",
+    "themeMagicDescription":  "Tema classico oro/marrone di BinderVault.",
+    "visualThemeTitle":  "Tema grafico",
+    "themeMagicSubtitle":  "Default: stile originale",
+    "themeVaultSubtitle":  "Look alternativo blu acciaio",
+    "issueCategoryCrash":  "Crash",
+    "issueCategoryUi":  "Interfaccia",
+    "issueCategoryPurchase":  "Acquisti",
+    "issueCategoryDatabase":  "Database",
+    "issueCategoryOther":  "Altro",
+    "reportIssueLabel":  "Segnala problema",
+    "issueCategoryLabel":  "Categoria",
+    "issueDescribeHint":  "Descrivi cosa e successo e come riprodurlo.",
+    "sendLabel":  "Invia",
+    "reportSentThanks":  "Segnalazione inviata. Grazie.",
+    "reportSendUnavailable":  "Invio non disponibile ora. Riprova.",
+    "diagnosticsCopied":  "Diagnostica copiata negli appunti.",
+    "resetMagicDatabaseLabel":  "Reset database Magic",
+    "resetGameDatabaseTitle":  "Reset database {game}",
+    "@resetGameDatabaseTitle":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "resetGameDatabaseBody":  "Verranno cancellate solo le carte nel database {game} e riscaricate da zero. Collezioni, deck e quantita restano invariati.",
+    "@resetGameDatabaseBody":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "resetInProgressTitle":  "Reset in corso",
+    "cleaningGameDatabase":  "Pulizia database {game}...",
+    "@cleaningGameDatabase":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "gameDatabaseResetDone":  "Database {game} resettato. Verra riscaricato in modo pulito.",
+    "@gameDatabaseResetDone":  {
+        "placeholders":  {
+            "game":  {}
+        }
+    },
+    "applyProfileLabel":  "Applica profilo",
+    "pokemonProfileUpdatedTapUpdate":  "Profilo Pokemon aggiornato. Tocca Update disponibile in Home per applicarlo.",
+    "gamesSelectionSubtitle":  "Il primo gioco scelto e gratis per sempre. L'altro richiede acquisto.",
+    "primaryGameLabel":  "Gioco principale",
+    "configureBothDatabasesSubtitle":  "Configura separatamente i database di Magic e Pokemon.",
+    "toolsAndDiagnosticsTitle":  "Tool e diagnostica",
+    "checkCoherenceLabel":  "Controlla coerenza",
+    "copyDiagnosticsLabel":  "Copia diagnostica",
+    "whatsNewButtonLabel":  "Novita",
+    "whatsNewDialogTitle":  "Novita versione 0.4.6",
+    "whatsNewLine1":  "Logica collezioni aggiornata: Inventory e ora la fonte unica delle quantita.",
+    "whatsNewLine2":  "Comportamento coerente per Set, Custom, Smart e Wishlist, con regole di auto-aggiornamento.",
+    "whatsNewLine3":  "Supporto multi-TCG migliorato: dati separati tra Magic e Pokemon.",
+    "whatsNewLine4":  "Home aggiornata: sotto All cards trovi gli ultimi inserimenti in galleria.",
+    "whatsNewLine5":  "Prima apertura migliorata con messaggio onboarding per iniziare piu rapidamente.",
+    "whatsNewLine6":  "Scanner potenziato: filtro set per gioco attivo, toggle foil e pulsante check per confermare il nome.",
+    "whatsNewLine7":  "Scanner UX migliorata: tutorial iniziale con opzione \"non mostrare piu\" e pulsante tutorial dedicato.",
+    "whatsNewLine8":  "Grafica uniformata: icone dorate e selettore database Pokemon allineato allo stile Magic.",
+    "whatsNewLine9":  "Pulizia release: rimossi toggle e funzioni test/dev dalla build pubblica.",
+    "createSmartCollectionTitle":  "Crea una smart collection",
+    "pokemonEnergyGrass":  "Erba",
+    "pokemonEnergyFire":  "Fuoco",
+    "pokemonEnergyWater":  "Acqua",
+    "pokemonEnergyLightning":  "Lampo",
+    "pokemonEnergyPsychicDarkness":  "Psico/Oscurita",
+    "pokemonEnergyFighting":  "Lotta",
+    "pokemonEnergyDragon":  "Drago",
+    "pokemonEnergyFairy":  "Folletto",
+    "pokemonEnergyColorless":  "Incolore",
+    "pokemonEnergyMetal":  "Metallo",
+    "pokemonEnergyNone":  "Nessuno",
+    "pokemonTypeTrainer":  "Allenatore",
+    "pokemonTypeEnergy":  "Energia",
+    "pokemonTypeItem":  "Oggetto",
+    "pokemonTypeSupporter":  "Aiuto",
+    "pokemonTypeStadium":  "Stadio",
+    "pokemonTypeTool":  "Strumento Pokemon",
+    "pokemonEnergyTypeLabel":  "Tipo energia",
+    "pokemonCardCategoryLabel":  "Categoria carta",
+    "pokemonAttackEnergyCostLabel":  "Costo energia (attacco)",
+    "addMultipleCardsByFilterTitle":  "Aggiungi piu carte da filtro",
+    "addMultipleCardsByFilterSubtitle":  "Seleziona filtri e aggiungi tutte le carte trovate",
+    "allSelectedCardsOwned":  "Tutte gia possedute.",
+    "skippedLabel":  "Saltate",
+    "totalLabel":  "Totale",
+    "pokemonEnergyPluralLabel":  "Energie",
+    "deckRule60Ok":  "Regola 60 carte: OK",
+    "deckBasicPokemonPresentOk":  "Pokemon Base presente: OK",
+    "deckBasicPokemonRequired":  "Manca almeno 1 Pokemon Base.",
+    "deckCopyLimitOk":  "Limite copie: OK",
+    "deckCopyLimitExceeded":  "{count} carte superano 4 copie (escluse Energie Base).",
+    "@deckCopyLimitExceeded":  {
+        "placeholders":  {
+            "count":  {
+                "type":  "int"
+            }
+        }
+    },
+    "deckAddCardsToReach60":  "Mancano {count} carte per arrivare a 60.",
+    "@deckAddCardsToReach60":  {
+        "placeholders":  {
+            "count":  {
+                "type":  "int"
+            }
+        }
+    },
+    "deckRemoveCardsToReturn60":  "Rimuovi {count} carte per tornare a 60.",
+    "@deckRemoveCardsToReturn60":  {
+        "placeholders":  {
+            "count":  {
+                "type":  "int"
+            }
         }
     }
 }

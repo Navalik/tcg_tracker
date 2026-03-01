@@ -32,7 +32,6 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialCollectorNumber,
     this.selectionEnabled = true,
     this.ownershipCollectionId,
-    this.alsoAddToCollectionId,
     this.customMembershipCollectionId,
     this.addMissingToCollectionId,
     this.requiredFilter,
@@ -44,7 +43,6 @@ class _CardSearchSheet extends StatefulWidget {
   final String? initialCollectorNumber;
   final bool selectionEnabled;
   final int? ownershipCollectionId;
-  final int? alsoAddToCollectionId;
   final int? customMembershipCollectionId;
   final int? addMissingToCollectionId;
   final CollectionFilter? requiredFilter;
@@ -922,27 +920,27 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (_isPokemonSearch) {
       switch (code.toUpperCase()) {
         case 'G':
-          return _isItalianUi() ? 'Erba' : 'Grass';
+          return l10n.pokemonEnergyGrass;
         case 'R':
-          return _isItalianUi() ? 'Fuoco' : 'Fire';
+          return l10n.pokemonEnergyFire;
         case 'U':
-          return _isItalianUi() ? 'Acqua' : 'Water';
+          return l10n.pokemonEnergyWater;
         case 'L':
-          return _isItalianUi() ? 'Lampo' : 'Lightning';
+          return l10n.pokemonEnergyLightning;
         case 'B':
-          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+          return l10n.pokemonEnergyPsychicDarkness;
         case 'F':
-          return _isItalianUi() ? 'Lotta' : 'Fighting';
+          return l10n.pokemonEnergyFighting;
         case 'D':
-          return _isItalianUi() ? 'Drago' : 'Dragon';
+          return l10n.pokemonEnergyDragon;
         case 'W':
-          return _isItalianUi() ? 'Folletto' : 'Fairy';
+          return l10n.pokemonEnergyFairy;
         case 'C':
-          return _isItalianUi() ? 'Incolore' : 'Colorless';
+          return l10n.pokemonEnergyColorless;
         case 'M':
-          return _isItalianUi() ? 'Metallo' : 'Metal';
+          return l10n.pokemonEnergyMetal;
         case 'N':
-          return _isItalianUi() ? 'Nessuno' : 'None';
+          return l10n.pokemonEnergyNone;
         default:
           return code.toUpperCase();
       }
@@ -963,11 +961,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       default:
         return code.toUpperCase();
     }
-  }
-
-  bool _isItalianUi() {
-    final code = Localizations.localeOf(context).languageCode.toLowerCase();
-    return code.startsWith('it');
   }
 
   Future<void> _showAdvancedFilters() async {
@@ -3230,7 +3223,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     BuildContext? anchorContext,
   }) async {
     final ownedCollectionId = widget.ownershipCollectionId;
-    final alsoAddToCollectionId = widget.alsoAddToCollectionId;
     final customMembershipCollectionId = widget.customMembershipCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
     if ((ownedCollectionId == null &&
@@ -3297,12 +3289,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         );
       } else if (ownedCollectionId != null) {
         await InventoryService.instance.addToInventory(card.id, deltaQty: 1);
-        if (alsoAddToCollectionId != null && alsoAddToCollectionId != ownedCollectionId) {
-          await ScryfallDatabase.instance.upsertCollectionMembership(
-            alsoAddToCollectionId,
-            card.id,
-          );
-        }
       }
       if (!mounted) {
         return;
@@ -3335,7 +3321,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   Future<void> _addCardFromDetails(CollectionCardEntry entry) async {
     final ownedCollectionId = widget.ownershipCollectionId;
-    final alsoAddToCollectionId = widget.alsoAddToCollectionId;
     final customMembershipCollectionId = widget.customMembershipCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
     if ((ownedCollectionId == null &&
@@ -3392,12 +3377,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         );
       } else if (ownedCollectionId != null) {
         await InventoryService.instance.addToInventory(entry.cardId, deltaQty: 1);
-        if (alsoAddToCollectionId != null && alsoAddToCollectionId != ownedCollectionId) {
-          await ScryfallDatabase.instance.upsertCollectionMembership(
-            alsoAddToCollectionId,
-            entry.cardId,
-          );
-        }
       }
       if (!mounted) {
         return;

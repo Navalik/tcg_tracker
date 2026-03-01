@@ -1,4 +1,4 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -171,39 +171,19 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<void> _activateSecondaryGameForTest() async {
-    final manager = _purchaseManager;
-    final secondary = _secondaryGame == TcgGame.pokemon
-        ? AppTcgGame.pokemon
-        : AppTcgGame.mtg;
-    await manager.setGameUnlockedForTest(secondary, true);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _ownedTcgs = _resolveOwnedTcgsForUi(_ownedTcgs);
-    });
-    showAppSnackBar(
-      context,
-      _isItalianUi
-          ? '${_secondaryGame == TcgGame.pokemon ? 'Pokemon' : 'Magic'} attivato (test).'
-          : '${_secondaryGame == TcgGame.pokemon ? 'Pokemon' : 'Magic'} activated (test).',
-    );
-  }
-
   Future<void> _changePrimaryGame(TcgGame selected) async {
     if (selected == _primaryGame) {
       return;
     }
+    final l10n = AppLocalizations.of(context)!;
     showAppSnackBar(
       context,
-      _isItalianUi
-          ? 'Il gioco primario è fisso.'
-          : 'Primary game is fixed.',
+      l10n.primaryGameFixedMessage,
     );
   }
 
   Widget _buildGameSelectorEntry(TcgGame game) {
+    final l10n = AppLocalizations.of(context)!;
     final isPrimary = game == _primaryGame;
     final isUnlocked = _isGameUnlockedForUi(game);
     final gameName = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
@@ -214,10 +194,8 @@ class _SettingsPageState extends State<SettingsPage> {
         title: Text(gameName),
         subtitle: Text(
           isPrimary
-              ? (_isItalianUi
-                    ? 'Primario gratuito (per sempre)'
-                    : 'Primary free (forever)')
-              : (_isItalianUi ? 'Acquistato' : 'Purchased'),
+              ? l10n.primaryFreeForever
+              : l10n.purchasedLabel,
         ),
       );
     }
@@ -237,9 +215,7 @@ class _SettingsPageState extends State<SettingsPage> {
             Text(gameName, style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 2),
             Text(
-              _isItalianUi
-                  ? 'Secondario: acquisto richiesto'
-                  : 'Secondary: purchase required',
+              l10n.secondaryPurchaseRequired,
               style: Theme.of(
                 context,
               ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
@@ -253,11 +229,12 @@ class _SettingsPageState extends State<SettingsPage> {
                 foregroundColor: const Color(0xFF1C1510),
               ),
               label: Text(
-                _isItalianUi
-                    ? 'Acquista $gameName ${_purchaseManager.additionalTcgPriceLabel ?? ''}'
-                          .trim()
-                    : 'Buy $gameName ${_purchaseManager.additionalTcgPriceLabel ?? ''}'
-                          .trim(),
+                l10n
+                    .buyGameLabel(
+                      gameName,
+                      _purchaseManager.additionalTcgPriceLabel ?? '',
+                    )
+                    .trim(),
               ),
             ),
           ],
@@ -285,9 +262,7 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       showAppSnackBar(
         context,
-        _isItalianUi
-            ? 'Ripristino acquisti completato.'
-            : 'Purchases restored.',
+        AppLocalizations.of(context)!.purchasesRestoredMessage,
       );
     } on TimeoutException {
       if (!mounted) {
@@ -295,9 +270,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       showAppSnackBar(
         context,
-        _isItalianUi
-            ? 'Ripristino acquisti troppo lento. Riprova.'
-            : 'Restore purchases is taking too long. Try again.',
+        AppLocalizations.of(context)!.restorePurchasesTimeoutMessage,
       );
     } catch (error, stackTrace) {
       debugPrint('Restore purchases failed: $error');
@@ -309,9 +282,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       showAppSnackBar(
         context,
-        _isItalianUi
-            ? 'Errore durante il ripristino acquisti. Riprova.'
-            : 'Error while restoring purchases. Please retry.',
+        AppLocalizations.of(context)!.restorePurchasesErrorMessage,
       );
     } finally {
       if (mounted) {
@@ -341,9 +312,7 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         showAppSnackBar(
           context,
-          _isItalianUi
-              ? 'Prodotto non disponibile su Google Play.'
-              : 'Product not available on Google Play.',
+          AppLocalizations.of(context)!.playStoreProductUnavailable,
         );
         return;
       }
@@ -357,24 +326,18 @@ class _SettingsPageState extends State<SettingsPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(
-            _isItalianUi ? 'Acquista $secondaryName' : 'Buy $secondaryName',
-          ),
+          title: Text(AppLocalizations.of(context)!.buyGameTitle(secondaryName)),
           content: Text(
-            _isItalianUi
-                ? 'Sblocchi $secondaryName una sola volta, per sempre su questo account. Il prezzo e $priceLabel. Gli acquisti sono gestiti da Google Play.'
-                : 'You unlock $secondaryName with a one-time purchase, forever on this account. Price is $priceLabel. Purchases are handled by Google Play.',
+            AppLocalizations.of(context)!.buyGameBody(secondaryName, priceLabel),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(_isItalianUi ? 'Annulla' : 'Cancel'),
+              child: Text(AppLocalizations.of(context)!.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(
-                _isItalianUi ? 'Continua acquisto' : 'Continue purchase',
-              ),
+              child: Text(AppLocalizations.of(context)!.continuePurchaseLabel),
             ),
           ],
         ),
@@ -389,9 +352,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (_purchaseManager.lastError == 'already_owned') {
         showAppSnackBar(
           context,
-          _isItalianUi
-              ? 'Acquisto giÃ  presente su Google Play. Entitlement sincronizzato.'
-              : 'Purchase already owned on Google Play. Entitlement synced.',
+          AppLocalizations.of(context)!.purchaseAlreadyOwnedSynced,
         );
       }
     } on TimeoutException {
@@ -400,9 +361,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       showAppSnackBar(
         context,
-        _isItalianUi
-            ? 'Connessione allo store troppo lenta. Riprova.'
-            : 'Store connection is taking too long. Try again.',
+        AppLocalizations.of(context)!.storeConnectionTimeout,
       );
     } catch (error, stackTrace) {
       debugPrint('Secondary game purchase flow failed: $error');
@@ -414,9 +373,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       showAppSnackBar(
         context,
-        _isItalianUi
-            ? 'Errore durante l\'acquisto. Riprova.'
-            : 'Error during purchase. Please retry.',
+        AppLocalizations.of(context)!.purchaseFailedRetry,
       );
     } finally {
       if (mounted) {
@@ -481,24 +438,21 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   String _themeDescription(String code) {
+    final l10n = AppLocalizations.of(context)!;
     final normalized = code.trim().toLowerCase();
     if (normalized == 'vault') {
-      return _isItalianUi
-          ? 'Blu acciaio e atmosfera tecnica.'
-          : 'Steel-blue palette with a technical mood.';
+      return l10n.themeVaultDescription;
     }
-    return _isItalianUi
-        ? 'Tema classico oro/marrone di Binder Vault.'
-        : 'Classic Binder Vault gold/brown look.';
+    return l10n.themeMagicDescription;
   }
 
   Future<void> _changeVisualTheme() async {
     final selected = await showDialog<String>(
       context: context,
       builder: (context) {
-        final isItalian = _isItalianUi;
+        final l10n = AppLocalizations.of(context)!;
         return SimpleDialog(
-          title: Text(isItalian ? 'Tema grafico' : 'Visual theme'),
+          title: Text(l10n.visualThemeTitle),
           children: [
             RadioGroup<String>(
               groupValue: _appThemeCode,
@@ -508,20 +462,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   RadioListTile<String>(
                     value: 'magic',
                     title: const Text('Magic'),
-                    subtitle: Text(
-                      isItalian
-                          ? 'Default: stile originale'
-                          : 'Default: original style',
-                    ),
+                    subtitle: Text(l10n.themeMagicSubtitle),
                   ),
                   RadioListTile<String>(
                     value: 'vault',
                     title: const Text('Vault'),
-                    subtitle: Text(
-                      isItalian
-                          ? 'Look alternativo blu acciaio'
-                          : 'Alternative steel-blue look',
-                    ),
+                    subtitle: Text(l10n.themeVaultSubtitle),
                   ),
                 ],
               ),
@@ -572,21 +518,21 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _reportIssueFromSettings() async {
+    final l10n = AppLocalizations.of(context)!;
     final categories = <String, String>{
-      'crash': _isItalianUi ? 'Crash' : 'Crash',
-      'ui': _isItalianUi ? 'Interfaccia' : 'UI',
-      'purchase': _isItalianUi ? 'Acquisti' : 'Purchases',
-      'database': _isItalianUi ? 'Database' : 'Database',
-      'other': _isItalianUi ? 'Altro' : 'Other',
+      'crash': l10n.issueCategoryCrash,
+      'ui': l10n.issueCategoryUi,
+      'purchase': l10n.issueCategoryPurchase,
+      'database': l10n.issueCategoryDatabase,
+      'other': l10n.issueCategoryOther,
     };
     final controller = TextEditingController();
     final payload = await showDialog<(String, String)>(
       context: context,
       builder: (context) {
-        final isItalian = _isItalianUi;
         var selectedCategory = 'other';
         return AlertDialog(
-          title: Text(isItalian ? 'Segnala problema' : 'Report issue'),
+          title: Text(l10n.reportIssueLabel),
           content: StatefulBuilder(
             builder: (context, setModalState) => Column(
               mainAxisSize: MainAxisSize.min,
@@ -594,7 +540,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 DropdownButtonFormField<String>(
                   initialValue: selectedCategory,
                   decoration: InputDecoration(
-                    labelText: isItalian ? 'Categoria' : 'Category',
+                    labelText: l10n.issueCategoryLabel,
                   ),
                   items: categories.entries
                       .map(
@@ -620,9 +566,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   minLines: 4,
                   maxLines: 8,
                   decoration: InputDecoration(
-                    hintText: isItalian
-                        ? 'Descrivi cosa e successo e come riprodurlo.'
-                        : 'Describe what happened and how to reproduce it.',
+                    hintText: l10n.issueDescribeHint,
                   ),
                 ),
               ],
@@ -631,12 +575,12 @@ class _SettingsPageState extends State<SettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: Text(isItalian ? 'Annulla' : 'Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.of(context).pop((controller.text, selectedCategory)),
-              child: Text(isItalian ? 'Invia' : 'Send'),
+              child: Text(l10n.sendLabel),
             ),
           ],
         );
@@ -657,13 +601,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     showAppSnackBar(
       context,
-      sent
-          ? (_isItalianUi
-                ? 'Segnalazione inviata. Grazie.'
-                : 'Report sent. Thanks.')
-          : (_isItalianUi
-                ? 'Invio non disponibile ora. Riprova.'
-                : 'Sending is not available right now. Please retry.'),
+      sent ? l10n.reportSentThanks : l10n.reportSendUnavailable,
     );
   }
 
@@ -699,9 +637,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     showAppSnackBar(
       context,
-      _isItalianUi
-          ? 'Diagnostica copiata negli appunti.'
-          : 'Diagnostics copied to clipboard.',
+      AppLocalizations.of(context)!.diagnosticsCopied,
     );
   }
 
@@ -777,15 +713,15 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _changeBulkType() async {
-    final isItalian = _isItalianUi;
+    final l10n = AppLocalizations.of(context)!;
     final selected = await _showBulkTypePicker(
       context,
       allowCancel: true,
       selectedType: _bulkType,
       requireConfirmation: true,
-      confirmLabel: AppLocalizations.of(context)!.downloadUpdate,
+      confirmLabel: l10n.downloadUpdate,
       allowResetAction: true,
-      resetLabel: isItalian ? 'Reset database Magic' : 'Reset Magic database',
+      resetLabel: l10n.resetMagicDatabaseLabel,
     );
     if (selected == null) {
       return;
@@ -869,21 +805,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _resetDatabaseForGame(TcgGame game) async {
     final l10n = AppLocalizations.of(context)!;
-    final isItalian = _isItalianUi;
     final gameLabel = game == TcgGame.mtg ? 'Magic' : 'Pokemon';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: Text(
-            isItalian
-                ? 'Reset database $gameLabel'
-                : 'Reset $gameLabel database',
+            l10n.resetGameDatabaseTitle(gameLabel),
           ),
           content: Text(
-            isItalian
-                ? 'Verranno cancellate solo le carte nel database $gameLabel e riscaricate da zero. Collezioni, deck e quantitÃ  restano invariati.'
-                : 'Only $gameLabel cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.',
+            l10n.resetGameDatabaseBody(gameLabel),
           ),
           actions: [
             TextButton(
@@ -892,7 +823,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: Text(isItalian ? 'Reset' : 'Reset'),
+              child: Text(l10n.reset),
             ),
           ],
         );
@@ -906,7 +837,7 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: Text(isItalian ? 'Reset in corso' : 'Reset in progress'),
+        title: Text(l10n.resetInProgressTitle),
         content: Row(
           children: [
             const SizedBox(
@@ -917,9 +848,7 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                isItalian
-                    ? 'Pulizia database $gameLabel...'
-                    : 'Cleaning $gameLabel database...',
+                l10n.cleaningGameDatabase(gameLabel),
               ),
             ),
           ],
@@ -958,76 +887,26 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     showAppSnackBar(
       context,
-      isItalian
-          ? 'Database $gameLabel resettato. VerrÃ  riscaricato in modo pulito.'
-          : '$gameLabel database reset. It will be downloaded again cleanly.',
+      l10n.gameDatabaseResetDone(gameLabel),
     );
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
   }
 
   String _pokemonProfileLabel(String profile) {
-    switch (profile.trim().toLowerCase()) {
-      case 'full':
-        return _isItalianUi ? 'Full (tutte le carte)' : 'Full (all cards)';
-      case 'expanded':
-        return _isItalianUi ? 'Expanded (10 set)' : 'Expanded (10 sets)';
-      case 'standard':
-        return _isItalianUi ? 'Standard (6 set)' : 'Standard (6 sets)';
-      case 'starter':
-      default:
-        return _isItalianUi ? 'Starter (3 set)' : 'Starter (3 sets)';
-    }
+    return _pokemonDatasetProfileTitle(context, profile);
   }
 
   String _pokemonProfileDescription(String profile) {
-    switch (profile.trim().toLowerCase()) {
-      case 'full':
-        return _isItalianUi
-            ? 'Catalogo completo via API. Download grande.'
-            : 'Complete catalog via API. Large download.';
-      case 'expanded':
-        return _isItalianUi
-            ? 'PiÃ¹ carte offline, download piÃ¹ grande.'
-            : 'More offline cards, larger download.';
-      case 'standard':
-        return _isItalianUi
-            ? 'Compromesso tra dimensione e copertura.'
-            : 'Balanced size and card coverage.';
-      case 'starter':
-      default:
-        return _isItalianUi
-            ? 'Database leggero, ideale per iniziare.'
-            : 'Lightweight database, good to start.';
-    }
+    return _pokemonDatasetProfileDescription(context, profile);
   }
 
   Future<void> _changePokemonDatasetProfile() async {
-    final options = const ['starter', 'standard', 'expanded', 'full'];
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (context) {
-        final isIt = _isItalianUi;
-        return SimpleDialog(
-          title: Text(isIt ? 'Database Pokemon' : 'Pokemon database'),
-          children: [
-            RadioGroup<String>(
-              groupValue: _pokemonDatasetProfile,
-              onChanged: (value) => Navigator.of(context).pop(value),
-              child: Column(
-                children: options
-                    .map(
-                      (profile) => RadioListTile<String>(
-                        value: profile,
-                        title: Text(_pokemonProfileLabel(profile)),
-                        subtitle: Text(_pokemonProfileDescription(profile)),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-            ),
-          ],
-        );
-      },
+    final selected = await _showPokemonDatasetProfilePicker(
+      context,
+      allowCancel: true,
+      selectedProfile: _pokemonDatasetProfile,
+      requireConfirmation: true,
+      confirmLabel: AppLocalizations.of(context)!.applyProfileLabel,
     );
     if (selected == null || selected == _pokemonDatasetProfile) {
       return;
@@ -1041,9 +920,7 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     showAppSnackBar(
       context,
-      _isItalianUi
-          ? 'Profilo Pokemon aggiornato. Tocca Update disponibile in Home per applicarlo.'
-          : 'Pokemon profile updated. Tap Update available in Home to apply.',
+      AppLocalizations.of(context)!.pokemonProfileUpdatedTapUpdate,
     );
   }
 
@@ -1471,7 +1348,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.palette_outlined,
-                  title: _isItalianUi ? 'Tema grafico' : 'Visual theme',
+                  title: l10n.visualThemeTitle,
                   subtitle: _themeDescription(_appThemeCode),
                   children: [
                     ListTile(
@@ -1491,13 +1368,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.sports_esports_rounded,
-                  title: _isItalianUi ? 'Giochi' : 'Games',
-                  subtitle: _isItalianUi
-                      ? 'Il primo gioco scelto Ã¨ gratis per sempre. Lâ€™altro richiede acquisto.'
-                      : 'The first selected game stays free forever. The other requires purchase.',
+                  title: l10n.games,
+                  subtitle: l10n.gamesSelectionSubtitle,
                   children: [
                     Text(
-                      _isItalianUi ? 'Gioco principale' : 'Primary game',
+                      l10n.primaryGameLabel,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     const SizedBox(height: 6),
@@ -1539,26 +1414,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   )
                                 : const Icon(Icons.restore),
                             label: Text(
-                              _isItalianUi
-                                  ? 'Ripristina acquisti'
-                                  : 'Restore purchases',
+                              l10n.restorePurchases,
                             ),
                           ),
-                          if (!_isGameUnlockedForUi(_secondaryGame))
-                            OutlinedButton.icon(
-                              onPressed: _gamesBusy
-                                  ? null
-                                  : _activateSecondaryGameForTest,
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0xFF5D4731),
-                                ),
-                              ),
-                              icon: const Icon(Icons.science_outlined),
-                              label: Text(
-                                _isItalianUi ? 'Unlock test' : 'Unlock test',
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -1624,9 +1482,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   context: context,
                   icon: Icons.storage_rounded,
                   title: l10n.cardDatabase,
-                  subtitle: _isItalianUi
-                      ? 'Configura separatamente i database di Magic e Pokemon.'
-                      : 'Configure Magic and Pokemon databases separately.',
+                  subtitle: l10n.configureBothDatabasesSubtitle,
                   children: [
                     Text(
                       'Magic',
@@ -1657,7 +1513,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
-                            child: Text(_isItalianUi ? 'Reset' : 'Reset'),
+                            child: Text(l10n.reset),
                           ),
                           OutlinedButton(
                             onPressed: _changeBulkType,
@@ -1700,7 +1556,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
-                            child: Text(_isItalianUi ? 'Reset' : 'Reset'),
+                            child: Text(l10n.reset),
                           ),
                           OutlinedButton(
                             onPressed: _changePokemonDatasetProfile,
@@ -1913,7 +1769,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionCard(
                   context: context,
                   icon: Icons.build_circle_outlined,
-                  title: _isItalianUi ? 'Tool e diagnostica' : 'Tools & diagnostics',
+                  title: l10n.toolsAndDiagnosticsTitle,
                   children: [
                     LayoutBuilder(
                       builder: (context, constraints) {
@@ -1947,9 +1803,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                             ),
                                           )
                                         : Text(
-                                            _isItalianUi
-                                                ? 'Controlla coerenza'
-                                                : 'Check coherence',
+                                            l10n.checkCoherenceLabel,
                                             maxLines: 1,
                                             softWrap: false,
                                             overflow: TextOverflow.ellipsis,
@@ -1969,9 +1823,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                       maximumSize: uniformHeight,
                                     ),
                                     child: Text(
-                                      _isItalianUi
-                                          ? 'Copia diagnostica'
-                                          : 'Copy diagnostics',
+                                      l10n.copyDiagnosticsLabel,
                                       maxLines: 1,
                                       softWrap: false,
                                       overflow: TextOverflow.ellipsis,
@@ -1998,9 +1850,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                       maximumSize: uniformHeight,
                                     ),
                                     child: Text(
-                                      _isItalianUi
-                                          ? 'Segnala problema'
-                                          : 'Report issue',
+                                      l10n.reportIssueLabel,
                                       maxLines: 1,
                                       softWrap: false,
                                       overflow: TextOverflow.ellipsis,

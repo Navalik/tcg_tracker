@@ -1506,6 +1506,72 @@ class ScryfallDatabase {
         .toList();
   }
 
+  Future<List<CardSearchResult>> fetchRecentOwnedCardPreviews(
+    int collectionId, {
+    int limit = 10,
+  }) async {
+    final db = await open();
+    final resolvedLimit = limit <= 0 ? 10 : limit;
+    final rows = await db
+        .customSelect(
+          '''
+      SELECT
+        cards.id AS id,
+        cards.name AS name,
+        COALESCE(cards.set_code, '') AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces
+      FROM collection_cards
+      JOIN cards ON cards.id = collection_cards.card_id
+      WHERE collection_cards.collection_id = ?
+        AND collection_cards.quantity > 0
+      ORDER BY collection_cards.rowid DESC
+      LIMIT ?
+      ''',
+          variables: [
+            Variable.withInt(collectionId),
+            Variable.withInt(resolvedLimit),
+          ],
+        )
+        .get();
+
+    return rows
+        .map(
+          (row) => CardSearchResult(
+            id: row.read<String>('id'),
+            name: row.read<String>('name'),
+            setCode: row.read<String>('set_code'),
+            setName: row.readNullable<String>('set_name') ?? '',
+            setTotal: row.readNullable<int>('set_total'),
+            collectorNumber: row.read<String>('collector_number'),
+            rarity: row.readNullable<String>('rarity') ?? '',
+            typeLine: row.readNullable<String>('type_line') ?? '',
+            colors: row.readNullable<String>('colors') ?? '',
+            colorIdentity: row.readNullable<String>('color_identity') ?? '',
+            priceUsd: _readOptionalPrice(row, 'price_usd'),
+            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+            priceEur: _readOptionalPrice(row, 'price_eur'),
+            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+            imageUri: _extractImageUrl(
+              row.readNullable<String>('image_uris'),
+              row.readNullable<String>('card_faces'),
+            ),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Future<List<CollectionCardEntry>> fetchCustomCollectionOwnedCards(
     int collectionId, {
     int? limit,
@@ -3246,6 +3312,7 @@ class ScryfallDatabase {
         UPDATE collections
         SET type = 'all'
         WHERE lower(trim(name)) IN ('all cards', 'tutte le carte', 'my collection')
+          AND type != 'all'
         ''',
       );
       repairedEntries += await readChanges();
@@ -3261,7 +3328,7 @@ class ScryfallDatabase {
         '''
         UPDATE collections
         SET type = 'smart'
-        WHERE type = 'custom'
+        WHERE type != 'smart'
           AND filter_json IS NOT NULL
           AND trim(filter_json) != ''
         ''',
@@ -3374,6 +3441,7 @@ class ScryfallDatabase {
         UPDATE collections
         SET filter_json = NULL
         WHERE type = 'wishlist'
+          AND filter_json IS NOT NULL
         ''',
       );
       repairedEntries += await readChanges();
@@ -3385,6 +3453,11 @@ class ScryfallDatabase {
           SELECT id FROM collections
           WHERE type = 'wishlist'
         )
+          AND (
+            COALESCE(quantity, 0) != 0 OR
+            COALESCE(foil, 0) != 0 OR
+            COALESCE(alt_art, 0) != 0
+          )
         ''',
       );
       repairedEntries += await readChanges();
@@ -3400,6 +3473,11 @@ class ScryfallDatabase {
             AND (filter_json IS NULL OR trim(filter_json) = '')
             AND name NOT LIKE '__deck_side__:%'
         )
+          AND (
+            COALESCE(quantity, 0) != 0 OR
+            COALESCE(foil, 0) != 0 OR
+            COALESCE(alt_art, 0) != 0
+          )
         ''',
       );
       repairedEntries += await readChanges();

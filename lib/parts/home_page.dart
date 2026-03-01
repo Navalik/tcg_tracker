@@ -38,15 +38,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _initialCollectionsLoading = true;
   bool _collectionsLoadInProgress = false;
   int _totalCardCount = 0;
+  int _appFirstOpenFlag = 1;
+  List<CardSearchResult> _recentAllCards = const [];
   Map<int, int> _deckSideboardCounts = {};
   late final AnimationController _snakeController;
   Map<String, String> _setNameLookup = {};
   static const int _deckImportBatchSize = 120;
   TcgGame _selectedHomeGame = TcgGame.mtg;
   _HomeCollectionsMenu _activeCollectionsMenu = _HomeCollectionsMenu.home;
-  bool _forceFreePreview = false;
-  bool get _hasRealProAccess => _purchaseManager.isPro || _isProUnlocked;
-  bool get _hasProAccess => _hasRealProAccess && !_forceFreePreview;
+  bool get _hasProAccess => _purchaseManager.isPro || _isProUnlocked;
 
   void _onCollectionsRefreshRequested() {
     unawaited(_loadCollections());
@@ -62,16 +62,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       setState(() {
         _isProUnlocked = _purchaseManager.isPro;
-        if (!_hasRealProAccess) {
-          _forceFreePreview = false;
-        }
       });
     };
     _purchaseManager.addListener(_purchaseListener);
     _isProUnlocked = _purchaseManager.isPro;
-    if (!_hasRealProAccess) {
-      _forceFreePreview = false;
-    }
     _snakeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -83,6 +77,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   Future<void> _initializeEnvironmentAndData() async {
     await _purchaseManager.init();
+    final firstOpenFlag = await AppSettings.loadAppFirstOpenFlag();
+    if (mounted) {
+      setState(() {
+        _appFirstOpenFlag = firstOpenFlag;
+      });
+    }
+    if (firstOpenFlag == 1) {
+      await AppSettings.saveAppFirstOpenFlag(0);
+    }
     await _ensurePrimaryGameSelectionOnFirstLaunch();
     await TcgEnvironmentController.instance.init();
     if (!mounted) {
@@ -91,20 +94,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _selectedHomeGame = TcgEnvironmentController.instance.currentGame;
     });
-    if (!_isGameUnlocked(_selectedHomeGame)) {
-      final fallbackGame = _firstAccessibleGame();
-      await TcgEnvironmentController.instance.setGame(fallbackGame);
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _selectedHomeGame = fallbackGame;
-      });
-    }
+    await _ensureSelectedHomeGameUnlocked();
     await ScryfallDatabase.instance.open();
     await _runCollectionCoherenceCheckIfNeeded();
     await _loadCollections();
     await _maybeShowLatestReleaseNotesBeforeDbDownloads();
+    await _maybePromptPrimaryGameSelectionForCurrentRelease();
+    await _ensureSelectedHomeGameUnlocked();
     if (!mounted || !context.mounted) {
       return;
     }
@@ -146,25 +142,51 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final selected = await _showPrimaryGamePickerDialog();
-    if (selected == null) {
-      await AppSettings.ensurePrimaryTcgGame(AppTcgGame.mtg);
-      await AppSettings.saveSelectedTcgGame(AppTcgGame.mtg);
-      await _purchaseManager.syncPrimaryGameFromSettings();
-      return;
-    }
+    await _applyPrimaryGameSelection(selected ?? TcgGame.mtg);
+  }
+
+  Future<void> _applyPrimaryGameSelection(TcgGame selected) async {
     final selectedGame = selected == TcgGame.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;
     await AppSettings.savePrimaryTcgGame(selectedGame);
     await AppSettings.saveSelectedTcgGame(selectedGame);
     await _purchaseManager.syncPrimaryGameFromSettings();
+    await TcgEnvironmentController.instance.setGame(selected);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedHomeGame = selected;
+    });
+  }
+
+  Future<void> _maybePromptPrimaryGameSelectionForCurrentRelease() async {
+    final promptedVersion = await AppSettings.loadPrimaryGamePromptVersion();
+    if (promptedVersion == _latestReleaseNotesId || !mounted) {
+      return;
+    }
+    final selected = await _showPrimaryGamePickerDialog();
+    await _applyPrimaryGameSelection(selected ?? TcgGame.mtg);
+    await AppSettings.savePrimaryGamePromptVersion(_latestReleaseNotesId);
+    await TcgEnvironmentController.instance.init();
+    if (!mounted) {
+      return;
+    }
+    final nextGame = TcgEnvironmentController.instance.currentGame;
+    setState(() {
+      _selectedHomeGame = nextGame;
+      _initialCollectionsLoading = true;
+      _collections.clear();
+    });
+    await _loadCollections();
   }
 
   Future<TcgGame?> _showPrimaryGamePickerDialog() async {
     if (!mounted) {
       return null;
     }
-    final isItalian = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     var current = TcgGame.mtg;
     return showDialog<TcgGame>(
       context: context,
@@ -173,16 +195,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return StatefulBuilder(
           builder: (context, setModalState) => AlertDialog(
             title: Text(
-              isItalian ? 'Scegli gioco primario' : 'Choose primary game',
+              l10n.primaryGamePickerTitle,
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  isItalian
-                      ? 'Alla prima apertura scegli il TCG primario (gratis per sempre). L\'altro richiede acquisto.'
-                      : 'At first launch choose your primary TCG (free forever). The other requires purchase.',
+                  l10n.primaryGamePickerBody,
                 ),
                 const SizedBox(height: 12),
                 RadioGroup<TcgGame>(
@@ -201,14 +221,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         value: TcgGame.mtg,
                         title: const Text('Magic'),
                         subtitle: Text(
-                          isItalian ? 'Primario gratuito' : 'Primary free',
+                          l10n.primaryFreeLabel,
                         ),
                       ),
                       RadioListTile<TcgGame>(
                         value: TcgGame.pokemon,
                         title: const Text('Pokemon'),
                         subtitle: Text(
-                          isItalian ? 'Primario gratuito' : 'Primary free',
+                          l10n.primaryFreeLabel,
                         ),
                       ),
                     ],
@@ -219,7 +239,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             actions: [
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(current),
-                child: Text(isItalian ? 'Continua' : 'Continue'),
+                child: Text(l10n.continueLabel),
               ),
             ],
           ),
@@ -251,10 +271,36 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   TcgGame _firstAccessibleGame() {
+    if (_isGameUnlocked(TcgGame.pokemon) && !_isGameUnlocked(TcgGame.mtg)) {
+      return TcgGame.pokemon;
+    }
     if (_isGameUnlocked(TcgGame.mtg)) {
       return TcgGame.mtg;
     }
     return TcgGame.pokemon;
+  }
+
+  Future<void> _ensureSelectedHomeGameUnlocked() async {
+    if (!_isGameUnlocked(_selectedHomeGame)) {
+      final fallbackGame = _firstAccessibleGame();
+      await TcgEnvironmentController.instance.setGame(fallbackGame);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedHomeGame = fallbackGame;
+      });
+      return;
+    }
+    final envGame = TcgEnvironmentController.instance.currentGame;
+    if (envGame != _selectedHomeGame && _isGameUnlocked(envGame)) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedHomeGame = envGame;
+      });
+    }
   }
 
   Future<void> _initializeForCurrentGame() async {
@@ -491,76 +537,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _loadCollections();
   }
 
-  String _pokemonProfileLabelForHome(String profile) {
-    switch (profile.trim().toLowerCase()) {
-      case 'full':
-        return _isItalianUi() ? 'Full (tutte le carte)' : 'Full (all cards)';
-      case 'expanded':
-        return _isItalianUi() ? 'Expanded (10 set)' : 'Expanded (10 sets)';
-      case 'standard':
-        return _isItalianUi() ? 'Standard (6 set)' : 'Standard (6 sets)';
-      case 'starter':
-      default:
-        return _isItalianUi() ? 'Starter (3 set)' : 'Starter (3 sets)';
-    }
-  }
-
   Future<String?> _showPokemonProfilePickerForMissingDb() async {
     if (!mounted) {
       return null;
     }
     final current = await AppSettings.loadPokemonDatasetProfile();
-    const options = <String>['starter', 'standard', 'expanded', 'full'];
     if (!mounted) {
       return null;
     }
-    return showDialog<String>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        var selected = options.contains(current) ? current : options.first;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
-            title: Text(
-              _isItalianUi()
-                  ? 'Scegli database Pokemon'
-                  : 'Choose Pokemon database',
-            ),
-            content: RadioGroup<String>(
-              groupValue: selected,
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setDialogState(() {
-                  selected = value;
-                });
-              },
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: options
-                    .map(
-                      (profile) => RadioListTile<String>(
-                        value: profile,
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(_pokemonProfileLabelForHome(profile)),
-                      ),
-                    )
-                    .toList(growable: false),
-              ),
-            ),
-            actions: [
-              FilledButton.icon(
-                onPressed: () => Navigator.of(context).pop(selected),
-                icon: const Icon(Icons.download_rounded, size: 18),
-                label: Text(
-                  _isItalianUi() ? 'Scarica database' : 'Download database',
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    return _showPokemonDatasetProfilePicker(
+      context,
+      allowCancel: false,
+      selectedProfile: current,
+      requireConfirmation: true,
+      confirmLabel: AppLocalizations.of(context)!.downloadDatabase,
     );
   }
 
@@ -568,23 +558,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!mounted) {
       return;
     }
-    final isItalian = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(
-          isItalian ? '$gameLabel in versione Pro' : '$gameLabel in Pro',
+          l10n.gameInProTitle(gameLabel),
         ),
         content: Text(
-          isItalian
-              ? '$gameLabel e disponibile come acquisto una tantum. Attivalo dalle Impostazioni.'
-              : '$gameLabel is available as a one-time unlock. Activate it from Settings.',
+          l10n.gameOneTimeUnlockBody(gameLabel),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: Text(isItalian ? 'Chiudi' : 'Close'),
+            child: Text(l10n.closeLabel),
           ),
           FilledButton(
             onPressed: () {
@@ -593,7 +581,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 context,
               ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
             },
-            child: Text(isItalian ? 'Apri impostazioni' : 'Open settings'),
+            child: Text(l10n.openSettingsLabel),
           ),
         ],
       ),
@@ -947,6 +935,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             ..addAll(updated);
           _totalCardCount = owned;
           _deckSideboardCounts = {};
+          _recentAllCards = const [];
         });
         return;
       }
@@ -972,6 +961,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             );
           _totalCardCount = owned;
           _deckSideboardCounts = {};
+          _recentAllCards = const [];
         });
         return;
       }
@@ -1018,6 +1008,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             .countCollectionQuantity(sideboardCollectionId);
         deckSideCounts[collection.id] = sideCount;
       }
+      final allCardsCollection = renamed.cast<CollectionInfo?>().firstWhere(
+        (item) => item?.name == _allCardsCollectionName,
+        orElse: () => null,
+      );
+      final recentAllCards = allCardsCollection == null
+          ? const <CardSearchResult>[]
+          : await ScryfallDatabase.instance.fetchRecentOwnedCardPreviews(
+              allCardsCollection.id,
+              limit: 10,
+            );
       if (!mounted) {
         return;
       }
@@ -1028,6 +1028,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _totalCardCount = owned;
         _setNameLookup = setNames;
         _deckSideboardCounts = deckSideCounts;
+        _recentAllCards = recentAllCards;
       });
     } on TimeoutException {
       if (mounted) {
@@ -1053,7 +1054,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  List<Widget> _buildCollectionSections(BuildContext context) {
+  List<Widget> _buildCollectionSections(
+    BuildContext context, {
+    bool includeAllCards = true,
+  }) {
     final allCards = _collections.cast<CollectionInfo?>().firstWhere(
       (item) => item?.name == _allCardsCollectionName,
       orElse: () => null,
@@ -1097,7 +1101,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           .then((_) => _loadCollections());
     }
 
-    if (allCards != null) {
+    if (includeAllCards && allCards != null) {
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -1128,6 +1132,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     if (_activeCollectionsMenu == _HomeCollectionsMenu.home) {
+      widgets.addAll(
+        _buildRecentAllCardsSection(context, includeHeader: false),
+      );
       return widgets;
     }
 
@@ -1276,12 +1283,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           );
         case _HomeCollectionsMenu.smart:
           return buildSingleCategory(
-            label: _isItalianUi() ? 'Smart collection' : 'Smart collection',
+            label: AppLocalizations.of(context)!.smartCollectionDefaultName,
             items: smartCollections,
             createIcon: Icons.auto_fix_high_rounded,
-            createTitle: _isItalianUi()
-                ? 'Crea una smart collection'
-                : 'Create your smart collection',
+            createTitle: AppLocalizations.of(context)!.createSmartCollectionTitle,
             description: _sectionHelpText(_HomeCollectionsMenu.smart),
             canCreate: canCreateCustom,
             onCreate: () => _addSmartCollection(context),
@@ -1379,33 +1384,139 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return widgets;
   }
 
+  Widget? _buildPinnedAllCardsCard(BuildContext context) {
+    final allCards = _collections.cast<CollectionInfo?>().firstWhere(
+      (item) => item?.name == _allCardsCollectionName,
+      orElse: () => null,
+    );
+    if (allCards == null) {
+      return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+      child: _CollectionCard(
+        name: _collectionDisplayName(allCards),
+        count: _totalCardCount,
+        icon: _collectionIcon(allCards),
+        onLongPress: (position) {
+          _showCollectionActions(allCards, position);
+        },
+        onTap: () {
+          Navigator.of(context)
+              .push(
+                MaterialPageRoute(
+                  builder: (_) => CollectionDetailPage(
+                    collectionId: allCards.id,
+                    name: _collectionDisplayName(allCards),
+                    isAllCards: true,
+                    filter: allCards.filter,
+                  ),
+                ),
+              )
+              .then((_) => _loadCollections());
+        },
+      ),
+    );
+  }
+
+  Widget _buildPinnedLatestAddsHeader(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: _SectionDivider(label: l10n.latestAddsLabel),
+    );
+  }
+
+  List<Widget> _buildRecentAllCardsSection(
+    BuildContext context, {
+    bool includeHeader = true,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    final widgets = <Widget>[];
+    if (includeHeader) {
+      widgets.addAll(const [SizedBox(height: 6)]);
+      widgets.add(_SectionDivider(label: l10n.latestAddsLabel));
+      widgets.addAll(const [SizedBox(height: 12)]);
+    }
+    if (_recentAllCards.isEmpty) {
+      final emptyText = _appFirstOpenFlag == 1
+          ? l10n.homeStartCollectionPrompt
+          : l10n.noCardsYet;
+      widgets.add(
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: const Color(0x221D1712),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0x445D4731)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded, color: Color(0xFFE9C46A)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  emptyText,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: const Color(0xFFDCCBAE),
+                    height: 1.28,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      return widgets;
+    }
+    widgets.add(
+      GridView.builder(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: _recentAllCards.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 0.66,
+        ),
+        itemBuilder: (context, index) {
+          final card = _recentAllCards[index];
+          return _RecentAddedCardTile(card: card);
+        },
+      ),
+    );
+    return widgets;
+  }
+
   Widget _buildCollectionsMenu() {
-    final isItalian = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     final items = <(_HomeCollectionsMenu, IconData, String)>[
       (
         _HomeCollectionsMenu.set,
         Icons.auto_awesome_mosaic,
-        isItalian ? 'Set' : 'Set',
+        l10n.setLabel,
       ),
       (
         _HomeCollectionsMenu.custom,
         Icons.collections_bookmark_outlined,
-        isItalian ? 'Custom' : 'Custom',
+        l10n.customLabel,
       ),
       (
         _HomeCollectionsMenu.smart,
         Icons.auto_fix_high_rounded,
-        isItalian ? 'Smart' : 'Smart',
+        l10n.smartLabel,
       ),
       (
         _HomeCollectionsMenu.wish,
         Icons.favorite_border_rounded,
-        isItalian ? 'Wishlist' : 'Wishlist',
+        l10n.wishlistCollectionTitle,
       ),
       (
         _HomeCollectionsMenu.deck,
         Icons.view_carousel_rounded,
-        isItalian ? 'Deck' : 'Deck',
+        l10n.deckCollectionTitle,
       ),
     ];
     return Column(
@@ -1443,28 +1554,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   String _sectionHelpText(_HomeCollectionsMenu section) {
-    final isItalian = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     switch (section) {
       case _HomeCollectionsMenu.set:
-        return isItalian
-            ? 'Scegli un set specifico e segui la checklist in modo chiaro: vedi subito le carte presenti e quelle che ti mancano.'
-            : 'Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.';
+        return l10n.homeSetHelp;
       case _HomeCollectionsMenu.custom:
-        return isItalian
-            ? 'Crea raccolte manuali aggiungendo solo carte possedute dalla tua inventory.'
-            : 'Create manual collections and include only cards you already own in inventory.';
+        return l10n.homeCustomHelp;
       case _HomeCollectionsMenu.smart:
-        return isItalian
-            ? 'Salva un filtro dinamico: la smart collection mostra automaticamente solo le carte possedute che rispettano i criteri.'
-            : 'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.';
+        return l10n.homeSmartHelp;
       case _HomeCollectionsMenu.wish:
-        return isItalian
-            ? 'Crea una wishlist con filtri avanzati per tenere sotto controllo le carte mancanti che vuoi trovare.'
-            : 'Create a wishlist with advanced filters to track the missing cards you are looking for.';
+        return l10n.homeWishHelp;
       case _HomeCollectionsMenu.deck:
-        return isItalian
-            ? 'Tieni traccia dei tuoi mazzi e aggiorna mainboard/sideboard: le carte del deck restano nel mazzo e non vengono aggiunte alle collezioni.'
-            : 'Track your decks and update mainboard/sideboard: deck cards stay in the deck and are not added to collections.';
+        return l10n.homeDeckHelp;
       case _HomeCollectionsMenu.home:
         return '';
     }
@@ -1542,26 +1643,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     markDisabled(wishItems, _freeWishlistLimit);
 
     return disabled;
-  }
-
-  void _toggleProPreviewMode() {
-    if (!_hasRealProAccess) {
-      return;
-    }
-    setState(() {
-      _forceFreePreview = !_forceFreePreview;
-    });
-    final isItalian = _isItalianUi();
-    showAppSnackBar(
-      context,
-      _forceFreePreview
-          ? (isItalian
-                ? 'Modalita test: comportamento Free attivo.'
-                : 'Test mode: Free behavior enabled.')
-          : (isItalian
-                ? 'Modalita test disattivata: comportamento Pro attivo.'
-                : 'Test mode disabled: Pro behavior restored.'),
-    );
   }
 
   Future<void> _showDeckCollectionLimitDialog() async {
@@ -2190,17 +2271,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _showCustomCollectionLimitDialog();
       return;
     }
-    final isItalian = _isItalianUi();
-    final defaultName = isItalian ? 'Collezione smart' : 'Smart collection';
+    final l10n = AppLocalizations.of(context)!;
+    final defaultName = l10n.smartCollectionDefaultName;
     final controller = TextEditingController(text: defaultName);
     final name = await showDialog<String>(
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
-          title: Text(
-            isItalian ? 'Nuova collezione smart' : 'New smart collection',
-          ),
+          title: Text(l10n.newSmartCollectionTitle),
           content: TextField(
             controller: controller,
             autofocus: true,
@@ -2243,7 +2322,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       MaterialPageRoute(
         builder: (_) => _CollectionFilterBuilderPage(
           name: name,
-          submitLabel: isItalian ? 'Crea' : 'Create',
+          submitLabel: l10n.create,
         ),
       ),
     );
@@ -2253,9 +2332,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!_hasAtLeastOneSmartFilter(filter)) {
       showAppSnackBar(
         context,
-        isItalian
-            ? 'Imposta almeno un filtro per creare una smart collection.'
-            : 'Choose at least one filter to create a smart collection.',
+        l10n.smartCollectionNeedFilterToCreate,
       );
       return;
     }
@@ -2634,68 +2711,51 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   String _deckImportButtonLabel() {
-    return _isItalianUi() ? 'Carica file Arena/MTGO' : 'Load Arena/MTGO file';
+    return AppLocalizations.of(context)!.loadArenaMtgoFileLabel;
   }
 
   String _pokemonDeckHintLabel() {
-    if (_isItalianUi()) {
-      return 'Mazzo Pokemon: 60 carte esatte, max 4 copie per nome (tranne Energie Base), almeno 1 Pokemon Base.';
-    }
-    return 'Pokemon deck: exactly 60 cards, max 4 copies per name (except Basic Energy), at least 1 Basic Pokemon.';
+    return AppLocalizations.of(context)!.pokemonDeckHintLabel;
   }
 
   String _deckImportMenuLabel() {
-    return _isItalianUi() ? 'Importa lista mazzo' : 'Import deck list';
+    return AppLocalizations.of(context)!.importDeckListLabel;
   }
 
   String _deckExportArenaLabel() {
-    return _isItalianUi() ? 'Esporta per Arena' : 'Export for Arena';
+    return AppLocalizations.of(context)!.exportForArenaLabel;
   }
 
   String _deckExportMtgoLabel() {
-    return _isItalianUi() ? 'Esporta per MTGO' : 'Export for MTGO';
+    return AppLocalizations.of(context)!.exportForMtgoLabel;
   }
 
   String _deckImportedSummaryLabel(int imported, int skipped) {
-    if (_isItalianUi()) {
-      return 'Mazzo importato: $imported carte, $skipped non trovate';
-    }
-    return 'Deck imported: $imported cards, $skipped not found';
+    return AppLocalizations.of(context)!.deckImportedSummary(imported, skipped);
   }
 
   String _deckImportingLabel() {
-    return _isItalianUi()
-        ? 'Importazione mazzo in corso...'
-        : 'Importing deck...';
+    return AppLocalizations.of(context)!.deckImportingLabel;
   }
 
   String _deckImportResultTitle() {
-    return _isItalianUi() ? 'Risultato import' : 'Import result';
+    return AppLocalizations.of(context)!.deckImportResultTitle;
   }
 
   String _deckImportNotFoundTitle() {
-    return _isItalianUi() ? 'Carte non trovate' : 'Cards not found';
+    return AppLocalizations.of(context)!.deckImportCardsNotFoundTitle;
   }
 
   String _deckExportedSummaryLabel(String fileName) {
-    if (_isItalianUi()) {
-      return 'Mazzo esportato: $fileName';
-    }
-    return 'Deck exported: $fileName';
+    return AppLocalizations.of(context)!.deckExportedSummary(fileName);
   }
 
   String _deckImportFailedLabel(Object error) {
-    if (_isItalianUi()) {
-      return 'Import mazzo non riuscito: $error';
-    }
-    return 'Deck import failed: $error';
+    return AppLocalizations.of(context)!.deckImportFailed(error.toString());
   }
 
   String _deckExportFailedLabel(Object error) {
-    if (_isItalianUi()) {
-      return 'Export mazzo non riuscito: $error';
-    }
-    return 'Deck export failed: $error';
+    return AppLocalizations.of(context)!.deckExportFailed(error.toString());
   }
 
   Future<_DeckImportSource?> _pickDeckImportSource() async {
@@ -3301,7 +3361,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (action != _ScanPreviewAction.add) {
           return;
         }
-        final added = await _addCardToAllCards(resolved.pickedCard!.id);
+        final added = await _addCardToAllCards(
+          resolved.pickedCard!.id,
+          foil: resolved.seed.isFoil,
+        );
         if (!mounted || !added) {
           return;
         }
@@ -3312,6 +3375,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         query: resolved.seed.query,
         initialSetCode: resolved.seed.setCode,
         initialCollectorNumber: resolved.seed.collectorNumber,
+        foil: resolved.seed.isFoil,
       );
       if (!mounted || !added) {
         return;
@@ -3445,6 +3509,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           cardName: cardName,
           setCode: seed.setCode,
           collectorNumber: seed.collectorNumber,
+          isFoil: seed.isFoil,
         ),
       );
     }
@@ -3458,6 +3523,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         collectorNumber: picked.collectorNumber.trim().isEmpty
             ? null
             : picked.collectorNumber.trim().toLowerCase(),
+        isFoil: seed.isFoil,
       ),
       pickedCard: picked,
     );
@@ -3560,7 +3626,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Future<bool> _addCardToAllCards(String cardId) async {
+  Future<bool> _addCardToAllCards(String cardId, {bool foil = false}) async {
     CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
       final allCardsId = await ScryfallDatabase.instance
@@ -3578,6 +3644,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
+    if (foil) {
+      await ScryfallDatabase.instance.updateCollectionCard(
+        allCards.id,
+        cardId,
+        foil: true,
+      );
+    }
     if (!mounted) {
       return false;
     }
@@ -3601,6 +3674,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     var text = rawText.trim();
     String? forcedName;
     String? forcedSet;
+    String? selectedSetCode;
+    var isFoil = false;
     if (text.startsWith('__SCAN_PAYLOAD__')) {
       final payloadText = text.substring('__SCAN_PAYLOAD__'.length).trim();
       try {
@@ -3617,6 +3692,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           }
           if (lockedSet != null && lockedSet.isNotEmpty) {
             forcedSet = lockedSet;
+          }
+          final payloadSet = (payload['selectedSetCode'] as String?)?.trim();
+          if (payloadSet != null && payloadSet.isNotEmpty) {
+            selectedSetCode = payloadSet;
+          }
+          final payloadFoil = payload['foil'];
+          if (payloadFoil is bool) {
+            isFoil = payloadFoil;
           }
         }
       } catch (_) {
@@ -3712,6 +3795,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
 
+    if (selectedSetCode != null) {
+      final normalizedSelected = selectedSetCode.trim().toLowerCase();
+      if (normalizedSelected.isNotEmpty) {
+        if (knownSetCodes.isEmpty ||
+            knownSetCodes.contains(normalizedSelected)) {
+          setCode = normalizedSelected;
+        }
+      }
+    }
+
     if (bestName.isEmpty && setCode == null && collectorNumber == null) {
       return null;
     }
@@ -3729,6 +3822,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       cardName: bestName.isEmpty ? null : bestName,
       setCode: setCode,
       collectorNumber: collectorNumber,
+      isFoil: isFoil,
     );
   }
 
@@ -3738,7 +3832,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final fallbackName = seed.cardName?.trim();
     if (query.isEmpty) {
       if (fallbackName != null && fallbackName.isNotEmpty) {
-        final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+        final onlineByName = await _tryOnlineCardFallbackByName(
+          fallbackName,
+          isFoil: seed.isFoil,
+        );
         if (onlineByName != null) {
           return onlineByName;
         }
@@ -3747,7 +3844,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     if (setCode == null || setCode.isEmpty) {
       if (fallbackName != null && fallbackName.isNotEmpty) {
-        final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+        final onlineByName = await _tryOnlineCardFallbackByName(
+          fallbackName,
+          isFoil: seed.isFoil,
+        );
         if (onlineByName != null) {
           return onlineByName;
         }
@@ -3759,6 +3859,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         fallbackName,
         setCode,
         preferredCollectorNumber: seed.collectorNumber,
+        isFoil: seed.isFoil,
       );
       if (onlineByNameAndSet != null) {
         return onlineByNameAndSet;
@@ -3789,7 +3890,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return onlineSeed;
     }
     if (fallbackName != null && fallbackName.isNotEmpty) {
-      final onlineByName = await _tryOnlineCardFallbackByName(fallbackName);
+      final onlineByName = await _tryOnlineCardFallbackByName(
+        fallbackName,
+        isFoil: seed.isFoil,
+      );
       if (onlineByName != null) {
         return onlineByName;
       }
@@ -3806,6 +3910,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           cardName: fallbackName,
           setCode: setCode,
           collectorNumber: seed.collectorNumber,
+          isFoil: seed.isFoil,
         );
       }
       return _OcrSearchSeed(
@@ -3813,6 +3918,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         cardName: fallbackName,
         setCode: null,
         collectorNumber: seed.collectorNumber,
+        isFoil: seed.isFoil,
       );
     }
     return _OcrSearchSeed(
@@ -3820,10 +3926,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       cardName: seed.cardName,
       setCode: null,
       collectorNumber: seed.collectorNumber,
+      isFoil: seed.isFoil,
     );
   }
 
-  Future<_OcrSearchSeed?> _tryOnlineCardFallbackByName(String cardName) async {
+  Future<_OcrSearchSeed?> _tryOnlineCardFallbackByName(
+    String cardName, {
+    bool isFoil = false,
+  }) async {
     final name = cardName.trim();
     if (name.isEmpty) {
       return null;
@@ -3859,6 +3969,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         collectorNumber: fetchedCollector?.isNotEmpty == true
             ? fetchedCollector
             : null,
+        isFoil: isFoil,
       );
     } catch (_) {
       return null;
@@ -3969,6 +4080,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String cardName,
     String setCode, {
     String? preferredCollectorNumber,
+    bool isFoil = false,
   }) async {
     final name = cardName.trim();
     final set = setCode.trim().toLowerCase();
@@ -4032,6 +4144,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         collectorNumber: selected != null
             ? _normalizeCollectorForComparison(selected.collectorNumber)
             : _normalizeCollectorForComparison(preferredCollectorNumber ?? ''),
+        isFoil: isFoil,
       );
     } catch (_) {
       return null;
@@ -4079,6 +4192,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         collectorNumber: fetchedCollector?.isNotEmpty == true
             ? fetchedCollector
             : collector,
+        isFoil: seed.isFoil,
       );
     } catch (_) {
       return null;
@@ -4391,6 +4505,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     required String query,
     String? initialSetCode,
     String? initialCollectorNumber,
+    bool foil = false,
   }) async {
     CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
@@ -4425,12 +4540,26 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (selection.isBulk) {
       for (final cardId in selection.cardIds) {
         await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
+        if (foil) {
+          await ScryfallDatabase.instance.updateCollectionCard(
+            allCards.id,
+            cardId,
+            foil: true,
+          );
+        }
       }
     } else {
       await InventoryService.instance.addToInventory(
         selection.cardIds.first,
         deltaQty: 1,
       );
+      if (foil) {
+        await ScryfallDatabase.instance.updateCollectionCard(
+          allCards.id,
+          selection.cardIds.first,
+          foil: true,
+        );
+      }
     }
     if (!mounted) {
       return false;
@@ -4703,12 +4832,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (collection.type != CollectionType.smart) {
       return;
     }
-    final isItalian = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     final updatedFilter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(
         builder: (_) => _CollectionFilterBuilderPage(
           name: collection.name,
-          submitLabel: isItalian ? 'Salva filtro' : 'Save filter',
+          submitLabel: l10n.saveFilterLabel,
           initialFilter: collection.filter,
         ),
       ),
@@ -4719,9 +4848,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!_hasAtLeastOneSmartFilter(updatedFilter)) {
       showAppSnackBar(
         context,
-        isItalian
-            ? 'Imposta almeno un filtro.'
-            : 'Choose at least one filter.',
+        l10n.smartCollectionNeedAtLeastOneFilter,
       );
       return;
     }
@@ -5050,12 +5177,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Widget _buildGameSelector() {
+    final canSwitchGame =
+        _isGameUnlocked(TcgGame.mtg) && _isGameUnlocked(TcgGame.pokemon);
+    final l10n = AppLocalizations.of(context)!;
     final gameInitial = _selectedHomeGame == TcgGame.mtg ? 'M' : 'P';
     return PopupMenuButton<TcgGame>(
+      enabled: canSwitchGame,
       initialValue: _selectedHomeGame,
       position: PopupMenuPosition.under,
       offset: const Offset(0, 6),
-      tooltip: 'Game selector (preview)',
+      tooltip: canSwitchGame
+          ? l10n.chooseYourGameTitle
+          : l10n.unlockOtherGameToSwitch,
       onSelected: (TcgGame selected) async {
         if (selected == _selectedHomeGame) {
           return;
@@ -5131,7 +5264,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.expand_more, size: 18),
+            Icon(
+              canSwitchGame ? Icons.expand_more : Icons.lock_outline_rounded,
+              size: 18,
+              color: canSwitchGame ? null : const Color(0xFFBFAE95),
+            ),
           ],
         ),
       ),
@@ -5144,6 +5281,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final pokemonLocked =
         !_isMtgActiveGame && !_isGameUnlocked(TcgGame.pokemon);
     final isBlockingSync = _bulkDownloading || _bulkImporting;
+    final pinnedAllCardsCard = _activeCollectionsMenu == _HomeCollectionsMenu.home
+        ? _buildPinnedAllCardsCard(context)
+        : null;
+    final pinnedLatestAddsHeader = _activeCollectionsMenu == _HomeCollectionsMenu.home
+        ? _buildPinnedLatestAddsHeader(context)
+        : null;
+    final pinnedHomeWidgets = <Widget>[
+      ...?((pinnedAllCardsCard == null) ? null : [pinnedAllCardsCard]),
+      ...?((pinnedLatestAddsHeader == null) ? null : [pinnedLatestAddsHeader]),
+    ];
     final blockingLabel = _bulkDownloading
         ? (_bulkDownloadTotal > 0
               ? l10n.downloadingWithPercent(
@@ -5185,10 +5332,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                             },
                           ),
                           const SizedBox(width: 8),
-                          _ProPreviewToggleButton(
-                            proModeActive: _hasRealProAccess && !_forceFreePreview,
-                            enabled: _hasRealProAccess,
-                            onTap: _toggleProPreviewMode,
+                          _PlanBadgeButton(
+                            isPro: _hasProAccess,
+                            onTap: _hasProAccess
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const ProPage(),
+                                      ),
+                                    );
+                                  },
                           ),
                           const Spacer(),
                           IconButton(
@@ -5376,7 +5530,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               vertical: 10,
                             ),
                           ),
-                          label: Text(_isItalianUi() ? 'Riprova' : 'Retry'),
+                          label: Text(l10n.retry),
                         ),
                       ],
                       if (_bulkDownloading || _bulkImporting)
@@ -5395,10 +5549,37 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 Expanded(
                   child: _initialCollectionsLoading
                       ? const Center(child: CircularProgressIndicator())
-                      : ListView(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
-                          children: [..._buildCollectionSections(context)],
-                        ),
+                      : (_activeCollectionsMenu == _HomeCollectionsMenu.home
+                            ? Column(
+                                children: [
+                                  ...pinnedHomeWidgets,
+                                  Expanded(
+                                    child: ListView(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        20,
+                                        0,
+                                        20,
+                                        120,
+                                      ),
+                                      children: [
+                                        ..._buildCollectionSections(
+                                          context,
+                                          includeAllCards: false,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ListView(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  12,
+                                  20,
+                                  120,
+                                ),
+                                children: [..._buildCollectionSections(context)],
+                              )),
                 ),
               ],
             ),
@@ -5428,17 +5609,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           ),
                           const SizedBox(height: 10),
                           Text(
-                            _isItalianUi()
-                                ? 'Pokemon disponibile nella versione Pro'
-                                : 'Pokemon available in Pro',
+                            l10n.pokemonInProTitle,
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            _isItalianUi()
-                                ? 'Sblocca Pokemon dalle impostazioni per usare collezioni, ricerca e download del database dedicato.'
-                                : 'Unlock Pokemon from Settings to use collections, search, and dedicated database download.',
+                            l10n.pokemonInProBody,
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
@@ -5453,9 +5630,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                             },
                             icon: const Icon(Icons.workspace_premium_outlined),
                             label: Text(
-                              _isItalianUi()
-                                  ? 'Apri impostazioni'
-                                  : 'Open settings',
+                              l10n.openSettingsLabel,
                             ),
                           ),
                         ],
@@ -5650,16 +5825,14 @@ class _HomeIconButton extends StatelessWidget {
   }
 }
 
-class _ProPreviewToggleButton extends StatelessWidget {
-  const _ProPreviewToggleButton({
-    required this.proModeActive,
-    required this.enabled,
-    required this.onTap,
+class _PlanBadgeButton extends StatelessWidget {
+  const _PlanBadgeButton({
+    required this.isPro,
+    this.onTap,
   });
 
-  final bool proModeActive;
-  final bool enabled;
-  final VoidCallback onTap;
+  final bool isPro;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -5667,7 +5840,7 @@ class _ProPreviewToggleButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: enabled ? onTap : null,
+        onTap: onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
@@ -5675,24 +5848,20 @@ class _ProPreviewToggleButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: proModeActive
+            color: isPro
                 ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
-                : (enabled ? const Color(0x221D1712) : const Color(0x1A1D1712)),
+                : const Color(0x221D1712),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: !enabled
-                  ? const Color(0xFF3E3327)
-                  : proModeActive
+              color: isPro
                   ? const Color(0xFFE9C46A)
                   : const Color(0xFF5D4731),
             ),
           ),
           child: Text(
-            enabled ? (proModeActive ? 'PRO' : 'FREE') : 'PRO',
+            isPro ? 'PRO' : 'FREE',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: !enabled
-                  ? const Color(0xFF8E7A62)
-                  : proModeActive
+              color: isPro
                   ? const Color(0xFFEFD28B)
                   : const Color(0xFFBFAE95),
               fontWeight: FontWeight.w900,
@@ -5847,6 +6016,86 @@ class _CollectionCard extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecentAddedCardTile extends StatelessWidget {
+  const _RecentAddedCardTile({required this.card});
+
+  final CardSearchResult card;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = card.imageUri?.trim() ?? '';
+    final setLabel = card.setName.trim().isNotEmpty
+        ? card.setName.trim()
+        : card.setCode.toUpperCase();
+    return Container(
+      width: 164,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0x335D4731)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: const Color(0x221D1712),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.image_not_supported,
+                          color: Color(0xFFBFAE95),
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: const Color(0x221D1712),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        color: Color(0xFFBFAE95),
+                      ),
+                    ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+              color: const Color(0xA81D1712),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    card.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: const Color(0xFFF3E8D0),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    setLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFFBFAE95),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -6205,27 +6454,27 @@ class _CollectionFilterBuilderPageState
     if (_isPokemonActive) {
       switch (code.toUpperCase()) {
         case 'G':
-          return _isItalianUi() ? 'Erba' : 'Grass';
+          return l10n.pokemonEnergyGrass;
         case 'R':
-          return _isItalianUi() ? 'Fuoco' : 'Fire';
+          return l10n.pokemonEnergyFire;
         case 'U':
-          return _isItalianUi() ? 'Acqua' : 'Water';
+          return l10n.pokemonEnergyWater;
         case 'L':
-          return _isItalianUi() ? 'Lampo' : 'Lightning';
+          return l10n.pokemonEnergyLightning;
         case 'B':
-          return _isItalianUi() ? 'Psico/Oscurita' : 'Psychic/Darkness';
+          return l10n.pokemonEnergyPsychicDarkness;
         case 'F':
-          return _isItalianUi() ? 'Lotta' : 'Fighting';
+          return l10n.pokemonEnergyFighting;
         case 'D':
-          return _isItalianUi() ? 'Drago' : 'Dragon';
+          return l10n.pokemonEnergyDragon;
         case 'W':
-          return _isItalianUi() ? 'Folletto' : 'Fairy';
+          return l10n.pokemonEnergyFairy;
         case 'C':
-          return _isItalianUi() ? 'Incolore' : 'Colorless';
+          return l10n.pokemonEnergyColorless;
         case 'M':
-          return _isItalianUi() ? 'Metallo' : 'Metal';
+          return l10n.pokemonEnergyMetal;
         case 'N':
-          return _isItalianUi() ? 'Nessuno' : 'None';
+          return l10n.pokemonEnergyNone;
         default:
           return code.toUpperCase();
       }
@@ -6252,22 +6501,22 @@ class _CollectionFilterBuilderPageState
     if (!_isPokemonActive) {
       return value;
     }
-    final isIt = _isItalianUi();
+    final l10n = AppLocalizations.of(context)!;
     switch (value) {
       case 'Pokemon':
         return 'Pokemon';
       case 'Trainer':
-        return isIt ? 'Allenatore' : 'Trainer';
+        return l10n.pokemonTypeTrainer;
       case 'Energy':
-        return isIt ? 'Energia' : 'Energy';
+        return l10n.pokemonTypeEnergy;
       case 'Item':
-        return isIt ? 'Oggetto' : 'Item';
+        return l10n.pokemonTypeItem;
       case 'Supporter':
-        return isIt ? 'Aiuto' : 'Supporter';
+        return l10n.pokemonTypeSupporter;
       case 'Stadium':
-        return isIt ? 'Stadio' : 'Stadium';
+        return l10n.pokemonTypeStadium;
       case 'Tool':
-        return isIt ? 'Strumento Pokemon' : 'Pokemon Tool';
+        return l10n.pokemonTypeTool;
       default:
         return value;
     }
@@ -6420,7 +6669,7 @@ class _CollectionFilterBuilderPageState
           const SizedBox(height: 16),
           Text(
             _isPokemonActive
-                ? (_isItalianUi() ? 'Tipo energia' : 'Energy type')
+                ? l10n.pokemonEnergyTypeLabel
                 : l10n.colorLabel,
             style: Theme.of(context).textTheme.titleSmall,
           ),
@@ -6439,7 +6688,7 @@ class _CollectionFilterBuilderPageState
           const SizedBox(height: 16),
           Text(
             _isPokemonActive
-                ? (_isItalianUi() ? 'Categoria carta' : 'Card category')
+                ? l10n.pokemonCardCategoryLabel
                 : l10n.typeLabel,
             style: Theme.of(context).textTheme.titleSmall,
           ),
@@ -6710,12 +6959,14 @@ class _OcrSearchSeed {
     this.cardName,
     this.setCode,
     this.collectorNumber,
+    this.isFoil = false,
   });
 
   final String query;
   final String? cardName;
   final String? setCode;
   final String? collectorNumber;
+  final bool isFoil;
 }
 
 class _ResolvedScanSelection {
@@ -7066,10 +7317,14 @@ class _CardScannerPageState extends State<_CardScannerPage>
   final List<String> _setVoteHistory = <String>[];
   final Map<String, int> _setVoteCounts = <String, int>{};
   Set<String> _knownSetCodes = const {};
+  Map<String, String> _knownSetNames = const {};
+  String? _selectedSetFilterCode;
+  bool _foilSelected = false;
   bool _torchEnabled = false;
   bool _torchAvailable = true;
   String _status = '';
   bool _limitedPrintCoverage = false;
+  bool _tutorialPromptScheduled = false;
 
   @override
   void initState() {
@@ -7089,6 +7344,12 @@ class _CardScannerPageState extends State<_CardScannerPage>
     if (_status.isEmpty) {
       _status = AppLocalizations.of(context)!.alignCardInFrame;
     }
+    if (!_tutorialPromptScheduled) {
+      _tutorialPromptScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_maybeShowScannerTutorialOnOpen());
+      });
+    }
   }
 
   Future<void> _loadBulkCoverageState() async {
@@ -7107,12 +7368,197 @@ class _CardScannerPageState extends State<_CardScannerPage>
     if (!mounted) {
       return;
     }
+    final knownCodes = <String>{};
+    final knownNames = <String, String>{};
+    for (final set in sets) {
+      final code = set.code.trim().toLowerCase();
+      if (code.isEmpty) {
+        continue;
+      }
+      knownCodes.add(code);
+      final name = set.name.trim();
+      knownNames[code] = name.isEmpty ? code.toUpperCase() : name;
+    }
     setState(() {
-      _knownSetCodes = sets
-          .map((set) => set.code.trim().toLowerCase())
-          .where((code) => code.isNotEmpty)
-          .toSet();
+      _knownSetCodes = knownCodes;
+      _knownSetNames = knownNames;
+      if (_selectedSetFilterCode != null &&
+          !_knownSetCodes.contains(_selectedSetFilterCode)) {
+        _selectedSetFilterCode = null;
+      }
     });
+  }
+
+  Future<void> _maybeShowScannerTutorialOnOpen() async {
+    final hidden = await AppSettings.loadHideScannerTutorial();
+    if (!mounted || hidden) {
+      return;
+    }
+    await _showScannerTutorialDialog();
+  }
+
+  Future<void> _showScannerTutorialDialog() async {
+    if (!mounted) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    var dontShowAgain = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) => AlertDialog(
+            title: Text(l10n.scannerTutorialTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.scannerTutorialIntro),
+                const SizedBox(height: 10),
+                Text(l10n.scannerTutorialSet),
+                Text(l10n.scannerTutorialFoil),
+                Text(l10n.scannerTutorialCheck),
+                Text(l10n.scannerTutorialFlash),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: dontShowAgain,
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.doNotShowAgain),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (value) {
+                    setModalState(() {
+                      dontShowAgain = value ?? false;
+                    });
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () async {
+                  if (dontShowAgain) {
+                    await AppSettings.saveHideScannerTutorial(true);
+                  }
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickSetFilter() async {
+    final l10n = AppLocalizations.of(context)!;
+    final entries = _knownSetNames.entries.toList()
+      ..sort((a, b) {
+        final byName = a.value.toLowerCase().compareTo(b.value.toLowerCase());
+        if (byName != 0) {
+          return byName;
+        }
+        return a.key.compareTo(b.key);
+      });
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        var query = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = entries.where((entry) {
+              if (query.isEmpty) {
+                return true;
+              }
+              final q = query.toLowerCase();
+              return entry.key.toLowerCase().contains(q) ||
+                  entry.value.toLowerCase().contains(q);
+            }).toList(growable: false);
+            return Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: const Color(0xFF5D4731)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: l10n.searchSetHint,
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          query = value.trim();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      leading: const Icon(Icons.clear_all_rounded),
+                      title: Text(l10n.scannerAnySetOption),
+                      onTap: () => Navigator.of(context).pop(''),
+                    ),
+                    const Divider(height: 1),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 360),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final entry = filtered[index];
+                          return ListTile(
+                            title: Text(entry.value),
+                            subtitle: Text(entry.key.toUpperCase()),
+                            onTap: () => Navigator.of(context).pop(entry.key),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _selectedSetFilterCode = selected.isEmpty ? null : selected.trim().toLowerCase();
+    });
+  }
+
+  void _confirmRecognizedName() {
+    final candidate = _lockedName.isNotEmpty
+        ? _lockedName.trim()
+        : _namePreview.trim();
+    if (candidate.isEmpty) {
+      return;
+    }
+    setState(() {
+      _lockedName = candidate;
+      _lastNameCandidate = candidate;
+      _nameHits = _requiredNameFieldHits;
+      _status = AppLocalizations.of(context)!.nameRecognizedOpeningSearchStatus;
+    });
+    if (_pulseController.isAnimating) {
+      _pulseController.stop();
+    }
   }
 
   Future<void> _initializeCamera() async {
@@ -7275,6 +7721,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
           'raw': _bestStableRawText.isNotEmpty ? _bestStableRawText : rawText,
           'lockedName': _lockedName,
           'lockedSet': _lockedSet,
+          'selectedSetCode': _selectedSetFilterCode,
+          'foil': _foilSelected,
         });
         Navigator.of(context).pop('__SCAN_PAYLOAD__$payload');
       }
@@ -7298,6 +7746,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
         .map((line) => line.trim())
         .where((line) => line.isNotEmpty)
         .toList();
+    if (_lockedName.isNotEmpty) {
+      // Once name is locked, stabilize on name only to avoid collector/set OCR jitter.
+      final locked = _lockedName
+          .replaceAll(RegExp(r'[^A-Za-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (locked.length >= 3) {
+        return locked.length > 80 ? '${locked.substring(0, 80)}...' : locked;
+      }
+    }
     if (lines.isEmpty) {
       return '';
     }
@@ -7308,6 +7766,17 @@ class _CardScannerPageState extends State<_CardScannerPage>
           (line) => line.length >= 3 && RegExp(r'[A-Za-z]').hasMatch(line),
           orElse: () => '',
         );
+    if (name.isEmpty && _namePreview.isNotEmpty) {
+      final previewName = _namePreview
+          .replaceAll(RegExp(r'[^A-Za-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (previewName.length >= 3) {
+        return previewName.length > 80
+            ? '${previewName.substring(0, 80)}...'
+            : previewName;
+      }
+    }
     final collector =
         (lines.reversed
             .map((line) => line.toLowerCase())
@@ -7628,6 +8097,27 @@ class _CardScannerPageState extends State<_CardScannerPage>
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 96,
+        leading: Row(
+          children: [
+            IconButton(
+              tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: const Icon(
+                Icons.arrow_back,
+                color: Color(0xFFE9C46A),
+              ),
+            ),
+            IconButton(
+              tooltip: l10n.scannerTutorialTitle,
+              onPressed: _showScannerTutorialDialog,
+              icon: const Icon(
+                Icons.help_outline_rounded,
+                color: Color(0xFFE9C46A),
+              ),
+            ),
+          ],
+        ),
         title: Text(l10n.liveCardScanTitle),
         actions: [
           IconButton(
@@ -7637,7 +8127,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 : _toggleTorch,
             icon: Icon(
               _torchEnabled ? Icons.flash_on : Icons.flash_off,
-              color: _torchEnabled ? const Color(0xFFE9C46A) : null,
+              color: const Color(0xFFE9C46A),
             ),
           ),
         ],
@@ -7703,6 +8193,65 @@ class _CardScannerPageState extends State<_CardScannerPage>
             ),
           Positioned(
             left: 16,
+            bottom: 138,
+            child: SafeArea(
+              top: false,
+              child: OutlinedButton.icon(
+                onPressed: _pickSetFilter,
+                icon: const Icon(Icons.auto_awesome_mosaic, size: 16),
+                label: Text(
+                  _selectedSetFilterCode == null
+                      ? l10n.scannerSetAnyLabel
+                      : 'Set: ${_knownSetNames[_selectedSetFilterCode!] ?? _selectedSetFilterCode!.toUpperCase()}',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFE9C46A),
+                  side: const BorderSide(color: Color(0xFF5D4731)),
+                  backgroundColor: const Color(0xAA1B1511),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 16,
+            bottom: 138,
+            child: SafeArea(
+              top: false,
+              child: FilledButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _foilSelected = !_foilSelected;
+                  });
+                },
+                icon: Icon(
+                  _foilSelected ? Icons.star : Icons.star_border_rounded,
+                  size: 16,
+                ),
+                label: Text(l10n.foilLabel),
+                style: FilledButton.styleFrom(
+                  foregroundColor: const Color(0xFF1C1510),
+                  backgroundColor: _foilSelected
+                      ? const Color(0xFFE9C46A)
+                      : const Color(0xCC3A2412),
+                  side: BorderSide(
+                    color: _foilSelected
+                        ? const Color(0xFFF5DEA0)
+                        : const Color(0xFF5D4731),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
             right: 16,
             bottom: 12,
             child: SafeArea(
@@ -7710,14 +8259,40 @@ class _CardScannerPageState extends State<_CardScannerPage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _ScanFieldStatusBox(
-                    label: AppLocalizations.of(context)!.nameLabel,
-                    value: _lockedName.isEmpty
-                        ? (_namePreview.isEmpty
-                              ? AppLocalizations.of(context)!.waitingStatus
-                              : _namePreview)
-                        : _lockedName,
-                    locked: _lockedName.isNotEmpty,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _ScanFieldStatusBox(
+                          label: AppLocalizations.of(context)!.nameLabel,
+                          value: _lockedName.isEmpty
+                              ? (_namePreview.isEmpty
+                                    ? AppLocalizations.of(context)!.waitingStatus
+                                    : _namePreview)
+                              : _lockedName,
+                          locked: _lockedName.isNotEmpty,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 44,
+                        height: 44,
+                        child: FilledButton(
+                          onPressed: (_namePreview.trim().isEmpty &&
+                                  _lockedName.trim().isEmpty)
+                              ? null
+                              : _confirmRecognizedName,
+                          style: FilledButton.styleFrom(
+                            foregroundColor: const Color(0xFF1C1510),
+                            backgroundColor: const Color(0xFFE9C46A),
+                            padding: EdgeInsets.zero,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Icon(Icons.done_rounded, size: 22),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
                   Text(

@@ -458,35 +458,11 @@ abstract class AppLocalizations {
   /// **'Support future premium features'**
   String get supportFuturePremiumFeatures;
 
-  /// No description provided for @switchToBaseTest.
-  ///
-  /// In en, this message translates to:
-  /// **'Switch to Base (test)'**
-  String get switchToBaseTest;
-
-  /// No description provided for @switchToProTest.
-  ///
-  /// In en, this message translates to:
-  /// **'Switch to Pro (test)'**
-  String get switchToProTest;
-
   /// No description provided for @restorePurchases.
   ///
   /// In en, this message translates to:
   /// **'Restore purchases'**
   String get restorePurchases;
-
-  /// No description provided for @testMode.
-  ///
-  /// In en, this message translates to:
-  /// **'Test mode'**
-  String get testMode;
-
-  /// No description provided for @testModeSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'When enabled, Upgrade toggles Pro locally.'**
-  String get testModeSubtitle;
 
   /// No description provided for @manage.
   ///
@@ -2461,6 +2437,888 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to share backup: {error}'**
   String backupShareFailed(Object error);
+
+  /// No description provided for @primaryGamePickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose your primary game'**
+  String get primaryGamePickerTitle;
+
+  /// No description provided for @primaryGamePickerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Select your main game. The other game will be available with Pro.'**
+  String get primaryGamePickerBody;
+
+  /// No description provided for @primaryFreeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Included in free plan'**
+  String get primaryFreeLabel;
+
+  /// No description provided for @continueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueLabel;
+
+  /// No description provided for @latestAddsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest adds'**
+  String get latestAddsLabel;
+
+  /// No description provided for @homeStartCollectionPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Start your collection now: tap + and add your first cards.'**
+  String get homeStartCollectionPrompt;
+
+  /// No description provided for @unlockOtherGameToSwitch.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock the other game in Pro to switch.'**
+  String get unlockOtherGameToSwitch;
+
+  /// No description provided for @scannerTutorialTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner tutorial'**
+  String get scannerTutorialTitle;
+
+  /// No description provided for @scannerTutorialIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Use these controls to speed up recognition:'**
+  String get scannerTutorialIntro;
+
+  /// No description provided for @scannerTutorialSet.
+  ///
+  /// In en, this message translates to:
+  /// **'• Set: limits search to the selected set.'**
+  String get scannerTutorialSet;
+
+  /// No description provided for @scannerTutorialFoil.
+  ///
+  /// In en, this message translates to:
+  /// **'• Foil: marks the card as foil when you add it.'**
+  String get scannerTutorialFoil;
+
+  /// No description provided for @scannerTutorialCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'• Check: if frame is green and name matches, tap to confirm and speed up scanning.'**
+  String get scannerTutorialCheck;
+
+  /// No description provided for @scannerTutorialFlash.
+  ///
+  /// In en, this message translates to:
+  /// **'• Flash: useful in low-light conditions.'**
+  String get scannerTutorialFlash;
+
+  /// No description provided for @doNotShowAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not show again'**
+  String get doNotShowAgain;
+
+  /// No description provided for @scannerSetAnyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Set: any'**
+  String get scannerSetAnyLabel;
+
+  /// No description provided for @scannerAnySetOption.
+  ///
+  /// In en, this message translates to:
+  /// **'Any set'**
+  String get scannerAnySetOption;
+
+  /// No description provided for @closeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get closeLabel;
+
+  /// No description provided for @openSettingsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get openSettingsLabel;
+
+  /// No description provided for @gameInProTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{game} in Pro'**
+  String gameInProTitle(Object game);
+
+  /// No description provided for @gameOneTimeUnlockBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{game} is available as a one-time unlock. Activate it from Settings.'**
+  String gameOneTimeUnlockBody(Object game);
+
+  /// No description provided for @pokemonInProTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pokemon available in Pro'**
+  String get pokemonInProTitle;
+
+  /// No description provided for @pokemonInProBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock Pokemon from Settings to use collections, search, and dedicated database download.'**
+  String get pokemonInProBody;
+
+  /// No description provided for @customLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get customLabel;
+
+  /// No description provided for @smartLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart'**
+  String get smartLabel;
+
+  /// No description provided for @homeSetHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.'**
+  String get homeSetHelp;
+
+  /// No description provided for @homeCustomHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create manual collections and include only cards you already own in inventory.'**
+  String get homeCustomHelp;
+
+  /// No description provided for @homeSmartHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.'**
+  String get homeSmartHelp;
+
+  /// No description provided for @homeWishHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a wishlist with advanced filters to track the missing cards you are looking for.'**
+  String get homeWishHelp;
+
+  /// No description provided for @homeDeckHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Track your decks and update mainboard/sideboard: deck cards stay in the deck and are not added to collections.'**
+  String get homeDeckHelp;
+
+  /// No description provided for @smartCollectionDefaultName.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart collection'**
+  String get smartCollectionDefaultName;
+
+  /// No description provided for @newSmartCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New smart collection'**
+  String get newSmartCollectionTitle;
+
+  /// No description provided for @smartCollectionNeedFilterToCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose at least one filter to create a smart collection.'**
+  String get smartCollectionNeedFilterToCreate;
+
+  /// No description provided for @smartCollectionNeedAtLeastOneFilter.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose at least one filter.'**
+  String get smartCollectionNeedAtLeastOneFilter;
+
+  /// No description provided for @saveFilterLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Save filter'**
+  String get saveFilterLabel;
+
+  /// No description provided for @loadArenaMtgoFileLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Load Arena/MTGO file'**
+  String get loadArenaMtgoFileLabel;
+
+  /// No description provided for @pokemonDeckHintLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pokemon deck: exactly 60 cards, max 4 copies per name (except Basic Energy), at least 1 Basic Pokemon.'**
+  String get pokemonDeckHintLabel;
+
+  /// No description provided for @importDeckListLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Import deck list'**
+  String get importDeckListLabel;
+
+  /// No description provided for @exportForArenaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Export for Arena'**
+  String get exportForArenaLabel;
+
+  /// No description provided for @exportForMtgoLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Export for MTGO'**
+  String get exportForMtgoLabel;
+
+  /// No description provided for @deckImportedSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck imported: {imported} cards, {skipped} not found'**
+  String deckImportedSummary(int imported, int skipped);
+
+  /// No description provided for @deckImportingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing deck...'**
+  String get deckImportingLabel;
+
+  /// No description provided for @deckImportResultTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import result'**
+  String get deckImportResultTitle;
+
+  /// No description provided for @deckImportCardsNotFoundTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cards not found'**
+  String get deckImportCardsNotFoundTitle;
+
+  /// No description provided for @deckExportedSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck exported: {fileName}'**
+  String deckExportedSummary(Object fileName);
+
+  /// No description provided for @deckImportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck import failed: {error}'**
+  String deckImportFailed(Object error);
+
+  /// No description provided for @deckExportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Deck export failed: {error}'**
+  String deckExportFailed(Object error);
+
+  /// No description provided for @pokemonDbProfileFullTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Full (all cards)'**
+  String get pokemonDbProfileFullTitle;
+
+  /// No description provided for @pokemonDbProfileExpandedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Expanded (10 sets)'**
+  String get pokemonDbProfileExpandedTitle;
+
+  /// No description provided for @pokemonDbProfileStandardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard (6 sets)'**
+  String get pokemonDbProfileStandardTitle;
+
+  /// No description provided for @pokemonDbProfileStarterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Starter (3 sets)'**
+  String get pokemonDbProfileStarterTitle;
+
+  /// No description provided for @pokemonDbProfileFullDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Complete Pokemon catalog.'**
+  String get pokemonDbProfileFullDescription;
+
+  /// No description provided for @pokemonDbProfileExpandedDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Wide coverage for search and scanning.'**
+  String get pokemonDbProfileExpandedDescription;
+
+  /// No description provided for @pokemonDbProfileStandardDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent sets, balanced size/coverage.'**
+  String get pokemonDbProfileStandardDescription;
+
+  /// No description provided for @pokemonDbProfileStarterDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick start with essential sets.'**
+  String get pokemonDbProfileStarterDescription;
+
+  /// No description provided for @pokemonDbPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Pokemon database'**
+  String get pokemonDbPickerTitle;
+
+  /// No description provided for @pokemonDbPickerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pokemon database: choose which version to download.'**
+  String get pokemonDbPickerSubtitle;
+
+  /// No description provided for @primaryGameFixedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary game is fixed.'**
+  String get primaryGameFixedMessage;
+
+  /// No description provided for @primaryFreeForever.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary free (forever)'**
+  String get primaryFreeForever;
+
+  /// No description provided for @purchasedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchased'**
+  String get purchasedLabel;
+
+  /// No description provided for @secondaryPurchaseRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Secondary: purchase required'**
+  String get secondaryPurchaseRequired;
+
+  /// No description provided for @buyGameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy {game} {price}'**
+  String buyGameLabel(Object game, Object price);
+
+  /// No description provided for @purchasesRestoredMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases restored.'**
+  String get purchasesRestoredMessage;
+
+  /// No description provided for @restorePurchasesTimeoutMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore purchases is taking too long. Try again.'**
+  String get restorePurchasesTimeoutMessage;
+
+  /// No description provided for @restorePurchasesErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Error while restoring purchases. Please retry.'**
+  String get restorePurchasesErrorMessage;
+
+  /// No description provided for @playStoreProductUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Product not available on Google Play.'**
+  String get playStoreProductUnavailable;
+
+  /// No description provided for @buyGameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy {game}'**
+  String buyGameTitle(Object game);
+
+  /// No description provided for @buyGameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You unlock {game} with a one-time purchase, forever on this account. Price is {price}. Purchases are handled by Google Play.'**
+  String buyGameBody(Object game, Object price);
+
+  /// No description provided for @continuePurchaseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue purchase'**
+  String get continuePurchaseLabel;
+
+  /// No description provided for @purchaseAlreadyOwnedSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase already owned on Google Play. Entitlement synced.'**
+  String get purchaseAlreadyOwnedSynced;
+
+  /// No description provided for @storeConnectionTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Store connection is taking too long. Try again.'**
+  String get storeConnectionTimeout;
+
+  /// No description provided for @purchaseFailedRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Error during purchase. Please retry.'**
+  String get purchaseFailedRetry;
+
+  /// No description provided for @themeVaultDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Steel-blue palette with a technical mood.'**
+  String get themeVaultDescription;
+
+  /// No description provided for @themeMagicDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Classic BinderVault gold/brown look.'**
+  String get themeMagicDescription;
+
+  /// No description provided for @visualThemeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Visual theme'**
+  String get visualThemeTitle;
+
+  /// No description provided for @themeMagicSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: original style'**
+  String get themeMagicSubtitle;
+
+  /// No description provided for @themeVaultSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Alternative steel-blue look'**
+  String get themeVaultSubtitle;
+
+  /// No description provided for @issueCategoryCrash.
+  ///
+  /// In en, this message translates to:
+  /// **'Crash'**
+  String get issueCategoryCrash;
+
+  /// No description provided for @issueCategoryUi.
+  ///
+  /// In en, this message translates to:
+  /// **'UI'**
+  String get issueCategoryUi;
+
+  /// No description provided for @issueCategoryPurchase.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchases'**
+  String get issueCategoryPurchase;
+
+  /// No description provided for @issueCategoryDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Database'**
+  String get issueCategoryDatabase;
+
+  /// No description provided for @issueCategoryOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get issueCategoryOther;
+
+  /// No description provided for @reportIssueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Report issue'**
+  String get reportIssueLabel;
+
+  /// No description provided for @issueCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Category'**
+  String get issueCategoryLabel;
+
+  /// No description provided for @issueDescribeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what happened and how to reproduce it.'**
+  String get issueDescribeHint;
+
+  /// No description provided for @sendLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get sendLabel;
+
+  /// No description provided for @reportSentThanks.
+  ///
+  /// In en, this message translates to:
+  /// **'Report sent. Thanks.'**
+  String get reportSentThanks;
+
+  /// No description provided for @reportSendUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending is not available right now. Please retry.'**
+  String get reportSendUnavailable;
+
+  /// No description provided for @diagnosticsCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagnostics copied to clipboard.'**
+  String get diagnosticsCopied;
+
+  /// No description provided for @resetMagicDatabaseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset Magic database'**
+  String get resetMagicDatabaseLabel;
+
+  /// No description provided for @resetGameDatabaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset {game} database'**
+  String resetGameDatabaseTitle(Object game);
+
+  /// No description provided for @resetGameDatabaseBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Only {game} cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.'**
+  String resetGameDatabaseBody(Object game);
+
+  /// No description provided for @resetInProgressTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset in progress'**
+  String get resetInProgressTitle;
+
+  /// No description provided for @cleaningGameDatabase.
+  ///
+  /// In en, this message translates to:
+  /// **'Cleaning {game} database...'**
+  String cleaningGameDatabase(Object game);
+
+  /// No description provided for @gameDatabaseResetDone.
+  ///
+  /// In en, this message translates to:
+  /// **'{game} database reset. It will be downloaded again cleanly.'**
+  String gameDatabaseResetDone(Object game);
+
+  /// No description provided for @applyProfileLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply profile'**
+  String get applyProfileLabel;
+
+  /// No description provided for @pokemonProfileUpdatedTapUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Pokemon profile updated. Tap Update available in Home to apply.'**
+  String get pokemonProfileUpdatedTapUpdate;
+
+  /// No description provided for @gamesSelectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The first selected game stays free forever. The other requires purchase.'**
+  String get gamesSelectionSubtitle;
+
+  /// No description provided for @primaryGameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary game'**
+  String get primaryGameLabel;
+
+  /// No description provided for @configureBothDatabasesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure Magic and Pokemon databases separately.'**
+  String get configureBothDatabasesSubtitle;
+
+  /// No description provided for @toolsAndDiagnosticsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tools & diagnostics'**
+  String get toolsAndDiagnosticsTitle;
+
+  /// No description provided for @checkCoherenceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Check coherence'**
+  String get checkCoherenceLabel;
+
+  /// No description provided for @copyDiagnosticsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy diagnostics'**
+  String get copyDiagnosticsLabel;
+
+  /// No description provided for @whatsNewButtonLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s new'**
+  String get whatsNewButtonLabel;
+
+  /// No description provided for @whatsNewDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s new in 0.4.6'**
+  String get whatsNewDialogTitle;
+
+  /// No description provided for @whatsNewLine1.
+  ///
+  /// In en, this message translates to:
+  /// **'Collections logic updated: Inventory is now the single source of truth for quantities.'**
+  String get whatsNewLine1;
+
+  /// No description provided for @whatsNewLine2.
+  ///
+  /// In en, this message translates to:
+  /// **'Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.'**
+  String get whatsNewLine2;
+
+  /// No description provided for @whatsNewLine3.
+  ///
+  /// In en, this message translates to:
+  /// **'Improved multi-TCG support: data is isolated between Magic and Pokemon.'**
+  String get whatsNewLine3;
+
+  /// No description provided for @whatsNewLine4.
+  ///
+  /// In en, this message translates to:
+  /// **'Home updated: under All cards you now see the latest additions in gallery mode.'**
+  String get whatsNewLine4;
+
+  /// No description provided for @whatsNewLine5.
+  ///
+  /// In en, this message translates to:
+  /// **'Better first-open onboarding message to help users start faster.'**
+  String get whatsNewLine5;
+
+  /// No description provided for @whatsNewLine6.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner upgraded: set filter by active game, foil toggle, and check button to confirm recognized name.'**
+  String get whatsNewLine6;
+
+  /// No description provided for @whatsNewLine7.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanner UX improved: startup tutorial with \"do not show again\" and a dedicated tutorial button.'**
+  String get whatsNewLine7;
+
+  /// No description provided for @whatsNewLine8.
+  ///
+  /// In en, this message translates to:
+  /// **'Visual consistency improved: golden icons and Pokemon database selector aligned with Magic style.'**
+  String get whatsNewLine8;
+
+  /// No description provided for @whatsNewLine9.
+  ///
+  /// In en, this message translates to:
+  /// **'Release cleanup: removed test/dev toggles and helper flows from production build.'**
+  String get whatsNewLine9;
+
+  /// No description provided for @createSmartCollectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create your smart collection'**
+  String get createSmartCollectionTitle;
+
+  /// No description provided for @pokemonEnergyGrass.
+  ///
+  /// In en, this message translates to:
+  /// **'Grass'**
+  String get pokemonEnergyGrass;
+
+  /// No description provided for @pokemonEnergyFire.
+  ///
+  /// In en, this message translates to:
+  /// **'Fire'**
+  String get pokemonEnergyFire;
+
+  /// No description provided for @pokemonEnergyWater.
+  ///
+  /// In en, this message translates to:
+  /// **'Water'**
+  String get pokemonEnergyWater;
+
+  /// No description provided for @pokemonEnergyLightning.
+  ///
+  /// In en, this message translates to:
+  /// **'Lightning'**
+  String get pokemonEnergyLightning;
+
+  /// No description provided for @pokemonEnergyPsychicDarkness.
+  ///
+  /// In en, this message translates to:
+  /// **'Psychic/Darkness'**
+  String get pokemonEnergyPsychicDarkness;
+
+  /// No description provided for @pokemonEnergyFighting.
+  ///
+  /// In en, this message translates to:
+  /// **'Fighting'**
+  String get pokemonEnergyFighting;
+
+  /// No description provided for @pokemonEnergyDragon.
+  ///
+  /// In en, this message translates to:
+  /// **'Dragon'**
+  String get pokemonEnergyDragon;
+
+  /// No description provided for @pokemonEnergyFairy.
+  ///
+  /// In en, this message translates to:
+  /// **'Fairy'**
+  String get pokemonEnergyFairy;
+
+  /// No description provided for @pokemonEnergyColorless.
+  ///
+  /// In en, this message translates to:
+  /// **'Colorless'**
+  String get pokemonEnergyColorless;
+
+  /// No description provided for @pokemonEnergyMetal.
+  ///
+  /// In en, this message translates to:
+  /// **'Metal'**
+  String get pokemonEnergyMetal;
+
+  /// No description provided for @pokemonEnergyNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get pokemonEnergyNone;
+
+  /// No description provided for @pokemonTypeTrainer.
+  ///
+  /// In en, this message translates to:
+  /// **'Trainer'**
+  String get pokemonTypeTrainer;
+
+  /// No description provided for @pokemonTypeEnergy.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy'**
+  String get pokemonTypeEnergy;
+
+  /// No description provided for @pokemonTypeItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Item'**
+  String get pokemonTypeItem;
+
+  /// No description provided for @pokemonTypeSupporter.
+  ///
+  /// In en, this message translates to:
+  /// **'Supporter'**
+  String get pokemonTypeSupporter;
+
+  /// No description provided for @pokemonTypeStadium.
+  ///
+  /// In en, this message translates to:
+  /// **'Stadium'**
+  String get pokemonTypeStadium;
+
+  /// No description provided for @pokemonTypeTool.
+  ///
+  /// In en, this message translates to:
+  /// **'Pokemon Tool'**
+  String get pokemonTypeTool;
+
+  /// No description provided for @pokemonEnergyTypeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy type'**
+  String get pokemonEnergyTypeLabel;
+
+  /// No description provided for @pokemonCardCategoryLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Card category'**
+  String get pokemonCardCategoryLabel;
+
+  /// No description provided for @pokemonAttackEnergyCostLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Attack energy cost'**
+  String get pokemonAttackEnergyCostLabel;
+
+  /// No description provided for @addMultipleCardsByFilterTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add multiple cards by filter'**
+  String get addMultipleCardsByFilterTitle;
+
+  /// No description provided for @addMultipleCardsByFilterSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply filters and add all matching cards'**
+  String get addMultipleCardsByFilterSubtitle;
+
+  /// No description provided for @allSelectedCardsOwned.
+  ///
+  /// In en, this message translates to:
+  /// **'All selected cards are already owned.'**
+  String get allSelectedCardsOwned;
+
+  /// No description provided for @skippedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Skipped'**
+  String get skippedLabel;
+
+  /// No description provided for @totalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get totalLabel;
+
+  /// No description provided for @pokemonEnergyPluralLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Energy'**
+  String get pokemonEnergyPluralLabel;
+
+  /// No description provided for @deckRule60Ok.
+  ///
+  /// In en, this message translates to:
+  /// **'60-card rule: OK'**
+  String get deckRule60Ok;
+
+  /// No description provided for @deckBasicPokemonPresentOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Basic Pokemon present: OK'**
+  String get deckBasicPokemonPresentOk;
+
+  /// No description provided for @deckBasicPokemonRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 1 Basic Pokemon is required.'**
+  String get deckBasicPokemonRequired;
+
+  /// No description provided for @deckCopyLimitOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy limit: OK'**
+  String get deckCopyLimitOk;
+
+  /// No description provided for @deckCopyLimitExceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} card names exceed 4 copies (Basic Energy excluded).'**
+  String deckCopyLimitExceeded(int count);
+
+  /// No description provided for @deckAddCardsToReach60.
+  ///
+  /// In en, this message translates to:
+  /// **'Add {count} cards to reach 60.'**
+  String deckAddCardsToReach60(int count);
+
+  /// No description provided for @deckRemoveCardsToReturn60.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {count} cards to get back to 60.'**
+  String deckRemoveCardsToReturn60(int count);
 }
 
 class _AppLocalizationsDelegate
