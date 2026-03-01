@@ -99,13 +99,13 @@ class PurchaseManager extends ChangeNotifier {
 
   Future<void> init() async {
     if (_initialized) {
+      if (_supportsStore()) {
+        _ensurePurchaseStreamListener();
+      }
       return;
     }
-    // On store-supported platforms entitlement must come from store state,
-    // not from locally editable preferences.
-    _userTier = _supportsStore()
-        ? UserTier.free
-        : _tierFromStored(await AppSettings.loadUserTier());
+    // Keep last known entitlement as fallback, then reconcile with store.
+    _userTier = _tierFromStored(await AppSettings.loadUserTier());
     _ownedTcgs = await AppSettings.loadOwnedTcgs();
     _pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
     _primaryGame =
@@ -118,23 +118,7 @@ class PurchaseManager extends ChangeNotifier {
 
     if (_supportsStore()) {
       _storeAvailable = await _inAppPurchase.isAvailable();
-      _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
-        _handlePurchaseUpdates,
-        onDone: () {
-          _purchasePending = false;
-          _restoringPurchases = false;
-          _purchaseWatchdog?.cancel();
-          _purchaseSubscription = null;
-          notifyListeners();
-        },
-        onError: (_) {
-          _lastError = 'purchase_failed';
-          _purchasePending = false;
-          _restoringPurchases = false;
-          _purchaseWatchdog?.cancel();
-          notifyListeners();
-        },
-      );
+      _ensurePurchaseStreamListener();
 
       if (_storeAvailable) {
         await refreshCatalog();
@@ -199,6 +183,7 @@ class PurchaseManager extends ChangeNotifier {
     if (!_supportsStore() || !_storeAvailable || product == null) {
       return;
     }
+    _ensurePurchaseStreamListener();
     _lastError = null;
     _purchasePending = true;
     _startPurchaseWatchdog();
@@ -240,6 +225,7 @@ class PurchaseManager extends ChangeNotifier {
     if (!_supportsStore() || !_storeAvailable || selected == null) {
       return;
     }
+    _ensurePurchaseStreamListener();
     _lastError = null;
     _purchasePending = true;
     _startPurchaseWatchdog();
@@ -280,9 +266,20 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   Future<void> restorePurchases() async {
-    if (!_supportsStore() || !_storeAvailable) {
+    if (!_supportsStore()) {
       return;
     }
+    try {
+      _storeAvailable = await _inAppPurchase.isAvailable();
+    } catch (_) {
+      _storeAvailable = false;
+    }
+    if (!_storeAvailable) {
+      _lastError = 'store_unavailable';
+      notifyListeners();
+      return;
+    }
+    _ensurePurchaseStreamListener();
     _restoringPurchases = true;
     _lastError = null;
     notifyListeners();
@@ -298,10 +295,16 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   Future<void> refreshEntitlementFromStore() async {
-    if (!_supportsStore() || !_storeAvailable || !Platform.isAndroid) {
+    if (!_supportsStore() || !Platform.isAndroid) {
       return;
     }
     try {
+      _storeAvailable = await _inAppPurchase.isAvailable();
+      if (!_storeAvailable) {
+        _lastError = 'store_unavailable';
+        notifyListeners();
+        return;
+      }
       final addition = _inAppPurchase
           .getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
       final response = await addition.queryPastPurchases();
@@ -331,12 +334,23 @@ class PurchaseManager extends ChangeNotifier {
       await _setTier(plusActive ? UserTier.plus : UserTier.free);
       _extraTcgSlots = additionalTcgUnlocked ? 1 : 0;
       await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
+      if (additionalTcgUnlocked) {
+        final secondary = _knownGames.firstWhere(
+          (candidate) => candidate != _primaryGame,
+          orElse: () => AppTcgGame.pokemon,
+        );
+        final key = _ownershipKeyForGame(secondary);
+        if (!_ownedTcgs.contains(key)) {
+          _ownedTcgs = {..._ownedTcgs, key};
+          _pokemonUnlocked = _ownedTcgs.contains(pokemonOwnershipKey);
+          await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
+          await AppSettings.saveOwnedTcgs(_ownedTcgs);
+        }
+      }
       notifyListeners();
     } catch (_) {
       _lastError = 'entitlement_refresh_failed';
-      await _setTier(UserTier.free);
-      _extraTcgSlots = 0;
-      await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
+      // Do not downgrade entitlements on transient store/network failures.
       notifyListeners();
     }
   }
@@ -383,6 +397,18 @@ class PurchaseManager extends ChangeNotifier {
 
       if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
+        // Optimistic unlock on successful purchase callback, then reconcile.
+        if (purchase.productID == plusProductId) {
+          await _setTier(UserTier.plus);
+          _lastError = null;
+        }
+        if (purchase.productID == additionalTcgProductId) {
+          if (_extraTcgSlots < 1) {
+            _extraTcgSlots = 1;
+            await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
+          }
+          _lastError = null;
+        }
         await refreshEntitlementFromStore();
         if (purchase.productID == plusProductId && _userTier != UserTier.plus) {
           _lastError = 'entitlement_verification_failed';
@@ -606,6 +632,27 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   bool _supportsStore() => Platform.isAndroid || Platform.isIOS;
+
+  void _ensurePurchaseStreamListener() {
+    _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
+      _handlePurchaseUpdates,
+      onDone: () {
+        _purchasePending = false;
+        _restoringPurchases = false;
+        _purchaseWatchdog?.cancel();
+        _purchaseSubscription = null;
+        notifyListeners();
+      },
+      onError: (_) {
+        _lastError = 'purchase_failed';
+        _purchasePending = false;
+        _restoringPurchases = false;
+        _purchaseWatchdog?.cancel();
+        _purchaseSubscription = null;
+        notifyListeners();
+      },
+    );
+  }
 
   bool _isAlreadyOwnedIapError(IAPError? error) {
     if (error == null) {

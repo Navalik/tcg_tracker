@@ -43,6 +43,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Map<String, String> _setNameLookup = {};
   static const int _deckImportBatchSize = 120;
   TcgGame _selectedHomeGame = TcgGame.mtg;
+  _HomeCollectionsMenu _activeCollectionsMenu = _HomeCollectionsMenu.home;
+  bool _forceFreePreview = false;
+  bool get _hasRealProAccess => _purchaseManager.isPro || _isProUnlocked;
+  bool get _hasProAccess => _hasRealProAccess && !_forceFreePreview;
 
   void _onCollectionsRefreshRequested() {
     unawaited(_loadCollections());
@@ -58,10 +62,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       setState(() {
         _isProUnlocked = _purchaseManager.isPro;
+        if (!_hasRealProAccess) {
+          _forceFreePreview = false;
+        }
       });
     };
     _purchaseManager.addListener(_purchaseListener);
     _isProUnlocked = _purchaseManager.isPro;
+    if (!_hasRealProAccess) {
+      _forceFreePreview = false;
+    }
     _snakeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
@@ -81,13 +91,45 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _selectedHomeGame = TcgEnvironmentController.instance.currentGame;
     });
+    if (!_isGameUnlocked(_selectedHomeGame)) {
+      final fallbackGame = _firstAccessibleGame();
+      await TcgEnvironmentController.instance.setGame(fallbackGame);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedHomeGame = fallbackGame;
+      });
+    }
     await ScryfallDatabase.instance.open();
+    await _runCollectionCoherenceCheckIfNeeded();
     await _loadCollections();
     await _maybeShowLatestReleaseNotesBeforeDbDownloads();
     if (!mounted || !context.mounted) {
       return;
     }
     unawaited(_initializeForCurrentGame());
+  }
+
+  Future<void> _runCollectionCoherenceCheckIfNeeded() async {
+    String currentVersion;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      currentVersion = '${info.version}+${info.buildNumber}';
+    } catch (_) {
+      return;
+    }
+    final game = _activeSettingsGame;
+    final lastCheckedVersion = await AppSettings
+        .loadCollectionCoherenceCheckVersionForGame(game);
+    if (lastCheckedVersion == currentVersion) {
+      return;
+    }
+    await ScryfallDatabase.instance.repairAllCardsCoherenceFromCustomCollections();
+    await AppSettings.saveCollectionCoherenceCheckVersionForGame(
+      game,
+      currentVersion,
+    );
   }
 
   Future<void> _maybeShowLatestReleaseNotesBeforeDbDownloads() async {
@@ -195,12 +237,28 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Future<void> _initializeForCurrentGame() async {
-    if (_isMtgActiveGame) {
-      await _initializeStartup();
-      return;
+  Future<bool> _ensureGameAccessFresh(TcgGame game) async {
+    if (_isGameUnlocked(game)) {
+      return true;
     }
-    if (!_isGameUnlocked(TcgGame.pokemon)) {
+    try {
+      await _purchaseManager.init();
+      await _purchaseManager.refreshEntitlementFromStore();
+    } catch (_) {
+      // Best effort only.
+    }
+    return _isGameUnlocked(game);
+  }
+
+  TcgGame _firstAccessibleGame() {
+    if (_isGameUnlocked(TcgGame.mtg)) {
+      return TcgGame.mtg;
+    }
+    return TcgGame.pokemon;
+  }
+
+  Future<void> _initializeForCurrentGame() async {
+    if (!_isGameUnlocked(_selectedHomeGame)) {
       if (!mounted) {
         return;
       }
@@ -210,6 +268,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _bulkDownloadError = null;
         _cardsMissing = false;
       });
+      return;
+    }
+    if (_isMtgActiveGame) {
+      await _initializeStartup();
       return;
     }
     await _initializePokemonStartup();
@@ -612,6 +674,48 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return collection.name;
   }
 
+  String _normalizedCollectionName(String value) {
+    return value.trim().toLowerCase();
+  }
+
+  bool _isCollectionNameTaken(
+    String name, {
+    int? excludeCollectionId,
+  }) {
+    final normalized = _normalizedCollectionName(name);
+    if (normalized.isEmpty) {
+      return false;
+    }
+    for (final item in _collections) {
+      if (excludeCollectionId != null && item.id == excludeCollectionId) {
+        continue;
+      }
+      if (_normalizedCollectionName(item.name) == normalized) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  IconData _collectionIcon(CollectionInfo collection) {
+    if (collection.type == CollectionType.deck) {
+      return Icons.view_carousel_rounded;
+    }
+    if (collection.type == CollectionType.wishlist) {
+      return Icons.favorite_border_rounded;
+    }
+    if (_isSetCollection(collection)) {
+      return Icons.auto_awesome_mosaic;
+    }
+    if (collection.type == CollectionType.custom) {
+      return Icons.tune;
+    }
+    if (_isBasicLandsCollection(collection)) {
+      return Icons.terrain_outlined;
+    }
+    return Icons.collections_bookmark;
+  }
+
   CollectionInfo? _findAllCardsCollection() {
     CollectionInfo? fallbackByName;
     for (final collection in _collections) {
@@ -636,7 +740,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _canCreateCollection() {
-    return _isProUnlocked || _userCollectionCount() < _freeCollectionLimit;
+    return _hasProAccess || _userCollectionCount() < _freeCollectionLimit;
   }
 
   int _setCollectionCount() {
@@ -644,7 +748,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _canCreateSetCollection() {
-    return _isProUnlocked || _setCollectionCount() < _freeSetCollectionLimit;
+    return _hasProAccess || _setCollectionCount() < _freeSetCollectionLimit;
   }
 
   int _wishlistCollectionCount() {
@@ -654,7 +758,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _canCreateWishlist() {
-    return _isProUnlocked || _wishlistCollectionCount() < _freeWishlistLimit;
+    return _hasProAccess || _wishlistCollectionCount() < _freeWishlistLimit;
   }
 
   int _customCollectionCount() {
@@ -664,7 +768,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _canCreateCustomCollection() {
-    return _isProUnlocked ||
+    return _hasProAccess ||
         _customCollectionCount() < _freeCustomCollectionLimit;
   }
 
@@ -675,7 +779,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   bool _canCreateDeckCollection() {
-    return _isProUnlocked || _deckCollectionCount() < _freeDeckCollectionLimit;
+    return _hasProAccess || _deckCollectionCount() < _freeDeckCollectionLimit;
   }
 
   Future<void> _showCollectionLimitDialog() async {
@@ -955,6 +1059,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               !_isDeckSideboardCollection(collection),
         )
         .toList();
+    final disabledCollectionIds = _disabledCollectionIdsForFree(userCollections);
     final deckCollections = userCollections
         .where((item) => item.type == CollectionType.deck)
         .toList();
@@ -992,6 +1097,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           child: _CollectionCard(
             name: _collectionDisplayName(allCards),
             count: _totalCardCount,
+            icon: _collectionIcon(allCards),
             onLongPress: (position) {
               _showCollectionActions(allCards, position);
             },
@@ -1014,92 +1120,188 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
     }
 
+    if (_activeCollectionsMenu == _HomeCollectionsMenu.home) {
+      return widgets;
+    }
+
     widgets.add(const SizedBox(height: 6));
     widgets.add(
       _SectionDivider(label: AppLocalizations.of(context)!.myCollections),
     );
     widgets.add(const SizedBox(height: 12));
 
-    final hasSetCollection = nonDeckCollections.any(_isSetCollection);
-    final hasCustomCollection = nonDeckCollections.any(
-      (item) => item.type == CollectionType.custom,
-    );
-    final hasDeckCollection = deckCollections.isNotEmpty;
-    final hasWishlistCollection = nonDeckCollections.any(
-      (item) => item.type == CollectionType.wishlist,
-    );
     final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
     final canCreateCustom =
         _canCreateCollection() && _canCreateCustomCollection();
     final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
     final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
+    final setCollections = nonDeckCollections
+        .where(_isSetCollection)
+        .toList(growable: false);
+    final customCollections = nonDeckCollections
+        .where((item) => item.type == CollectionType.custom)
+        .toList(growable: false);
+    final wishlistCollections = nonDeckCollections
+        .where((item) => item.type == CollectionType.wishlist)
+        .toList(growable: false);
 
-    void addCreateCards({required bool includeDeck}) {
-      if (!hasCustomCollection) {
-        widgets.add(
-          _buildCreateCollectionCard(
-            context,
-            icon: Icons.tune,
-            title: AppLocalizations.of(
-              context,
-            )!.createYourCustomCollectionTitle,
-            enabled: canCreateCustom,
-            onTap: () => _addCustomCollection(context),
+    List<Widget> buildSingleCategory({
+      required String label,
+      required List<CollectionInfo> items,
+      required IconData createIcon,
+      required String createTitle,
+      required String description,
+      required bool canCreate,
+      required VoidCallback onCreate,
+      bool includeCountLabel = false,
+    }) {
+      final sectionWidgets = <Widget>[
+        const SizedBox(height: 6),
+        _SectionDivider(label: label),
+        const SizedBox(height: 12),
+      ];
+      for (final collection in items) {
+        final sideCount = _deckSideboardCounts[collection.id] ?? 0;
+        final isDisabled = disabledCollectionIds.contains(collection.id);
+        sectionWidgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _CollectionCard(
+              name: _collectionDisplayName(collection),
+              count: collection.cardCount,
+              icon: _collectionIcon(collection),
+              enabled: !isDisabled,
+              disabledTag: 'PRO',
+              countLabel: includeCountLabel
+                  ? '${collection.cardCount}+$sideCount'
+                  : null,
+              onLongPress: isDisabled
+                  ? null
+                  : (position) {
+                      _showCollectionActions(collection, position);
+                    },
+              onTap: isDisabled ? null : () => openCollection(collection),
+            ),
           ),
         );
       }
-      if (!hasSetCollection) {
-        widgets.add(
-          _buildCreateCollectionCard(
-            context,
-            icon: Icons.auto_awesome_mosaic,
-            title: AppLocalizations.of(context)!.createYourSetCollectionTitle,
-            enabled: canCreateSet,
-            onTap: () => _addSetCollection(context),
-          ),
-        );
-      }
-      if (includeDeck && !hasDeckCollection) {
-        widgets.add(
-          _buildCreateCollectionCard(
-            context,
-            icon: Icons.view_carousel_rounded,
-            title: AppLocalizations.of(context)!.createYourDeckTitle,
-            enabled: canCreateDeck,
-            onTap: () => _addDeckCollection(context),
-          ),
-        );
-      }
-      if (!hasWishlistCollection) {
-        widgets.add(
-          _buildCreateCollectionCard(
-            context,
-            icon: Icons.favorite_border_rounded,
-            title: AppLocalizations.of(context)!.createYourWishlistTitle,
-            enabled: canCreateWishlist,
-            onTap: () => _addWishlistCollection(context),
-          ),
-        );
+      sectionWidgets.add(
+        _buildCreateCollectionCard(
+          context,
+          icon: createIcon,
+          title: createTitle,
+          enabled: canCreate,
+          onTap: onCreate,
+        ),
+      );
+      sectionWidgets.add(const SizedBox(height: 2));
+      sectionWidgets.add(const _DividerGlow());
+      sectionWidgets.add(const SizedBox(height: 10));
+      sectionWidgets.add(_buildSectionHintCard(description));
+      return sectionWidgets;
+    }
+
+    void addCreateCards() {
+      widgets.add(
+        _buildCreateCollectionCard(
+          context,
+          icon: Icons.tune,
+          title: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+          enabled: canCreateCustom,
+          onTap: () => _addCustomCollection(context),
+        ),
+      );
+      widgets.add(
+        _buildCreateCollectionCard(
+          context,
+          icon: Icons.auto_awesome_mosaic,
+          title: AppLocalizations.of(context)!.createYourSetCollectionTitle,
+          enabled: canCreateSet,
+          onTap: () => _addSetCollection(context),
+        ),
+      );
+      widgets.add(
+        _buildCreateCollectionCard(
+          context,
+          icon: Icons.favorite_border_rounded,
+          title: AppLocalizations.of(context)!.createYourWishlistTitle,
+          enabled: canCreateWishlist,
+          onTap: () => _addWishlistCollection(context),
+        ),
+      );
+    }
+
+    if (_activeCollectionsMenu != _HomeCollectionsMenu.home) {
+      switch (_activeCollectionsMenu) {
+        case _HomeCollectionsMenu.set:
+          return buildSingleCategory(
+            label: AppLocalizations.of(context)!.createYourSetCollectionTitle,
+            items: setCollections,
+            createIcon: Icons.auto_awesome_mosaic,
+            createTitle: AppLocalizations.of(context)!.createYourSetCollectionTitle,
+            description: _sectionHelpText(_HomeCollectionsMenu.set),
+            canCreate: canCreateSet,
+            onCreate: () => _addSetCollection(context),
+          );
+        case _HomeCollectionsMenu.collection:
+          return buildSingleCategory(
+            label: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            items: customCollections,
+            createIcon: Icons.tune,
+            createTitle: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            description: _sectionHelpText(_HomeCollectionsMenu.collection),
+            canCreate: canCreateCustom,
+            onCreate: () => _addCustomCollection(context),
+          );
+        case _HomeCollectionsMenu.wish:
+          return buildSingleCategory(
+            label: AppLocalizations.of(context)!.createYourWishlistTitle,
+            items: wishlistCollections,
+            createIcon: Icons.favorite_border_rounded,
+            createTitle: AppLocalizations.of(context)!.createYourWishlistTitle,
+            description: _sectionHelpText(_HomeCollectionsMenu.wish),
+            canCreate: canCreateWishlist,
+            onCreate: () => _addWishlistCollection(context),
+          );
+        case _HomeCollectionsMenu.deck:
+          return buildSingleCategory(
+            label: AppLocalizations.of(context)!.deckCollectionTitle,
+            items: deckCollections,
+            createIcon: Icons.view_carousel_rounded,
+            createTitle: AppLocalizations.of(context)!.createYourDeckTitle,
+            description: _sectionHelpText(_HomeCollectionsMenu.deck),
+            canCreate: canCreateDeck,
+            onCreate: () => _addDeckCollection(context),
+            includeCountLabel: true,
+          );
+        case _HomeCollectionsMenu.home:
+          break;
       }
     }
 
     for (final collection in nonDeckCollections) {
+      final isDisabled = disabledCollectionIds.contains(collection.id);
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _CollectionCard(
             name: _collectionDisplayName(collection),
             count: collection.cardCount,
-            onLongPress: (position) {
-              _showCollectionActions(collection, position);
-            },
-            onTap: () => openCollection(collection),
+            icon: _collectionIcon(collection),
+            enabled: !isDisabled,
+            disabledTag: 'PRO',
+            onLongPress: isDisabled
+                ? null
+                : (position) {
+                    _showCollectionActions(collection, position);
+                  },
+            onTap: isDisabled ? null : () => openCollection(collection),
           ),
         ),
       );
     }
 
-    addCreateCards(includeDeck: false);
+    addCreateCards();
 
     widgets.add(const SizedBox(height: 6));
     widgets.add(
@@ -1109,35 +1311,193 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     for (final collection in deckCollections) {
       final sideCount = _deckSideboardCounts[collection.id] ?? 0;
+      final isDisabled = disabledCollectionIds.contains(collection.id);
       widgets.add(
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: _CollectionCard(
             name: _collectionDisplayName(collection),
             count: collection.cardCount,
+            icon: _collectionIcon(collection),
+            enabled: !isDisabled,
+            disabledTag: 'PRO',
             countLabel: '${collection.cardCount}+$sideCount',
-            onLongPress: (position) {
-              _showCollectionActions(collection, position);
-            },
-            onTap: () => openCollection(collection),
+            onLongPress: isDisabled
+                ? null
+                : (position) {
+                    _showCollectionActions(collection, position);
+                  },
+            onTap: isDisabled ? null : () => openCollection(collection),
           ),
         ),
       );
     }
 
-    if (!hasDeckCollection) {
-      widgets.add(
-        _buildCreateCollectionCard(
-          context,
-          icon: Icons.view_carousel_rounded,
-          title: AppLocalizations.of(context)!.createYourDeckTitle,
-          enabled: canCreateDeck,
-          onTap: () => _addDeckCollection(context),
-        ),
-      );
-    }
+    widgets.add(
+      _buildCreateCollectionCard(
+        context,
+        icon: Icons.view_carousel_rounded,
+        title: AppLocalizations.of(context)!.createYourDeckTitle,
+        enabled: canCreateDeck,
+        onTap: () => _addDeckCollection(context),
+      ),
+    );
 
     return widgets;
+  }
+
+  Widget _buildCollectionsMenu() {
+    final items = const <(_HomeCollectionsMenu, String)>[
+      (_HomeCollectionsMenu.set, 'Set'),
+      (_HomeCollectionsMenu.collection, 'Collection'),
+      (_HomeCollectionsMenu.wish, 'Wish'),
+      (_HomeCollectionsMenu.deck, 'Deck'),
+    ];
+    return Column(
+      children: [
+        const Divider(height: 1, color: Color(0x7A5D4731)),
+        const SizedBox(height: 10),
+        Row(
+          children: items
+              .map(
+                (entry) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: _MenuPillButton(
+                      label: entry.$2,
+                      selected: _activeCollectionsMenu == entry.$1,
+                      onTap: () {
+                        if (_activeCollectionsMenu == entry.$1) {
+                          return;
+                        }
+                        setState(() {
+                          _activeCollectionsMenu = entry.$1;
+                        });
+                      },
+                    ),
+                  ),
+                ),
+              )
+              .toList(growable: false),
+        ),
+        const SizedBox(height: 10),
+        const Divider(height: 1, color: Color(0x7A5D4731)),
+      ],
+    );
+  }
+
+  String _sectionHelpText(_HomeCollectionsMenu section) {
+    final isItalian = _isItalianUi();
+    switch (section) {
+      case _HomeCollectionsMenu.set:
+        return isItalian
+            ? 'Scegli un set specifico e segui la checklist in modo chiaro: vedi subito le carte presenti e quelle che ti mancano.'
+            : 'Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.';
+      case _HomeCollectionsMenu.collection:
+        return isItalian
+            ? 'Crea una collezione con filtri avanzati (formato, rarita, colori, tipi e altro) e tieni traccia delle carte possedute.'
+            : 'Create a collection with advanced filters (format, rarity, colors, types, and more) and track your owned cards.';
+      case _HomeCollectionsMenu.wish:
+        return isItalian
+            ? 'Crea una wishlist con filtri avanzati per tenere sotto controllo le carte mancanti che vuoi trovare.'
+            : 'Create a wishlist with advanced filters to track the missing cards you are looking for.';
+      case _HomeCollectionsMenu.deck:
+        return isItalian
+            ? 'Tieni traccia dei tuoi mazzi e aggiorna mainboard/sideboard: le carte del deck restano nel mazzo e non vengono aggiunte alle collezioni.'
+            : 'Track your decks and update mainboard/sideboard: deck cards stay in the deck and are not added to collections.';
+      case _HomeCollectionsMenu.home:
+        return '';
+    }
+  }
+
+  Widget _buildSectionHintCard(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        decoration: BoxDecoration(
+          color: const Color(0x221D1712),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF5D4731)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.info_outline_rounded,
+                size: 18,
+                color: Color(0xFFE9C46A),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: const Color(0xFFD6C7B0),
+                  fontWeight: FontWeight.w700,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Set<int> _disabledCollectionIdsForFree(List<CollectionInfo> userCollections) {
+    if (_hasProAccess) {
+      return const <int>{};
+    }
+    final disabled = <int>{};
+
+    void markDisabled(List<CollectionInfo> items, int limit) {
+      for (var i = limit; i < items.length; i++) {
+        disabled.add(items[i].id);
+      }
+    }
+
+    final setItems = userCollections.where(_isSetCollection).toList();
+    final customItems = userCollections
+        .where((item) => item.type == CollectionType.custom)
+        .toList();
+    final deckItems = userCollections
+        .where((item) => item.type == CollectionType.deck)
+        .toList();
+    final wishItems = userCollections
+        .where((item) => item.type == CollectionType.wishlist)
+        .toList();
+
+    markDisabled(setItems, _freeSetCollectionLimit);
+    markDisabled(customItems, _freeCustomCollectionLimit);
+    markDisabled(deckItems, _freeDeckCollectionLimit);
+    markDisabled(wishItems, _freeWishlistLimit);
+
+    return disabled;
+  }
+
+  void _toggleProPreviewMode() {
+    if (!_hasRealProAccess) {
+      return;
+    }
+    setState(() {
+      _forceFreePreview = !_forceFreePreview;
+    });
+    final isItalian = _isItalianUi();
+    showAppSnackBar(
+      context,
+      _forceFreePreview
+          ? (isItalian
+                ? 'Modalita test: comportamento Free attivo.'
+                : 'Test mode: Free behavior enabled.')
+          : (isItalian
+                ? 'Modalita test disattivata: comportamento Pro attivo.'
+                : 'Test mode disabled: Pro behavior restored.'),
+    );
   }
 
   Future<void> _showDeckCollectionLimitDialog() async {
@@ -1540,6 +1900,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (name == null) {
       return;
     }
+    if (_isCollectionNameTaken(name)) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
+      );
+      return;
+    }
     int id;
     try {
       id = await ScryfallDatabase.instance.addCollection(
@@ -1656,6 +2026,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
 
     if (name == null) {
+      return;
+    }
+    if (_isCollectionNameTaken(name)) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
+      );
       return;
     }
     if (!context.mounted) {
@@ -1827,7 +2207,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     final resolvedName = _setCollectionName(selected.code);
-    if (_collections.any((item) => item.name == resolvedName)) {
+    if (_isCollectionNameTaken(resolvedName)) {
       showAppSnackBar(
         context,
         AppLocalizations.of(context)!.collectionAlreadyExists,
@@ -2006,7 +2386,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
-    if (_collections.any((item) => item.name == request.name)) {
+    if (_isCollectionNameTaken(request.name)) {
       showAppSnackBar(
         context,
         AppLocalizations.of(context)!.collectionAlreadyExists,
@@ -2747,7 +3127,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<bool> _canStartScanSession() async {
-    if (_isProUnlocked) {
+    if (_hasProAccess) {
       return true;
     }
     final remaining = await AppSettings.remainingFreeDailyScans(
@@ -2764,7 +3144,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<bool> _consumeFreeScanIfNeeded() async {
-    if (_isProUnlocked) {
+    if (_hasProAccess) {
       return true;
     }
     final consumed = await AppSettings.consumeFreeDailyScan(
@@ -3943,7 +4323,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final isSetCollection = _isSetCollection(collection);
     final isDeckCollection = collection.type == CollectionType.deck;
-    final isWishlistCollection = collection.type == CollectionType.wishlist;
     final menuItems = <PopupMenuEntry<_CollectionAction>>[];
     if (!isSetCollection) {
       menuItems.add(
@@ -3958,20 +4337,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
         ),
       );
-      if (!isWishlistCollection && !isDeckCollection) {
-        menuItems.add(
-          PopupMenuItem(
-            value: _CollectionAction.editFilters,
-            child: Row(
-              children: [
-                Icon(Icons.tune, size: 18),
-                SizedBox(width: 8),
-                Text(AppLocalizations.of(context)!.filters),
-              ],
-            ),
-          ),
-        );
-      }
     }
     if (isDeckCollection && _isMtgActiveGame) {
       menuItems.add(
@@ -4034,8 +4399,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     if (selection == _CollectionAction.rename) {
       await _renameCollection(collection);
-    } else if (selection == _CollectionAction.editFilters) {
-      await _editCollectionFilters(collection);
     } else if (selection == _CollectionAction.importDeckFile) {
       await _importDeckFileIntoCollection(collection);
     } else if (selection == _CollectionAction.exportDeckArena) {
@@ -4045,32 +4408,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     } else if (selection == _CollectionAction.delete) {
       await _deleteCollection(collection);
     }
-  }
-
-  Future<void> _editCollectionFilters(CollectionInfo collection) async {
-    if (_isSetCollection(collection) ||
-        collection.type == CollectionType.wishlist) {
-      return;
-    }
-    final filter = await Navigator.of(context).push<CollectionFilter>(
-      MaterialPageRoute(
-        builder: (_) => _CollectionFilterBuilderPage(
-          name: _collectionDisplayName(collection),
-          initialFilter: collection.filter,
-        ),
-      ),
-    );
-    if (filter == null) {
-      return;
-    }
-    await ScryfallDatabase.instance.updateCollectionFilter(
-      collection.id,
-      filter: filter,
-    );
-    if (!mounted) {
-      return;
-    }
-    await _loadCollections();
   }
 
   Future<void> _renameCollection(CollectionInfo collection) async {
@@ -4113,7 +4450,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     final resolvedName = name;
-    if (resolvedName == collection.name) {
+    if (_normalizedCollectionName(resolvedName) ==
+        _normalizedCollectionName(collection.name)) {
+      return;
+    }
+    if (_isCollectionNameTaken(resolvedName, excludeCollectionId: collection.id)) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
+      );
       return;
     }
     await ScryfallDatabase.instance.renameCollection(
@@ -4443,12 +4791,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final gameInitial = _selectedHomeGame == TcgGame.mtg ? 'M' : 'P';
     return PopupMenuButton<TcgGame>(
       initialValue: _selectedHomeGame,
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
       tooltip: 'Game selector (preview)',
       onSelected: (TcgGame selected) async {
         if (selected == _selectedHomeGame) {
           return;
         }
-        if (!_isGameUnlocked(selected)) {
+        final hasAccess = await _ensureGameAccessFresh(selected);
+        if (!hasAccess) {
           if (!mounted) {
             return;
           }
@@ -4557,10 +4908,33 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     children: [
                       Row(
                         children: [
-                          _buildGameSelector(),
+                          _HomeIconButton(
+                            selected:
+                                _activeCollectionsMenu == _HomeCollectionsMenu.home,
+                            onTap: () {
+                              if (_activeCollectionsMenu ==
+                                  _HomeCollectionsMenu.home) {
+                                return;
+                              }
+                              setState(() {
+                                _activeCollectionsMenu =
+                                    _HomeCollectionsMenu.home;
+                              });
+                            },
+                          ),
+                          if (_hasRealProAccess) ...[
+                            const SizedBox(width: 8),
+                            _ProPreviewToggleButton(
+                              proModeActive: !_forceFreePreview,
+                              onTap: _toggleProPreviewMode,
+                            ),
+                          ],
                           const Spacer(),
                           IconButton(
                             tooltip: l10n.settings,
+                            style: IconButton.styleFrom(
+                              foregroundColor: const Color(0xFFE9C46A),
+                            ),
                             icon: const Icon(Icons.settings),
                             onPressed: () {
                               Navigator.of(context)
@@ -4576,6 +4950,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                   });
                             },
                           ),
+                          const SizedBox(width: 4),
+                          _buildGameSelector(),
                         ],
                       ),
                       const SizedBox(height: 8),
@@ -4719,6 +5095,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(color: const Color(0xFF908676)),
                         ),
+                      const SizedBox(height: 10),
+                      _buildCollectionsMenu(),
                       if (!_isMtgActiveGame &&
                           !pokemonLocked &&
                           !_checkingBulk &&
@@ -4912,6 +5290,156 @@ class _GameMenuBadge extends StatelessWidget {
   }
 }
 
+class _MenuPillButton extends StatelessWidget {
+  const _MenuPillButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 170),
+          curve: Curves.easeOutCubic,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFFE9C46A)
+                  : const Color(0xFF5D4731).withValues(alpha: 0.45),
+            ),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.fade,
+            softWrap: false,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: selected
+                  ? const Color(0xFFEFD28B)
+                  : const Color(0xFFBFAE95),
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeIconButton extends StatelessWidget {
+  const _HomeIconButton({
+    required this.selected,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected
+                ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
+                : Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected
+                  ? const Color(0xFFE9C46A)
+                  : const Color(0xFF5D4731),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(
+              Icons.home_rounded,
+              size: 18,
+              color: selected
+                  ? const Color(0xFFE9C46A)
+                  : const Color(0xFFBFAE95),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProPreviewToggleButton extends StatelessWidget {
+  const _ProPreviewToggleButton({
+    required this.proModeActive,
+    required this.onTap,
+  });
+
+  final bool proModeActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: proModeActive
+                ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
+                : const Color(0x221D1712),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: proModeActive
+                  ? const Color(0xFFE9C46A)
+                  : const Color(0xFF5D4731),
+            ),
+          ),
+          child: Text(
+            proModeActive ? 'PRO' : 'FREE',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: proModeActive
+                  ? const Color(0xFFEFD28B)
+                  : const Color(0xFFBFAE95),
+              fontWeight: FontWeight.w900,
+              fontSize: 13.5,
+              letterSpacing: 0.7,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DashedRoundedRectPainter extends CustomPainter {
   const _DashedRoundedRectPainter({required this.color, required this.radius});
 
@@ -4950,16 +5478,22 @@ class _CollectionCard extends StatelessWidget {
   const _CollectionCard({
     required this.name,
     required this.count,
-    required this.onTap,
+    required this.icon,
+    this.onTap,
     this.countLabel,
     this.onLongPress,
+    this.enabled = true,
+    this.disabledTag,
   });
 
   final String name;
   final int count;
+  final IconData icon;
   final String? countLabel;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final ValueChanged<Offset>? onLongPress;
+  final bool enabled;
+  final String? disabledTag;
 
   @override
   Widget build(BuildContext context) {
@@ -4971,48 +5505,80 @@ class _CollectionCard extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.collections_bookmark,
-                  color: Color(0xFFE9C46A),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        countLabel ?? l10n.cardCount(count),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: const Color(0xFFBFAE95),
-                        ),
-                      ),
-                    ],
+          child: Opacity(
+            opacity: enabled ? 1.0 : 0.58,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: enabled ? null : Border.all(color: const Color(0x665D4731)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
                   ),
-                ),
-                const Icon(Icons.chevron_right, color: Color(0xFFBFAE95)),
-              ],
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, color: const Color(0xFFE9C46A)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          countLabel ?? l10n.cardCount(count),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFFBFAE95),
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (enabled)
+                    const Icon(Icons.chevron_right, color: Color(0xFFBFAE95))
+                  else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (disabledTag?.trim().isNotEmpty ?? false)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF5A2020),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(color: const Color(0xFFE16464)),
+                            ),
+                            child: Text(
+                              disabledTag!,
+                              style:
+                                  Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: const Color(0xFFFFD2D2),
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 11.5,
+                                        letterSpacing: 0.8,
+                                      ),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.lock_outline, color: Color(0xFFBFAE95)),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -5148,12 +5714,10 @@ class _HomeAddSheet extends StatelessWidget {
 class _CollectionFilterBuilderPage extends StatefulWidget {
   const _CollectionFilterBuilderPage({
     required this.name,
-    this.initialFilter,
     this.submitLabel,
   });
 
   final String name;
-  final CollectionFilter? initialFilter;
   final String? submitLabel;
 
   @override
@@ -5222,21 +5786,6 @@ class _CollectionFilterBuilderPageState
   @override
   void initState() {
     super.initState();
-    final initial = widget.initialFilter;
-    if (initial != null) {
-      _nameController.text = initial.name ?? '';
-      _artistController.text = initial.artist ?? '';
-      if (initial.manaMin != null) {
-        _manaMinController.text = initial.manaMin.toString();
-      }
-      if (initial.manaMax != null) {
-        _manaMaxController.text = initial.manaMax.toString();
-      }
-      _selectedSets.addAll(initial.sets);
-      _selectedRarities.addAll(initial.rarities);
-      _selectedColors.addAll(initial.colors);
-      _selectedTypes.addAll(initial.types);
-    }
     _loadSets();
     _schedulePreviewUpdate();
   }
@@ -5441,7 +5990,6 @@ class _CollectionFilterBuilderPageState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final isEditing = widget.initialFilter != null;
     final filter = _buildFilter();
     final hasCriteria = _hasCriteria(filter);
     final filteredSets = _setQuery.isEmpty
@@ -5702,7 +6250,7 @@ class _CollectionFilterBuilderPageState
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(_buildFilter()),
                 child: Text(
-                  widget.submitLabel ?? (isEditing ? l10n.save : l10n.create),
+                  widget.submitLabel ?? l10n.create,
                 ),
               ),
             ],
@@ -7143,12 +7691,13 @@ class _ParsedDeckList {
 
 enum _CollectionAction {
   rename,
-  editFilters,
   importDeckFile,
   exportDeckArena,
   exportDeckMtgo,
   delete,
 }
+
+enum _HomeCollectionsMenu { home, set, collection, wish, deck }
 
 enum _HomeAddAction { addByScan, addCards, addCollection, addWishlist }
 

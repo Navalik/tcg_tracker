@@ -15,6 +15,7 @@ class AppSettings {
   static const _prefsKeyPriceCurrency = 'price_currency';
   static const _prefsKeyShowPrices = 'show_prices';
   static const _prefsKeyAppLocale = 'app_locale';
+  static const _prefsKeyVisualTheme = 'visual_theme';
   static const _prefsKeyProUnlocked = 'pro_unlocked';
   static const _prefsKeyFreeScanDate = 'free_scan_date';
   static const _prefsKeyFreeScanCount = 'free_scan_count';
@@ -27,8 +28,14 @@ class AppSettings {
   static const _prefsKeyPokemonUnlocked = 'pokemon_unlocked';
   static const _prefsKeyExtraTcgSlots = 'extra_tcg_slots';
   static const _prefsKeyPokemonDatasetProfile = 'pokemon_dataset_profile';
+  static const _prefsKeyCollectionCoherenceCheckVersionPrefix =
+      'collection_coherence_check_version';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
       'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+  static String _prefsKeyCollectionCoherenceCheckVersionForGame(
+    AppTcgGame game,
+  ) =>
+      '${_prefsKeyCollectionCoherenceCheckVersionPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
 
   static const List<String> languageCodes = [
     'en',
@@ -173,6 +180,26 @@ class AppSettings {
     final value = localeCode.trim().toLowerCase();
     final normalized = supportedAppLocales.contains(value) ? value : 'en';
     await prefs.setString(_prefsKeyAppLocale, normalized);
+  }
+
+  static Future<String> loadVisualTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyVisualTheme)?.trim().toLowerCase();
+    if (value == 'magic' || value == 'vault') {
+      return value!;
+    }
+    const fallback = 'magic';
+    await prefs.setString(_prefsKeyVisualTheme, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveVisualTheme(String themeCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = themeCode.trim().toLowerCase();
+    final normalized = (value == 'magic' || value == 'vault')
+        ? value
+        : 'magic';
+    await prefs.setString(_prefsKeyVisualTheme, normalized);
   }
 
   static Future<bool> loadProUnlocked() async {
@@ -348,11 +375,18 @@ class AppSettings {
     await prefs.remove(_prefsKeyPriceCurrency);
     await prefs.remove(_prefsKeyShowPrices);
     await prefs.remove(_prefsKeyAppLocale);
+    await prefs.remove(_prefsKeyVisualTheme);
     await prefs.remove(_prefsKeySelectedTcg);
     await prefs.remove(_prefsKeyPrimaryTcg);
     await prefs.remove(_prefsKeyPokemonUnlocked);
     await prefs.remove(_prefsKeyExtraTcgSlots);
     await prefs.remove(_prefsKeyPokemonDatasetProfile);
+    await prefs.remove(
+      _prefsKeyCollectionCoherenceCheckVersionForGame(AppTcgGame.mtg),
+    );
+    await prefs.remove(
+      _prefsKeyCollectionCoherenceCheckVersionForGame(AppTcgGame.pokemon),
+    );
     await prefs.remove(_prefsKeyProUnlocked);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
@@ -481,5 +515,34 @@ class AppSettings {
     final prefs = await SharedPreferences.getInstance();
     final normalized = slots < 0 ? 0 : slots;
     await prefs.setInt(_prefsKeyExtraTcgSlots, normalized);
+  }
+
+  static Future<String?> loadCollectionCoherenceCheckVersionForGame(
+    AppTcgGame game,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs
+        .getString(_prefsKeyCollectionCoherenceCheckVersionForGame(game))
+        ?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> saveCollectionCoherenceCheckVersionForGame(
+    AppTcgGame game,
+    String version,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = version.trim();
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyCollectionCoherenceCheckVersionForGame(game));
+      return;
+    }
+    await prefs.setString(
+      _prefsKeyCollectionCoherenceCheckVersionForGame(game),
+      normalized,
+    );
   }
 }

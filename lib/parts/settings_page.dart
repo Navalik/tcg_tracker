@@ -18,9 +18,11 @@ class _SettingsPageState extends State<SettingsPage> {
   String _priceCurrency = 'eur';
   bool _showPrices = true;
   String _appLocaleCode = 'en';
+  String _appThemeCode = 'magic';
   String _appVersion = '0.4.4';
   bool _backupBusy = false;
   bool _gamesBusy = false;
+  bool _coherenceCheckBusy = false;
   TcgGame _primaryGame = TcgGame.mtg;
   Set<String> _ownedTcgs = const <String>{};
   late final PurchaseManager _purchaseManager;
@@ -47,6 +49,17 @@ class _SettingsPageState extends State<SettingsPage> {
     return _purchaseManager.canAccessGame(
       game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
     );
+  }
+
+  Set<String> _resolveOwnedTcgsForUi(Set<String> persisted) {
+    final merged = <String>{...persisted, ..._purchaseManager.ownedTcgs};
+    if (_purchaseManager.canAccessGame(AppTcgGame.mtg)) {
+      merged.add(PurchaseManager.magicOwnershipKey);
+    }
+    if (_purchaseManager.canAccessGame(AppTcgGame.pokemon)) {
+      merged.add(PurchaseManager.pokemonOwnershipKey);
+    }
+    return merged;
   }
 
   String _googleSignInErrorMessage(Object error) {
@@ -95,7 +108,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
       setState(() {
-        _ownedTcgs = _purchaseManager.ownedTcgs;
+        _ownedTcgs = _resolveOwnedTcgsForUi(_ownedTcgs);
         _gamesBusy =
             _purchaseManager.purchasePending ||
             _purchaseManager.restoringPurchases;
@@ -120,6 +133,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final priceCurrency = await AppSettings.loadPriceCurrency();
     final showPrices = await AppSettings.loadShowPrices();
     final appLocaleCode = await AppSettings.loadAppLocale();
+    final appThemeCode = await AppSettings.loadVisualTheme();
     final ownedTcgs = await AppSettings.loadOwnedTcgs();
     final pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
     final pokemonDatasetProfile = await AppSettings.loadPokemonDatasetProfile();
@@ -138,19 +152,17 @@ class _SettingsPageState extends State<SettingsPage> {
       _priceCurrency = priceCurrency;
       _showPrices = showPrices;
       _appLocaleCode = appLocaleCode;
+      _appThemeCode = appThemeCode;
       _appVersion = appVersion;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;
       final pokemonAccessible =
           pokemonUnlocked || ownedTcgs.contains(_pokemonOwnershipKey);
-      if (pokemonAccessible && !ownedTcgs.contains(_pokemonOwnershipKey)) {
-        _ownedTcgs = {...ownedTcgs, _pokemonOwnershipKey};
-      } else {
-        _ownedTcgs = _purchaseManager.ownedTcgs.isNotEmpty
-            ? _purchaseManager.ownedTcgs
-            : ownedTcgs;
-      }
+      final baseOwned = pokemonAccessible && !ownedTcgs.contains(_pokemonOwnershipKey)
+          ? {...ownedTcgs, _pokemonOwnershipKey}
+          : ownedTcgs;
+      _ownedTcgs = _resolveOwnedTcgsForUi(baseOwned);
       _gamesBusy =
           _purchaseManager.purchasePending ||
           _purchaseManager.restoringPurchases;
@@ -169,7 +181,7 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     setState(() {
-      _ownedTcgs = manager.ownedTcgs;
+      _ownedTcgs = _resolveOwnedTcgsForUi(_ownedTcgs);
     });
     showAppSnackBar(
       context,
@@ -269,7 +281,7 @@ class _SettingsPageState extends State<SettingsPage> {
         return;
       }
       setState(() {
-        _ownedTcgs = manager.ownedTcgs;
+        _ownedTcgs = _resolveOwnedTcgsForUi(_ownedTcgs);
       });
       showAppSnackBar(
         context,
@@ -286,6 +298,20 @@ class _SettingsPageState extends State<SettingsPage> {
         _isItalianUi
             ? 'Ripristino acquisti troppo lento. Riprova.'
             : 'Restore purchases is taking too long. Try again.',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Restore purchases failed: $error');
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Errore durante il ripristino acquisti. Riprova.'
+            : 'Error while restoring purchases. Please retry.',
       );
     } finally {
       if (mounted) {
@@ -378,6 +404,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ? 'Connessione allo store troppo lenta. Riprova.'
             : 'Store connection is taking too long. Try again.',
       );
+    } catch (error, stackTrace) {
+      debugPrint('Secondary game purchase flow failed: $error');
+      if (kDebugMode) {
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Errore durante l\'acquisto. Riprova.'
+            : 'Error during purchase. Please retry.',
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -430,6 +470,79 @@ class _SettingsPageState extends State<SettingsPage> {
     _appLocaleNotifier.value = Locale(selected);
   }
 
+  String _themeLabel(String code) {
+    switch (code.trim().toLowerCase()) {
+      case 'vault':
+        return 'Vault';
+      case 'magic':
+      default:
+        return 'Magic';
+    }
+  }
+
+  String _themeDescription(String code) {
+    final normalized = code.trim().toLowerCase();
+    if (normalized == 'vault') {
+      return _isItalianUi
+          ? 'Blu acciaio e atmosfera tecnica.'
+          : 'Steel-blue palette with a technical mood.';
+    }
+    return _isItalianUi
+        ? 'Tema classico oro/marrone di Binder Vault.'
+        : 'Classic Binder Vault gold/brown look.';
+  }
+
+  Future<void> _changeVisualTheme() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final isItalian = _isItalianUi;
+        return SimpleDialog(
+          title: Text(isItalian ? 'Tema grafico' : 'Visual theme'),
+          children: [
+            RadioGroup<String>(
+              groupValue: _appThemeCode,
+              onChanged: (value) => Navigator.of(context).pop(value),
+              child: Column(
+                children: [
+                  RadioListTile<String>(
+                    value: 'magic',
+                    title: const Text('Magic'),
+                    subtitle: Text(
+                      isItalian
+                          ? 'Default: stile originale'
+                          : 'Default: original style',
+                    ),
+                  ),
+                  RadioListTile<String>(
+                    value: 'vault',
+                    title: const Text('Vault'),
+                    subtitle: Text(
+                      isItalian
+                          ? 'Look alternativo blu acciaio'
+                          : 'Alternative steel-blue look',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    if (selected == null || selected == _appThemeCode) {
+      return;
+    }
+    await AppSettings.saveVisualTheme(selected);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appThemeCode = selected;
+    });
+    _appThemeNotifier.value = appVisualThemeFromCode(selected);
+  }
+
   Future<void> _changePriceSource() async {
     final selected = await showDialog<String>(
       context: context,
@@ -456,6 +569,183 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _priceSource = selected;
     });
+  }
+
+  Future<void> _reportIssueFromSettings() async {
+    final categories = <String, String>{
+      'crash': _isItalianUi ? 'Crash' : 'Crash',
+      'ui': _isItalianUi ? 'Interfaccia' : 'UI',
+      'purchase': _isItalianUi ? 'Acquisti' : 'Purchases',
+      'database': _isItalianUi ? 'Database' : 'Database',
+      'other': _isItalianUi ? 'Altro' : 'Other',
+    };
+    final controller = TextEditingController();
+    final payload = await showDialog<(String, String)>(
+      context: context,
+      builder: (context) {
+        final isItalian = _isItalianUi;
+        var selectedCategory = 'other';
+        return AlertDialog(
+          title: Text(isItalian ? 'Segnala problema' : 'Report issue'),
+          content: StatefulBuilder(
+            builder: (context, setModalState) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  initialValue: selectedCategory,
+                  decoration: InputDecoration(
+                    labelText: isItalian ? 'Categoria' : 'Category',
+                  ),
+                  items: categories.entries
+                      .map(
+                        (entry) => DropdownMenuItem<String>(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setModalState(() {
+                      selectedCategory = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  minLines: 4,
+                  maxLines: 8,
+                  decoration: InputDecoration(
+                    hintText: isItalian
+                        ? 'Descrivi cosa e successo e come riprodurlo.'
+                        : 'Describe what happened and how to reproduce it.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(isItalian ? 'Annulla' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(context).pop((controller.text, selectedCategory)),
+              child: Text(isItalian ? 'Invia' : 'Send'),
+            ),
+          ],
+        );
+      },
+    );
+    if (payload == null || payload.$1.trim().isEmpty || !mounted) {
+      return;
+    }
+    final diagnostics = await _buildIssueDiagnostics();
+    final sent = await _submitManualIssueReport(
+      payload.$1,
+      source: 'settings',
+      category: payload.$2,
+      diagnostics: diagnostics,
+    );
+    if (!mounted) {
+      return;
+    }
+    showAppSnackBar(
+      context,
+      sent
+          ? (_isItalianUi
+                ? 'Segnalazione inviata. Grazie.'
+                : 'Report sent. Thanks.')
+          : (_isItalianUi
+                ? 'Invio non disponibile ora. Riprova.'
+                : 'Sending is not available right now. Please retry.'),
+    );
+  }
+
+  Future<String> _buildIssueDiagnostics() async {
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final gameLabel = selectedGame == AppTcgGame.pokemon ? 'pokemon' : 'mtg';
+    final tier = _purchaseManager.userTier == UserTier.plus ? 'plus' : 'free';
+    final unlocked = _ownedTcgs.toList()..sort();
+    return [
+      'app_version=$_appVersion',
+      'locale=$_appLocaleCode',
+      'platform=${Platform.operatingSystem}',
+      'platform_version=${Platform.operatingSystemVersion}',
+      'selected_game=$gameLabel',
+      'primary_game=${_primaryGame == TcgGame.pokemon ? 'pokemon' : 'mtg'}',
+      'user_tier=$tier',
+      'owned_tcgs=${unlocked.join(',')}',
+      'extra_tcg_slots=${_purchaseManager.extraTcgSlots}',
+      'store_available=${_purchaseManager.storeAvailable}',
+      'last_error=${_purchaseManager.lastError ?? ''}',
+      'can_access_mtg=${_purchaseManager.canAccessGame(AppTcgGame.mtg)}',
+      'can_access_pokemon=${_purchaseManager.canAccessGame(AppTcgGame.pokemon)}',
+      'purchase_pending=${_purchaseManager.purchasePending}',
+      'restoring_purchases=${_purchaseManager.restoringPurchases}',
+    ].join(' | ');
+  }
+
+  Future<void> _copyDiagnosticsToClipboard() async {
+    final diagnostics = await _buildIssueDiagnostics();
+    await Clipboard.setData(ClipboardData(text: diagnostics));
+    if (!mounted) {
+      return;
+    }
+    showAppSnackBar(
+      context,
+      _isItalianUi
+          ? 'Diagnostica copiata negli appunti.'
+          : 'Diagnostics copied to clipboard.',
+    );
+  }
+
+  Future<void> _runManualCollectionCoherenceCheck() async {
+    if (_coherenceCheckBusy) {
+      return;
+    }
+    setState(() {
+      _coherenceCheckBusy = true;
+    });
+    try {
+      final repaired = await ScryfallDatabase.instance
+          .repairAllCardsCoherenceFromCustomCollections();
+      if (!mounted) {
+        return;
+      }
+      _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+      showAppSnackBar(
+        context,
+        repaired > 0
+            ? (_isItalianUi
+                  ? 'Controllo completato: $repaired correzioni applicate.'
+                  : 'Check completed: $repaired fixes applied.')
+            : (_isItalianUi
+                  ? 'Controllo completato: nessuna incoerenza trovata.'
+                  : 'Check completed: no inconsistencies found.'),
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Errore durante il controllo coerenza. Riprova.'
+            : 'Error while running coherence check. Please retry.',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _coherenceCheckBusy = false;
+        });
+      }
+    }
   }
 
   Future<void> _changePriceCurrency(String currency) async {
@@ -1180,6 +1470,26 @@ class _SettingsPageState extends State<SettingsPage> {
                 const SizedBox(height: 14),
                 _buildSectionCard(
                   context: context,
+                  icon: Icons.palette_outlined,
+                  title: _isItalianUi ? 'Tema grafico' : 'Visual theme',
+                  subtitle: _themeDescription(_appThemeCode),
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(_themeLabel(_appThemeCode)),
+                      trailing: OutlinedButton(
+                        onPressed: _changeVisualTheme,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Color(0xFF5D4731)),
+                        ),
+                        child: Text(l10n.change),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
                   icon: Icons.sports_esports_rounded,
                   title: _isItalianUi ? 'Giochi' : 'Games',
                   subtitle: _isItalianUi
@@ -1537,23 +1847,171 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.info_outline_rounded,
                   title: l10n.appInfo,
                   children: [
-                    ListTile(
-                      title: Text(l10n.versionLabel),
-                      subtitle: Text(_appVersion),
-                      trailing: Wrap(
-                        spacing: 8,
-                        children: [
-                          OutlinedButton(
-                            onPressed: () =>
-                                _showLatestReleaseNotesPanel(context),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF5D4731)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    l10n.versionLabel,
+                                    style: Theme.of(context).textTheme.titleSmall
+                                        ?.copyWith(
+                                          color: const Color(0xFFBFAE95),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    _appVersion,
+                                    style: Theme.of(context).textTheme.titleMedium
+                                        ?.copyWith(
+                                          color: const Color(0xFFEFE7D8),
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.2,
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Text(_whatsNewLabel(context)),
-                          ),
-                        ],
-                      ),
-                      contentPadding: EdgeInsets.zero,
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 168,
+                              child: FilledButton.icon(
+                                onPressed: () =>
+                                    _showLatestReleaseNotesPanel(context),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE9C46A),
+                                  foregroundColor: const Color(0xFF1C1510),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(_whatsNewLabel(context)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.build_circle_outlined,
+                  title: _isItalianUi ? 'Tool e diagnostica' : 'Tools & diagnostics',
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final spacing = 10.0;
+                        final buttonWidth = (constraints.maxWidth - spacing) / 2;
+                        final uniformHeight = const Size.fromHeight(44);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                SizedBox(
+                                  width: buttonWidth,
+                                  child: FilledButton(
+                                    onPressed: _coherenceCheckBusy
+                                        ? null
+                                        : _runManualCollectionCoherenceCheck,
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor: const Color(0xFFE9C46A),
+                                      foregroundColor: const Color(0xFF1C1510),
+                                      minimumSize: uniformHeight,
+                                      maximumSize: uniformHeight,
+                                    ),
+                                    child: _coherenceCheckBusy
+                                        ? const SizedBox(
+                                            width: 14,
+                                            height: 14,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Color(0xFF1C1510),
+                                            ),
+                                          )
+                                        : Text(
+                                            _isItalianUi
+                                                ? 'Controlla coerenza'
+                                                : 'Check coherence',
+                                            maxLines: 1,
+                                            softWrap: false,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                  ),
+                                ),
+                                SizedBox(width: spacing),
+                                SizedBox(
+                                  width: buttonWidth,
+                                  child: OutlinedButton(
+                                    onPressed: _copyDiagnosticsToClipboard,
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: Color(0xFF5D4731),
+                                      ),
+                                      minimumSize: uniformHeight,
+                                      maximumSize: uniformHeight,
+                                    ),
+                                    child: Text(
+                                      _isItalianUi
+                                          ? 'Copia diagnostica'
+                                          : 'Copy diagnostics',
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                SizedBox(width: buttonWidth),
+                                SizedBox(width: spacing),
+                                SizedBox(
+                                  width: buttonWidth,
+                                  child: OutlinedButton(
+                                    onPressed: _reportIssueFromSettings,
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: Color(0xFFC85454),
+                                      ),
+                                      foregroundColor: const Color(0xFFEAA0A0),
+                                      minimumSize: uniformHeight,
+                                      maximumSize: uniformHeight,
+                                    ),
+                                    child: Text(
+                                      _isItalianUi
+                                          ? 'Segnala problema'
+                                          : 'Report issue',
+                                      maxLines: 1,
+                                      softWrap: false,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

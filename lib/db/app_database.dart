@@ -506,7 +506,17 @@ class ScryfallDatabase {
               jsonDecode(row.filterJson!) as Map<String, dynamic>,
             );
       if (filter == null) {
-        counts[row.id] = 0;
+        if (collectionTypeFromDb(row.type) == CollectionType.custom) {
+          final customRow = await db
+              .customSelect(
+                'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
+                variables: [Variable.withInt(row.id)],
+              )
+              .getSingle();
+          counts[row.id] = customRow.read<int>('total');
+        } else {
+          counts[row.id] = 0;
+        }
         continue;
       }
       counts[row.id] = await _countOwnedCardsForFilter(db, filter, allCardsId);
@@ -2469,6 +2479,69 @@ class ScryfallDatabase {
         )
         .getSingle();
     return row.read<int>('total');
+  }
+
+  Future<int> repairAllCardsCoherenceFromCustomCollections() async {
+    final db = await open();
+    final allCardsId = await ensureAllCardsCollectionId();
+    var repairedEntries = 0;
+    await db.transaction(() async {
+      final requiredRows = await db.customSelect('''
+        SELECT
+          cc.card_id AS card_id,
+          COALESCE(SUM(cc.quantity), 0) AS required_qty
+        FROM collection_cards cc
+        INNER JOIN collections c ON c.id = cc.collection_id
+        WHERE c.type = 'custom'
+          AND (c.filter_json IS NULL OR TRIM(c.filter_json) = '')
+          AND cc.quantity > 0
+        GROUP BY cc.card_id
+      ''').get();
+      if (requiredRows.isEmpty) {
+        return;
+      }
+      for (final row in requiredRows) {
+        final cardId = row.read<String>('card_id');
+        final requiredQty = row.read<int>('required_qty');
+        if (requiredQty <= 0) {
+          continue;
+        }
+        final existing =
+            await (db.select(db.collectionCards)
+                  ..where(
+                    (tbl) =>
+                        tbl.collectionId.equals(allCardsId) &
+                        tbl.cardId.equals(cardId),
+                  )
+                  ..limit(1))
+                .getSingleOrNull();
+        if (existing == null) {
+          await db
+              .into(db.collectionCards)
+              .insert(
+                CollectionCardsCompanion.insert(
+                  collectionId: allCardsId,
+                  cardId: cardId,
+                  quantity: Value(requiredQty),
+                  foil: const Value(false),
+                  altArt: const Value(false),
+                ),
+              );
+          repairedEntries += 1;
+          continue;
+        }
+        if (existing.quantity < requiredQty) {
+          await (db.update(db.collectionCards)..where(
+                (tbl) =>
+                    tbl.collectionId.equals(allCardsId) &
+                    tbl.cardId.equals(cardId),
+              ))
+              .write(CollectionCardsCompanion(quantity: Value(requiredQty)));
+          repairedEntries += 1;
+        }
+      }
+    });
+    return repairedEntries;
   }
 
   Future<void> deleteAllCards(AppDatabase db) async {

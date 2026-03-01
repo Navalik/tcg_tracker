@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -47,9 +49,96 @@ part 'parts/scryfall_bulk.dart';
 part 'parts/ui_helpers.dart';
 
 bool _firebaseReady = false;
+bool _crashReportingReady = false;
+
+enum AppVisualTheme { magic, vault }
+
+AppVisualTheme appVisualThemeFromCode(String? rawCode) {
+  switch (rawCode?.trim().toLowerCase()) {
+    case 'vault':
+      return AppVisualTheme.vault;
+    case 'magic':
+    default:
+      return AppVisualTheme.magic;
+  }
+}
+
+String appVisualThemeToCode(AppVisualTheme theme) {
+  switch (theme) {
+    case AppVisualTheme.vault:
+      return 'vault';
+    case AppVisualTheme.magic:
+      return 'magic';
+  }
+}
+
+class _AppVisualPalette {
+  const _AppVisualPalette({
+    required this.seedColor,
+    required this.surfaceColor,
+    required this.scaffoldBackground,
+    required this.cardColor,
+    required this.bodyColor,
+    required this.displayColor,
+    required this.snackBarBackground,
+    required this.snackBarText,
+    required this.snackBarBorder,
+  });
+
+  final Color seedColor;
+  final Color surfaceColor;
+  final Color scaffoldBackground;
+  final Color cardColor;
+  final Color bodyColor;
+  final Color displayColor;
+  final Color snackBarBackground;
+  final Color snackBarText;
+  final Color snackBarBorder;
+}
+
+_AppVisualPalette _paletteForTheme(AppVisualTheme theme) {
+  switch (theme) {
+    case AppVisualTheme.vault:
+      return const _AppVisualPalette(
+        seedColor: Color(0xFF4E8FB8),
+        surfaceColor: Color(0xFF111A21),
+        scaffoldBackground: Color(0xFF070D12),
+        cardColor: Color(0xFF101922),
+        bodyColor: Color(0xFFDCE8EF),
+        displayColor: Color(0xFFEAF3F8),
+        snackBarBackground: Color(0xFF6CB4DD),
+        snackBarText: Color(0xFF0B1B26),
+        snackBarBorder: Color(0xFF3A86B3),
+      );
+    case AppVisualTheme.magic:
+      return const _AppVisualPalette(
+        seedColor: Color(0xFFC9A043),
+        surfaceColor: Color(0xFF1C1510),
+        scaffoldBackground: Color(0xFF0E0A08),
+        cardColor: Color(0xFF171411),
+        bodyColor: Color(0xFFEFE7D8),
+        displayColor: Color(0xFFF5EEDA),
+        snackBarBackground: Color(0xFFE9C46A),
+        snackBarText: Color(0xFF1C1510),
+        snackBarBorder: Color(0xFFB07C2A),
+      );
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (Platform.isAndroid) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
+  }
   if (Platform.isAndroid || Platform.isIOS) {
     try {
       await Firebase.initializeApp().timeout(const Duration(seconds: 8));
@@ -57,16 +146,124 @@ Future<void> main() async {
       await AnalyticsService.instance.init().timeout(
         const Duration(seconds: 5),
       );
+      await _configureCrashReporting();
     } catch (_) {
       _firebaseReady = false;
     }
   }
-  runApp(const TCGTracker());
+  runZonedGuarded(
+    () => runApp(const TCGTracker()),
+    (error, stackTrace) {
+      unawaited(
+        _recordAppError(
+          error,
+          stackTrace,
+          fatal: true,
+          reason: 'run_zoned_guarded',
+        ),
+      );
+    },
+  );
+}
+
+Future<void> _configureCrashReporting() async {
+  if (!_firebaseReady || !(Platform.isAndroid || Platform.isIOS)) {
+    return;
+  }
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+    !kDebugMode,
+  );
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    unawaited(
+      _recordAppError(
+        details.exception,
+        details.stack ?? StackTrace.current,
+        fatal: true,
+        reason: details.context?.toDescription(),
+      ),
+    );
+  };
+  PlatformDispatcher.instance.onError = (error, stackTrace) {
+    unawaited(
+      _recordAppError(
+        error,
+        stackTrace,
+        fatal: true,
+        reason: 'platform_dispatcher',
+      ),
+    );
+    return true;
+  };
+  _crashReportingReady = true;
+}
+
+Future<void> _recordAppError(
+  Object error,
+  StackTrace stackTrace, {
+  required bool fatal,
+  String? reason,
+}) async {
+  if (!_crashReportingReady) {
+    debugPrint('App error (crash reporting disabled): $error');
+    return;
+  }
+  try {
+    await FirebaseCrashlytics.instance.recordError(
+      error,
+      stackTrace,
+      fatal: fatal,
+      reason: reason,
+    );
+  } catch (_) {
+    debugPrint('Failed to report error: $error');
+  }
+}
+
+Future<bool> _submitManualIssueReport(
+  String message, {
+  String source = 'manual',
+  String category = 'other',
+  String? diagnostics,
+}) async {
+  final normalized = message.trim();
+  if (normalized.isEmpty) {
+    return false;
+  }
+  if (!_crashReportingReady) {
+    return false;
+  }
+  try {
+    final normalizedCategory = category.trim().isEmpty ? 'other' : category;
+    final safeDiagnostics = diagnostics?.trim() ?? '';
+    FirebaseCrashlytics.instance.log(
+      'user_issue_report source=$source category=$normalizedCategory message=$normalized',
+    );
+    if (safeDiagnostics.isNotEmpty) {
+      FirebaseCrashlytics.instance.log('user_issue_diagnostics $safeDiagnostics');
+    }
+    await FirebaseCrashlytics.instance.recordError(
+      StateError('User issue report'),
+      StackTrace.current,
+      reason: 'user_issue_report:$source:$normalizedCategory',
+      fatal: false,
+      information: [
+        'category=$normalizedCategory',
+        if (safeDiagnostics.isNotEmpty) 'diagnostics=$safeDiagnostics',
+        normalized,
+      ],
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 final ValueNotifier<Locale> _appLocaleNotifier = ValueNotifier<Locale>(
   const Locale('en'),
 );
+final ValueNotifier<AppVisualTheme> _appThemeNotifier =
+    ValueNotifier<AppVisualTheme>(AppVisualTheme.magic);
 final ValueNotifier<int> _collectionsRefreshNotifier = ValueNotifier<int>(0);
 
 class TCGTracker extends StatefulWidget {
@@ -81,6 +278,7 @@ class _TCGTrackerState extends State<TCGTracker> {
   void initState() {
     super.initState();
     _loadAppLocale();
+    _loadAppTheme();
   }
 
   Future<void> _loadAppLocale() async {
@@ -91,74 +289,86 @@ class _TCGTrackerState extends State<TCGTracker> {
     _appLocaleNotifier.value = Locale(localeCode);
   }
 
+  Future<void> _loadAppTheme() async {
+    final themeCode = await AppSettings.loadVisualTheme();
+    if (!mounted) {
+      return;
+    }
+    _appThemeNotifier.value = appVisualThemeFromCode(themeCode);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFFC9A043),
-      brightness: Brightness.dark,
-      surface: const Color(0xFF1C1510),
-    );
-    const scaffoldBackground = Color(0xFF0E0A08);
-    final textTheme =
-        GoogleFonts.sourceSans3TextTheme(
-          ThemeData(brightness: Brightness.dark).textTheme,
-        ).apply(
-          bodyColor: const Color(0xFFEFE7D8),
-          displayColor: const Color(0xFFF5EEDA),
-        );
-    final scaledTextTheme = textTheme.copyWith(
-      bodySmall: textTheme.bodySmall?.copyWith(fontSize: 13.5),
-      bodyMedium: textTheme.bodyMedium?.copyWith(fontSize: 15.5),
-      bodyLarge: textTheme.bodyLarge?.copyWith(fontSize: 17),
-      titleSmall: textTheme.titleSmall?.copyWith(fontSize: 15),
-      titleMedium: textTheme.titleMedium?.copyWith(fontSize: 17.5),
-      titleLarge: textTheme.titleLarge?.copyWith(fontSize: 20),
-      headlineSmall: textTheme.headlineSmall?.copyWith(fontSize: 24),
-      headlineMedium: textTheme.headlineMedium?.copyWith(fontSize: 28),
-    );
-
     return ValueListenableBuilder<Locale>(
       valueListenable: _appLocaleNotifier,
       builder: (context, locale, _) {
-        return MaterialApp(
-          onGenerateTitle: (context) =>
-              AppLocalizations.of(context)?.appTitle ?? 'BinderVault',
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: colorScheme,
-            textTheme: scaledTextTheme,
-            scaffoldBackgroundColor: scaffoldBackground,
-            cardColor: const Color(0xFF171411),
-            snackBarTheme: SnackBarThemeData(
-              backgroundColor: const Color(0xFFE9C46A),
-              contentTextStyle: scaledTextTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF1C1510),
-                fontWeight: FontWeight.w600,
+        return ValueListenableBuilder<AppVisualTheme>(
+          valueListenable: _appThemeNotifier,
+          builder: (context, visualTheme, _) {
+            final palette = _paletteForTheme(visualTheme);
+            final colorScheme = ColorScheme.fromSeed(
+              seedColor: palette.seedColor,
+              brightness: Brightness.dark,
+              surface: palette.surfaceColor,
+            );
+            final textTheme =
+                GoogleFonts.sourceSans3TextTheme(
+                  ThemeData(brightness: Brightness.dark).textTheme,
+                ).apply(
+                  bodyColor: palette.bodyColor,
+                  displayColor: palette.displayColor,
+                );
+            final scaledTextTheme = textTheme.copyWith(
+              bodySmall: textTheme.bodySmall?.copyWith(fontSize: 13.5),
+              bodyMedium: textTheme.bodyMedium?.copyWith(fontSize: 15.5),
+              bodyLarge: textTheme.bodyLarge?.copyWith(fontSize: 17),
+              titleSmall: textTheme.titleSmall?.copyWith(fontSize: 15),
+              titleMedium: textTheme.titleMedium?.copyWith(fontSize: 17.5),
+              titleLarge: textTheme.titleLarge?.copyWith(fontSize: 20),
+              headlineSmall: textTheme.headlineSmall?.copyWith(fontSize: 24),
+              headlineMedium: textTheme.headlineMedium?.copyWith(fontSize: 28),
+            );
+            return MaterialApp(
+              onGenerateTitle: (context) =>
+                  AppLocalizations.of(context)?.appTitle ?? 'BinderVault',
+              theme: ThemeData(
+                useMaterial3: true,
+                colorScheme: colorScheme,
+                textTheme: scaledTextTheme,
+                scaffoldBackgroundColor: palette.scaffoldBackground,
+                cardColor: palette.cardColor,
+                snackBarTheme: SnackBarThemeData(
+                  backgroundColor: palette.snackBarBackground,
+                  contentTextStyle: scaledTextTheme.bodyMedium?.copyWith(
+                    color: palette.snackBarText,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  behavior: SnackBarBehavior.floating,
+                  elevation: 6,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    side: BorderSide(color: palette.snackBarBorder),
+                  ),
+                  insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                ),
+                appBarTheme: const AppBarTheme(
+                  backgroundColor: Colors.transparent,
+                  elevation: 0,
+                  centerTitle: true,
+                ),
               ),
-              behavior: SnackBarBehavior.floating,
-              elevation: 6,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: const BorderSide(color: Color(0xFFB07C2A)),
-              ),
-              insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            ),
-            appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              centerTitle: true,
-            ),
-          ),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            GlobalMaterialLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          locale: locale,
-          themeMode: ThemeMode.dark,
-          home: const _StartupSplashGate(),
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              locale: locale,
+              themeMode: ThemeMode.dark,
+              home: const _StartupSplashGate(),
+            );
+          },
         );
       },
     );
