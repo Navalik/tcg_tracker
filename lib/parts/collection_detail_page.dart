@@ -129,6 +129,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   int? _ownedCollectionId;
   int? _allCardsCollectionId;
   int? _sideboardCollectionId;
+  CollectionType? _resolvedCollectionType;
   Timer? _searchDebounce;
   CollectionViewMode _viewMode = CollectionViewMode.list;
   bool _showOwned = true;
@@ -154,20 +155,25 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   String _priceCurrency = 'eur';
   bool _showPrices = true;
   static const List<String> _basicLandManaOrder = ['W', 'U', 'B', 'R', 'G'];
+  InventoryService get _inventoryService => InventoryService.instance;
 
+  bool get _isWishlistCollection =>
+      widget.isWishlistCollection ||
+      _resolvedCollectionType == CollectionType.wishlist;
   bool get _isFilterCollection =>
       !widget.isAllCards &&
       !widget.isDeckCollection &&
+      !_isWishlistCollection &&
       (widget.filter != null || widget.isSetCollection);
   bool get _isDirectCustomCollection =>
       !widget.isAllCards &&
       !widget.isDeckCollection &&
-      !widget.isWishlistCollection &&
+      !_isWishlistCollection &&
       !_isFilterCollection;
   bool get _isPokemonActive =>
       TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
   bool get _isMissingStyleCollection =>
-      _isFilterCollection || widget.isWishlistCollection;
+      _isFilterCollection || _isWishlistCollection;
   bool get _isPokemonDeck => widget.isDeckCollection && _isPokemonActive;
   List<String> get _activeDeckTypeOrder =>
       _isPokemonDeck ? _pokemonDeckTypeOrder : _mtgDeckTypeOrder;
@@ -314,10 +320,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _ownedCollectionId = widget.collectionId;
       _allCardsCollectionId = widget.collectionId;
     } else {
+      _resolvedCollectionType = await ScryfallDatabase.instance
+          .fetchCollectionTypeById(widget.collectionId);
       _allCardsCollectionId = await ScryfallDatabase.instance
           .ensureAllCardsCollectionId();
       final useAllCardsAsOwnership =
-          _isFilterCollection || widget.isWishlistCollection;
+          _isFilterCollection || _isWishlistCollection;
       _ownedCollectionId =
           widget.isDeckCollection
           ? widget.collectionId
@@ -679,6 +687,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (widget.isDeckCollection) {
       return null;
     }
+    if (_isWishlistCollection) {
+      // Wishlist is membership-driven only, never catalog-filter-driven.
+      return null;
+    }
     final fallbackFilter =
         widget.isSetCollection && (widget.setCode?.trim().isNotEmpty ?? false)
         ? CollectionFilter(sets: {widget.setCode!.trim().toLowerCase()})
@@ -701,8 +713,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (!mounted) {
       return;
     }
-    if (widget.isWishlistCollection) {
-      final total = await ScryfallDatabase.instance.countCollectionCards(
+    if (_isWishlistCollection) {
+      final total = await ScryfallDatabase.instance.countWishlistCards(
         widget.collectionId,
         searchQuery: _searchQuery,
       );
@@ -716,10 +728,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return;
     }
     if (!_isFilterCollection) {
-      final total = await ScryfallDatabase.instance.countCollectionCards(
-        widget.collectionId,
-        searchQuery: _searchQuery,
-      );
+      final total = _isDirectCustomCollection
+          ? await ScryfallDatabase.instance.countCustomCollectionOwnedCards(
+              widget.collectionId,
+              searchQuery: _searchQuery,
+            )
+          : await ScryfallDatabase.instance.countCollectionCards(
+              widget.collectionId,
+              searchQuery: _searchQuery,
+            );
       if (!mounted) {
         return;
       }
@@ -796,6 +813,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               limit: _pageSize,
               offset: _loadedOffset,
             )
+          : _isDirectCustomCollection
+          ? await ScryfallDatabase.instance.fetchCustomCollectionOwnedCards(
+              widget.collectionId,
+              searchQuery: _searchQuery,
+              limit: _pageSize,
+              offset: _loadedOffset,
+            )
+          : _isWishlistCollection
+          ? await ScryfallDatabase.instance.fetchWishlistCardsWithOwnedQuantities(
+              widget.collectionId,
+              searchQuery: _searchQuery,
+              limit: _pageSize,
+              offset: _loadedOffset,
+            )
           : filter != null
           ? await ScryfallDatabase.instance.fetchFilteredCollectionCards(
               filter,
@@ -807,6 +838,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             )
           : await ScryfallDatabase.instance.fetchCollectionCards(
               widget.collectionId,
+              searchQuery: _searchQuery,
               limit: _pageSize,
               offset: _loadedOffset,
             );
@@ -1079,17 +1111,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final ids = _selectedCardIds.toList(growable: false);
     final isFilterCollection = _isFilterCollection;
     for (final cardId in ids) {
-      if (isFilterCollection) {
-        await ScryfallDatabase.instance.upsertCollectionCard(
-          ownedCollectionId!,
+      if (isFilterCollection || widget.isAllCards) {
+        await _inventoryService.setInventoryQty(cardId, 0);
+      } else if (_isDirectCustomCollection) {
+        await ScryfallDatabase.instance.deleteCollectionCard(
+          widget.collectionId,
           cardId,
-          quantity: 0,
-          foil: false,
-          altArt: false,
         );
       } else {
         await ScryfallDatabase.instance.deleteCollectionCard(
-          widget.isWishlistCollection
+          _isWishlistCollection
               ? widget.collectionId
               : ownedCollectionId!,
           cardId,
@@ -1487,7 +1518,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         await PriceRepository.instance.ensurePricesFresh(cardId);
       }
       final lookupCollectionId =
-          widget.isAllCards || widget.isWishlistCollection
+          widget.isAllCards || _isWishlistCollection
           ? widget.collectionId
           : (_ownedCollectionId ?? -1);
       final refreshedEntries = await Future.wait(
@@ -1528,7 +1559,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _refreshCardEntryInPlace(String cardId) async {
-    final lookupCollectionId = widget.isAllCards || widget.isWishlistCollection
+    final lookupCollectionId = widget.isAllCards || _isWishlistCollection
         ? widget.collectionId
         : (_ownedCollectionId ?? -1);
     final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
@@ -2035,27 +2066,23 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (ownedCollectionId == null) {
       return;
     }
-    if (widget.isWishlistCollection) {
-      await ScryfallDatabase.instance.claimCardFromWishlist(
-        wishlistCollectionId: widget.collectionId,
-        ownedCollectionId: ownedCollectionId,
-        cardId: entry.cardId,
+    if (_isWishlistCollection) {
+      await ScryfallDatabase.instance.deleteCollectionCard(
+        widget.collectionId,
+        entry.cardId,
       );
-    } else {
+      await _inventoryService.addToInventory(entry.cardId, deltaQty: 1);
+    } else if (widget.isDeckCollection) {
       final nextQuantity = entry.quantity + 1;
       await ScryfallDatabase.instance.upsertCollectionCard(
         ownedCollectionId,
         entry.cardId,
         quantity: nextQuantity,
-        foil: widget.isDeckCollection ? false : entry.foil,
+        foil: false,
         altArt: entry.altArt,
       );
-      await _syncOwnedMirrorToAllCards(
-        entry.cardId,
-        delta: 1,
-        foil: entry.foil,
-        altArt: entry.altArt,
-      );
+    } else {
+      await _inventoryService.addToInventory(entry.cardId, deltaQty: 1);
     }
     if (mounted) {
       setState(() {
@@ -2079,27 +2106,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     BuildContext? anchorContext,
   }) async {
     final ownedCollectionId = _ownedCollectionId;
-    if (ownedCollectionId == null ||
-        widget.isWishlistCollection ||
-        entry.quantity <= 0) {
+    if (ownedCollectionId == null || _isWishlistCollection || entry.quantity <= 0) {
       return;
     }
-    final nextQuantity = entry.quantity - 1;
-    await ScryfallDatabase.instance.upsertCollectionCard(
-      ownedCollectionId,
-      entry.cardId,
-      quantity: nextQuantity,
-      foil: widget.isDeckCollection
-          ? false
-          : (nextQuantity == 0 ? false : entry.foil),
-      altArt: nextQuantity == 0 ? false : entry.altArt,
-    );
-    await _syncOwnedMirrorToAllCards(
-      entry.cardId,
-      delta: -1,
-      foil: entry.foil,
-      altArt: entry.altArt,
-    );
+    if (widget.isDeckCollection) {
+      final nextQuantity = entry.quantity - 1;
+      await ScryfallDatabase.instance.upsertCollectionCard(
+        ownedCollectionId,
+        entry.cardId,
+        quantity: nextQuantity,
+        foil: false,
+        altArt: nextQuantity == 0 ? false : entry.altArt,
+      );
+    } else {
+      await _inventoryService.removeFromInventory(entry.cardId, deltaQty: 1);
+    }
     if (mounted) {
       setState(() {
         _quickRemoveAnimating.add(entry.cardId);
@@ -2169,10 +2190,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
         selectionEnabled: false,
-        ownershipCollectionId: ownedCollectionId,
-        alsoAddToCollectionId: _mirrorAllCardsCollectionIdForDirectCustom(),
+        ownershipCollectionId: _allCardsCollectionId ?? ownedCollectionId,
+        customMembershipCollectionId: _isDirectCustomCollection
+            ? widget.collectionId
+            : null,
         requiredFilter: _requiredSearchFilter(),
-        addMissingToCollectionId: widget.isWishlistCollection
+        addMissingToCollectionId: _isWishlistCollection
             ? widget.collectionId
             : null,
         showFilterButton: false,
@@ -2268,23 +2291,80 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         showAppSnackBar(context, AppLocalizations.of(context)!.noResultsFound);
         return;
       }
-      await ScryfallDatabase.instance.addCardsToCollection(
-        ownedCollectionId,
-        cardIds,
-      );
-      final mirrorCollectionId = _mirrorAllCardsCollectionIdForDirectCustom();
-      if (mirrorCollectionId != null && mirrorCollectionId != ownedCollectionId) {
-        await ScryfallDatabase.instance.addCardsToCollection(
-          mirrorCollectionId,
+      if (_isWishlistCollection) {
+        final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
+        final ownedMap = await ScryfallDatabase.instance.fetchCollectionQuantities(
+          allCardsId,
           cardIds,
         );
+        var added = 0;
+        for (final cardId in cardIds) {
+          if ((ownedMap[cardId] ?? 0) > 0) {
+            continue;
+          }
+          await ScryfallDatabase.instance.upsertCollectionMembership(
+            widget.collectionId,
+            cardId,
+          );
+          added += 1;
+        }
+        if (!context.mounted) {
+          return;
+        }
+        showAppSnackBar(
+          context,
+          added > 0
+              ? AppLocalizations.of(context)!.addedCards(added)
+              : (_isItalianUi()
+                    ? 'Tutte gia possedute.'
+                    : 'All selected cards are already owned.'),
+        );
+        await _loadCards();
+        return;
+      }
+      if (_isDirectCustomCollection) {
+        final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
+        final ownedMap = await ScryfallDatabase.instance.fetchCollectionQuantities(
+          allCardsId,
+          cardIds,
+        );
+        var added = 0;
+        var skipped = 0;
+        for (final cardId in cardIds) {
+          if ((ownedMap[cardId] ?? 0) <= 0) {
+            skipped += 1;
+            continue;
+          }
+          await ScryfallDatabase.instance.upsertCollectionMembership(
+            widget.collectionId,
+            cardId,
+          );
+          added += 1;
+        }
+        if (!context.mounted) {
+          return;
+        }
+        final l10n = AppLocalizations.of(context)!;
+        showAppSnackBar(
+          context,
+          skipped > 0
+              ? '${l10n.addedCards(added)} • ${_isItalianUi() ? 'Saltate' : 'Skipped'}: $skipped'
+              : l10n.addedCards(added),
+        );
+        await _loadCards();
+        return;
+      }
+      var added = 0;
+      for (final cardId in cardIds) {
+        await _inventoryService.addToInventory(cardId, deltaQty: 1);
+        added += 1;
       }
       if (!context.mounted) {
         return;
       }
       showAppSnackBar(
         context,
-        AppLocalizations.of(context)!.addedCards(cardIds.length),
+        AppLocalizations.of(context)!.addedCards(added),
       );
       await _loadCards();
     } catch (_) {
@@ -3180,7 +3260,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
 
   Future<void> _showCardDetails(CollectionCardEntry entry) async {
     var detailEntry = entry;
-    final lookupCollectionId = widget.isAllCards || widget.isWishlistCollection
+    final lookupCollectionId = widget.isAllCards || _isWishlistCollection
         ? widget.collectionId
         : (_ownedCollectionId ?? -1);
     try {
@@ -3708,31 +3788,30 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       TextButton(
                         onPressed: () async {
                           if (isFilterCollection) {
-                            await ScryfallDatabase.instance
-                                .upsertCollectionCard(
-                                  ownedCollectionId!,
-                                  entry.cardId,
-                                  quantity: 0,
-                                  foil: foil,
-                                  altArt: altArt,
-                                );
-                          } else if (widget.isWishlistCollection) {
+                            await _inventoryService.setInventoryQty(
+                              entry.cardId,
+                              0,
+                            );
+                          } else if (_isWishlistCollection) {
                             await ScryfallDatabase.instance
                                 .deleteCollectionCard(
                                   widget.collectionId,
                                   entry.cardId,
                                 );
-                          } else {
-                            await ScryfallDatabase.instance
-                                .deleteCollectionCard(
-                                  ownedCollectionId!,
-                                  entry.cardId,
-                                );
-                            await _syncOwnedMirrorToAllCards(
+                          } else if (_isDirectCustomCollection) {
+                            await ScryfallDatabase.instance.deleteCollectionCard(
+                              widget.collectionId,
                               entry.cardId,
-                              delta: -entry.quantity,
-                              foil: entry.foil,
-                              altArt: entry.altArt,
+                            );
+                          } else if (widget.isDeckCollection) {
+                            await ScryfallDatabase.instance.deleteCollectionCard(
+                              ownedCollectionId!,
+                              entry.cardId,
+                            );
+                          } else {
+                            await _inventoryService.setInventoryQty(
+                              entry.cardId,
+                              0,
                             );
                           }
                           if (!context.mounted) {
@@ -3760,27 +3839,45 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               entry.quantity;
                           final quantity = isFilterCollection
                               ? (parsed < 0 ? 0 : parsed)
-                              : widget.isWishlistCollection
+                              : _isWishlistCollection
                               ? 0
                               : (parsed < 1 ? 1 : parsed);
-                          final targetCollectionId = widget.isWishlistCollection
-                              ? widget.collectionId
-                              : ownedCollectionId!;
-                          await ScryfallDatabase.instance.upsertCollectionCard(
-                            targetCollectionId,
-                            entry.cardId,
-                            quantity: quantity,
-                            foil: widget.isWishlistCollection ? false : foil,
-                            altArt: widget.isWishlistCollection
-                                ? false
-                                : altArt,
-                          );
-                          await _syncOwnedMirrorToAllCards(
-                            entry.cardId,
-                            delta: quantity - entry.quantity,
-                            foil: foil,
-                            altArt: altArt,
-                          );
+                          if (_isWishlistCollection) {
+                            await ScryfallDatabase.instance
+                                .upsertCollectionMembership(
+                                  widget.collectionId,
+                                  entry.cardId,
+                                );
+                          } else if (_isDirectCustomCollection) {
+                            if (quantity <= 0) {
+                              await ScryfallDatabase.instance.deleteCollectionCard(
+                                widget.collectionId,
+                                entry.cardId,
+                              );
+                            } else {
+                              await _inventoryService.setInventoryQty(
+                                entry.cardId,
+                                quantity,
+                              );
+                              await ScryfallDatabase.instance.upsertCollectionMembership(
+                                widget.collectionId,
+                                entry.cardId,
+                              );
+                            }
+                          } else if (widget.isDeckCollection) {
+                            await ScryfallDatabase.instance.upsertCollectionCard(
+                              ownedCollectionId!,
+                              entry.cardId,
+                              quantity: quantity,
+                              foil: false,
+                              altArt: altArt,
+                            );
+                          } else {
+                            await _inventoryService.setInventoryQty(
+                              entry.cardId,
+                              quantity,
+                            );
+                          }
                           if (!context.mounted) {
                             return;
                           }
@@ -3804,42 +3901,6 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           },
         );
       },
-    );
-  }
-
-  int? _mirrorAllCardsCollectionIdForDirectCustom() {
-    if (!_isDirectCustomCollection) {
-      return null;
-    }
-    return _allCardsCollectionId;
-  }
-
-  Future<void> _syncOwnedMirrorToAllCards(
-    String cardId, {
-    required int delta,
-    required bool foil,
-    required bool altArt,
-  }) async {
-    final mirrorCollectionId = _mirrorAllCardsCollectionIdForDirectCustom();
-    if (delta == 0 || mirrorCollectionId == null) {
-      return;
-    }
-    final current = await ScryfallDatabase.instance.fetchCardEntryById(
-      cardId,
-      collectionId: mirrorCollectionId,
-    );
-    final currentQuantity = current?.quantity ?? 0;
-    final nextQuantity = (currentQuantity + delta).clamp(0, 999999);
-    if (nextQuantity <= 0) {
-      await ScryfallDatabase.instance.deleteCollectionCard(mirrorCollectionId, cardId);
-      return;
-    }
-    await ScryfallDatabase.instance.upsertCollectionCard(
-      mirrorCollectionId,
-      cardId,
-      quantity: nextQuantity,
-      foil: current?.foil ?? foil,
-      altArt: current?.altArt ?? altArt,
     );
   }
 
@@ -4392,7 +4453,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Widget _buildListCardTile(CollectionCardEntry entry, AppLocalizations l10n) {
     final isMissing =
         _isMissingStyleCollection &&
-        !widget.isWishlistCollection &&
+        !_isWishlistCollection &&
         entry.quantity == 0;
     final hasCornerQuantity = entry.quantity > 1;
     return GestureDetector(
@@ -4636,15 +4697,15 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   ) {
     final isMissing =
         _isMissingStyleCollection &&
-        !widget.isWishlistCollection &&
+        !_isWishlistCollection &&
         entry.quantity == 0;
     final hasCornerQuantity = entry.quantity > 1;
     final showQuickAdd =
-        widget.isWishlistCollection ||
+        _isWishlistCollection ||
         widget.isAllCards ||
         (!isMissing && entry.quantity > 0);
     final showMissingQuickAdd = isMissing && _ownedCollectionId != null;
-    final showQuickRemove = !widget.isWishlistCollection && entry.quantity > 0;
+    final showQuickRemove = !_isWishlistCollection && entry.quantity > 0;
     return GestureDetector(
       onTap: () {
         if (_selectionMode) {

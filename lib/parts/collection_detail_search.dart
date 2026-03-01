@@ -33,6 +33,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.selectionEnabled = true,
     this.ownershipCollectionId,
     this.alsoAddToCollectionId,
+    this.customMembershipCollectionId,
     this.addMissingToCollectionId,
     this.requiredFilter,
     this.showFilterButton = true,
@@ -44,6 +45,7 @@ class _CardSearchSheet extends StatefulWidget {
   final bool selectionEnabled;
   final int? ownershipCollectionId;
   final int? alsoAddToCollectionId;
+  final int? customMembershipCollectionId;
   final int? addMissingToCollectionId;
   final CollectionFilter? requiredFilter;
   final bool showFilterButton;
@@ -2329,6 +2331,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     final showRightActions = showAdd || canSelectCards || hasStatusBadge;
+    final quickAddButtonKey = GlobalKey();
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -2447,6 +2450,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             ],
                             if (showAdd)
                               IconButton(
+                                key: quickAddButtonKey,
                                 tooltip: l10n.addOne,
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints.tightFor(
@@ -2462,7 +2466,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
-                                    : () => _addCardFromPreview(card),
+                                    : () => _addCardFromPreview(
+                                        card,
+                                        anchorKey: quickAddButtonKey,
+                                      ),
                               )
                             else if (canSelectCards)
                               const Icon(
@@ -2491,6 +2498,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final canSelectCards = widget.selectionEnabled;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     final showMissingQuickAdd = isMissing && showAdd;
+    final quickAddButtonKey = GlobalKey();
     final imageUrl = card.imageUri?.trim() ?? '';
     final setLabel = _setLabelForSearch(card);
     final hasRarity = card.rarity.trim().isNotEmpty;
@@ -2580,6 +2588,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                               bottom: 2,
                               left: 2,
                               child: IconButton(
+                                key: quickAddButtonKey,
                                 tooltip: l10n.addOne,
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints.tightFor(
@@ -2595,7 +2604,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
-                                    : () => _addCardFromPreview(card),
+                                    : () => _addCardFromPreview(
+                                        card,
+                                        anchorKey: quickAddButtonKey,
+                                      ),
                               ),
                             ),
                         ],
@@ -3075,6 +3087,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _previewController.value = 0;
     _previewEntry = OverlayEntry(
       builder: (context) {
+        final quickAddButtonKey = GlobalKey();
         final size = MediaQuery.of(context).size;
         final maxWidth = size.width * 0.82;
         final maxHeight = size.height * 0.82;
@@ -3151,9 +3164,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   child: SizedBox(
                                     width: double.infinity,
                                     child: FilledButton.icon(
+                                      key: quickAddButtonKey,
                                       onPressed: _addingFromPreview
                                           ? null
-                                          : () => _addCardFromPreview(card),
+                                          : () => _addCardFromPreview(
+                                              card,
+                                              anchorKey: quickAddButtonKey,
+                                            ),
                                       icon: const Icon(Icons.add),
                                       label: Text(
                                         AppLocalizations.of(
@@ -3207,11 +3224,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _previewEntry = null;
   }
 
-  Future<void> _addCardFromPreview(CardSearchResult card) async {
+  Future<void> _addCardFromPreview(
+    CardSearchResult card, {
+    GlobalKey? anchorKey,
+    BuildContext? anchorContext,
+  }) async {
     final ownedCollectionId = widget.ownershipCollectionId;
     final alsoAddToCollectionId = widget.alsoAddToCollectionId;
+    final customMembershipCollectionId = widget.customMembershipCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
-    if ((ownedCollectionId == null && missingCollectionId == null) ||
+    if ((ownedCollectionId == null &&
+            missingCollectionId == null &&
+            customMembershipCollectionId == null) ||
         _addingFromPreview) {
       return;
     }
@@ -3230,18 +3254,51 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         return;
       }
       if (missingCollectionId != null) {
+        final ownedQty = await InventoryService.instance.currentInventoryQty(
+          card.id,
+        );
+        if (ownedQty > 0) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              Localizations.localeOf(context).languageCode
+                      .toLowerCase()
+                      .startsWith('it')
+                  ? 'Carta gia posseduta.'
+                  : 'Card already owned.',
+            );
+          }
+          return;
+        }
         await ScryfallDatabase.instance.addCardToCollectionAsMissing(
           missingCollectionId,
           card.id,
         );
-      } else if (ownedCollectionId != null) {
-        await ScryfallDatabase.instance.addCardToCollection(
-          ownedCollectionId,
+      } else if (customMembershipCollectionId != null) {
+        final ownedQty = await InventoryService.instance.currentInventoryQty(
           card.id,
         );
-        if (alsoAddToCollectionId != null &&
-            alsoAddToCollectionId != ownedCollectionId) {
-          await ScryfallDatabase.instance.addCardToCollection(
+        if (ownedQty <= 0) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              Localizations.localeOf(context).languageCode
+                      .toLowerCase()
+                      .startsWith('it')
+                  ? 'Aggiungila prima all\'inventario.'
+                  : 'Add it to inventory first.',
+            );
+          }
+          return;
+        }
+        await ScryfallDatabase.instance.upsertCollectionMembership(
+          customMembershipCollectionId,
+          card.id,
+        );
+      } else if (ownedCollectionId != null) {
+        await InventoryService.instance.addToInventory(card.id, deltaQty: 1);
+        if (alsoAddToCollectionId != null && alsoAddToCollectionId != ownedCollectionId) {
+          await ScryfallDatabase.instance.upsertCollectionMembership(
             alsoAddToCollectionId,
             card.id,
           );
@@ -3250,7 +3307,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (!mounted) {
         return;
       }
-      if (missingCollectionId == null && ownedCollectionId != null) {
+      if (missingCollectionId == null &&
+          customMembershipCollectionId == null &&
+          ownedCollectionId != null) {
         final current = _ownedQuantitiesByCardId[card.id] ?? 0;
         setState(() {
           _ownedQuantitiesByCardId = {
@@ -3259,7 +3318,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           };
         });
       }
-      showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
+      if (anchorKey != null) {
+        _showMiniToast(anchorKey, '+1');
+      } else if (anchorContext != null && anchorContext.mounted) {
+        _showMiniToastForContext(anchorContext, '+1');
+      }
       await _hidePreview(immediate: false);
     } finally {
       if (mounted) {
@@ -3273,8 +3336,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Future<void> _addCardFromDetails(CollectionCardEntry entry) async {
     final ownedCollectionId = widget.ownershipCollectionId;
     final alsoAddToCollectionId = widget.alsoAddToCollectionId;
+    final customMembershipCollectionId = widget.customMembershipCollectionId;
     final missingCollectionId = widget.addMissingToCollectionId;
-    if ((ownedCollectionId == null && missingCollectionId == null) ||
+    if ((ownedCollectionId == null &&
+            missingCollectionId == null &&
+            customMembershipCollectionId == null) ||
         _addingFromPreview) {
       return;
     }
@@ -3283,18 +3349,51 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     });
     try {
       if (missingCollectionId != null) {
+        final ownedQty = await InventoryService.instance.currentInventoryQty(
+          entry.cardId,
+        );
+        if (ownedQty > 0) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              Localizations.localeOf(context).languageCode
+                      .toLowerCase()
+                      .startsWith('it')
+                  ? 'Carta gia posseduta.'
+                  : 'Card already owned.',
+            );
+          }
+          return;
+        }
         await ScryfallDatabase.instance.addCardToCollectionAsMissing(
           missingCollectionId,
           entry.cardId,
         );
-      } else if (ownedCollectionId != null) {
-        await ScryfallDatabase.instance.addCardToCollection(
-          ownedCollectionId,
+      } else if (customMembershipCollectionId != null) {
+        final ownedQty = await InventoryService.instance.currentInventoryQty(
           entry.cardId,
         );
-        if (alsoAddToCollectionId != null &&
-            alsoAddToCollectionId != ownedCollectionId) {
-          await ScryfallDatabase.instance.addCardToCollection(
+        if (ownedQty <= 0) {
+          if (mounted) {
+            showAppSnackBar(
+              context,
+              Localizations.localeOf(context).languageCode
+                      .toLowerCase()
+                      .startsWith('it')
+                  ? 'Aggiungila prima all\'inventario.'
+                  : 'Add it to inventory first.',
+            );
+          }
+          return;
+        }
+        await ScryfallDatabase.instance.upsertCollectionMembership(
+          customMembershipCollectionId,
+          entry.cardId,
+        );
+      } else if (ownedCollectionId != null) {
+        await InventoryService.instance.addToInventory(entry.cardId, deltaQty: 1);
+        if (alsoAddToCollectionId != null && alsoAddToCollectionId != ownedCollectionId) {
+          await ScryfallDatabase.instance.upsertCollectionMembership(
             alsoAddToCollectionId,
             entry.cardId,
           );
@@ -3303,7 +3402,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (!mounted) {
         return;
       }
-      if (missingCollectionId == null && ownedCollectionId != null) {
+      if (missingCollectionId == null &&
+          customMembershipCollectionId == null &&
+          ownedCollectionId != null) {
         final current =
             _ownedQuantitiesByCardId[entry.cardId] ?? entry.quantity;
         setState(() {
@@ -3313,7 +3414,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           };
         });
       }
-      showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(1));
     } finally {
       if (mounted) {
         setState(() {
@@ -3326,6 +3426,52 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   void _showMiniToast(GlobalKey targetKey, String label) {
     final overlay = Overlay.of(context);
     final box = targetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) {
+      return;
+    }
+    final position = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final entry = OverlayEntry(
+      builder: (context) {
+        return Positioned(
+          left: position.dx + (size.width / 2) - 18,
+          top: position.dy - 28,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9C46A),
+                borderRadius: BorderRadius.circular(999),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 10,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: const Color(0xFF1C1510),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    Future<void>.delayed(const Duration(milliseconds: 900), () {
+      entry.remove();
+    });
+  }
+
+  void _showMiniToastForContext(BuildContext anchorContext, String label) {
+    final overlay = Overlay.of(context);
+    final box = anchorContext.findRenderObject() as RenderBox?;
     if (box == null) {
       return;
     }

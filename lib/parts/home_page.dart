@@ -708,6 +708,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return Icons.auto_awesome_mosaic;
     }
     if (collection.type == CollectionType.custom) {
+      return Icons.collections_bookmark_outlined;
+    }
+    if (collection.type == CollectionType.smart) {
       return Icons.tune;
     }
     if (_isBasicLandsCollection(collection)) {
@@ -763,7 +766,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   int _customCollectionCount() {
     return _collections
-        .where((item) => item.type == CollectionType.custom)
+        .where(
+          (item) =>
+              item.type == CollectionType.custom ||
+              item.type == CollectionType.smart,
+        )
         .length;
   }
 
@@ -1141,6 +1148,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final customCollections = nonDeckCollections
         .where((item) => item.type == CollectionType.custom)
         .toList(growable: false);
+    final smartCollections = nonDeckCollections
+        .where((item) => item.type == CollectionType.smart)
+        .toList(growable: false);
     final wishlistCollections = nonDeckCollections
         .where((item) => item.type == CollectionType.wishlist)
         .toList(growable: false);
@@ -1214,6 +1224,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       widgets.add(
         _buildCreateCollectionCard(
           context,
+          icon: Icons.auto_fix_high_rounded,
+          title: _isItalianUi()
+              ? 'Crea una smart collection'
+              : 'Create your smart collection',
+          enabled: canCreateCustom,
+          onTap: () => _addSmartCollection(context),
+        ),
+      );
+      widgets.add(
+        _buildCreateCollectionCard(
+          context,
           icon: Icons.auto_awesome_mosaic,
           title: AppLocalizations.of(context)!.createYourSetCollectionTitle,
           enabled: canCreateSet,
@@ -1243,15 +1264,27 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             canCreate: canCreateSet,
             onCreate: () => _addSetCollection(context),
           );
-        case _HomeCollectionsMenu.collection:
+        case _HomeCollectionsMenu.custom:
           return buildSingleCategory(
             label: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
             items: customCollections,
             createIcon: Icons.tune,
             createTitle: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
-            description: _sectionHelpText(_HomeCollectionsMenu.collection),
+            description: _sectionHelpText(_HomeCollectionsMenu.custom),
             canCreate: canCreateCustom,
             onCreate: () => _addCustomCollection(context),
+          );
+        case _HomeCollectionsMenu.smart:
+          return buildSingleCategory(
+            label: _isItalianUi() ? 'Smart collection' : 'Smart collection',
+            items: smartCollections,
+            createIcon: Icons.auto_fix_high_rounded,
+            createTitle: _isItalianUi()
+                ? 'Crea una smart collection'
+                : 'Create your smart collection',
+            description: _sectionHelpText(_HomeCollectionsMenu.smart),
+            canCreate: canCreateCustom,
+            onCreate: () => _addSmartCollection(context),
           );
         case _HomeCollectionsMenu.wish:
           return buildSingleCategory(
@@ -1347,11 +1380,33 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Widget _buildCollectionsMenu() {
-    final items = const <(_HomeCollectionsMenu, String)>[
-      (_HomeCollectionsMenu.set, 'Set'),
-      (_HomeCollectionsMenu.collection, 'Collection'),
-      (_HomeCollectionsMenu.wish, 'Wish'),
-      (_HomeCollectionsMenu.deck, 'Deck'),
+    final isItalian = _isItalianUi();
+    final items = <(_HomeCollectionsMenu, IconData, String)>[
+      (
+        _HomeCollectionsMenu.set,
+        Icons.auto_awesome_mosaic,
+        isItalian ? 'Set' : 'Set',
+      ),
+      (
+        _HomeCollectionsMenu.custom,
+        Icons.collections_bookmark_outlined,
+        isItalian ? 'Custom' : 'Custom',
+      ),
+      (
+        _HomeCollectionsMenu.smart,
+        Icons.auto_fix_high_rounded,
+        isItalian ? 'Smart' : 'Smart',
+      ),
+      (
+        _HomeCollectionsMenu.wish,
+        Icons.favorite_border_rounded,
+        isItalian ? 'Wishlist' : 'Wishlist',
+      ),
+      (
+        _HomeCollectionsMenu.deck,
+        Icons.view_carousel_rounded,
+        isItalian ? 'Deck' : 'Deck',
+      ),
     ];
     return Column(
       children: [
@@ -1364,7 +1419,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 2),
                     child: _MenuPillButton(
-                      label: entry.$2,
+                      icon: entry.$2,
+                      tooltip: entry.$3,
                       selected: _activeCollectionsMenu == entry.$1,
                       onTap: () {
                         if (_activeCollectionsMenu == entry.$1) {
@@ -1393,10 +1449,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return isItalian
             ? 'Scegli un set specifico e segui la checklist in modo chiaro: vedi subito le carte presenti e quelle che ti mancano.'
             : 'Choose a specific set and follow its checklist clearly: instantly see collected cards and missing ones.';
-      case _HomeCollectionsMenu.collection:
+      case _HomeCollectionsMenu.custom:
         return isItalian
-            ? 'Crea una collezione con filtri avanzati (formato, rarita, colori, tipi e altro) e tieni traccia delle carte possedute.'
-            : 'Create a collection with advanced filters (format, rarity, colors, types, and more) and track your owned cards.';
+            ? 'Crea raccolte manuali aggiungendo solo carte possedute dalla tua inventory.'
+            : 'Create manual collections and include only cards you already own in inventory.';
+      case _HomeCollectionsMenu.smart:
+        return isItalian
+            ? 'Salva un filtro dinamico: la smart collection mostra automaticamente solo le carte possedute che rispettano i criteri.'
+            : 'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.';
       case _HomeCollectionsMenu.wish:
         return isItalian
             ? 'Crea una wishlist con filtri avanzati per tenere sotto controllo le carte mancanti che vuoi trovare.'
@@ -1463,7 +1523,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     final setItems = userCollections.where(_isSetCollection).toList();
     final customItems = userCollections
-        .where((item) => item.type == CollectionType.custom)
+        .where(
+          (item) =>
+              item.type == CollectionType.custom ||
+              item.type == CollectionType.smart,
+        )
         .toList();
     final deckItems = userCollections
         .where((item) => item.type == CollectionType.deck)
@@ -2117,6 +2181,119 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .then((_) => _loadCollections());
   }
 
+  Future<void> _addSmartCollection(BuildContext context) async {
+    if (!_canCreateCollection()) {
+      await _showCollectionLimitDialog();
+      return;
+    }
+    if (!_canCreateCustomCollection()) {
+      await _showCustomCollectionLimitDialog();
+      return;
+    }
+    final isItalian = _isItalianUi();
+    final defaultName = isItalian ? 'Collezione smart' : 'Smart collection';
+    final controller = TextEditingController(text: defaultName);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(
+            isItalian ? 'Nuova collezione smart' : 'New smart collection',
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(hintText: l10n.collectionNameHint),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () {
+                final value = controller.text.trim();
+                Navigator.of(context).pop(value.isEmpty ? defaultName : value);
+              },
+              child: Text(l10n.create),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null) {
+      return;
+    }
+    if (_isCollectionNameTaken(name)) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.collectionAlreadyExists,
+      );
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+
+    final filter = await Navigator.of(context).push<CollectionFilter>(
+      MaterialPageRoute(
+        builder: (_) => _CollectionFilterBuilderPage(
+          name: name,
+          submitLabel: isItalian ? 'Crea' : 'Create',
+        ),
+      ),
+    );
+    if (!context.mounted || filter == null) {
+      return;
+    }
+    if (!_hasAtLeastOneSmartFilter(filter)) {
+      showAppSnackBar(
+        context,
+        isItalian
+            ? 'Imposta almeno un filtro per creare una smart collection.'
+            : 'Choose at least one filter to create a smart collection.',
+      );
+      return;
+    }
+
+    int id;
+    try {
+      id = await ScryfallDatabase.instance.addCollection(
+        name,
+        type: CollectionType.smart,
+        filter: filter,
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.failedToAddCollection('operation_failed'),
+      );
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _collections.add(
+        CollectionInfo(
+          id: id,
+          name: name,
+          cardCount: 0,
+          type: CollectionType.smart,
+          filter: filter,
+        ),
+      );
+    });
+    await _loadCollections();
+  }
+
   Future<void> _addSetCollection(BuildContext context) async {
     if (!_canCreateCollection()) {
       await _showCollectionLimitDialog();
@@ -2442,6 +2619,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return Localizations.localeOf(
       context,
     ).languageCode.toLowerCase().startsWith('it');
+  }
+
+  bool _hasAtLeastOneSmartFilter(CollectionFilter filter) {
+    return (filter.name?.trim().isNotEmpty ?? false) ||
+        (filter.artist?.trim().isNotEmpty ?? false) ||
+        filter.manaMin != null ||
+        filter.manaMax != null ||
+        (filter.format?.trim().isNotEmpty ?? false) ||
+        filter.sets.isNotEmpty ||
+        filter.rarities.isNotEmpty ||
+        filter.colors.isNotEmpty ||
+        filter.types.isNotEmpty;
   }
 
   String _deckImportButtonLabel() {
@@ -2978,6 +3167,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
     final canCreateCustom =
         _canCreateCollection() && _canCreateCustomCollection();
+    final canCreateSmart =
+        _canCreateCollection() && _canCreateCustomCollection();
     final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
     final selection = await showModalBottomSheet<_CollectionCreateAction>(
       context: context,
@@ -2986,6 +3177,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return _CreateCollectionSheet(
           canCreateSet: canCreateSet,
           canCreateCustom: canCreateCustom,
+          canCreateSmart: canCreateSmart,
           canCreateDeck: canCreateDeck,
         );
       },
@@ -2995,6 +3187,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     if (selection == _CollectionCreateAction.custom) {
       await _addCustomCollection(context);
+    } else if (selection == _CollectionCreateAction.smart) {
+      await _addSmartCollection(context);
     } else if (selection == _CollectionCreateAction.setBased) {
       await _addSetCollection(context);
     } else if (selection == _CollectionCreateAction.deck) {
@@ -3383,7 +3577,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return false;
       }
     }
-    await ScryfallDatabase.instance.addCardToCollection(allCards.id, cardId);
+    await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
     if (!mounted) {
       return false;
     }
@@ -4229,14 +4423,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     if (selection.isBulk) {
-      await ScryfallDatabase.instance.addCardsToCollection(
-        allCards.id,
-        selection.cardIds,
-      );
+      for (final cardId in selection.cardIds) {
+        await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
+      }
     } else {
-      await ScryfallDatabase.instance.addCardToCollection(
-        allCards.id,
+      await InventoryService.instance.addToInventory(
         selection.cardIds.first,
+        deltaQty: 1,
       );
     }
     if (!mounted) {
@@ -4323,6 +4516,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final isSetCollection = _isSetCollection(collection);
     final isDeckCollection = collection.type == CollectionType.deck;
+    final isSmartCollection = collection.type == CollectionType.smart;
     final menuItems = <PopupMenuEntry<_CollectionAction>>[];
     if (!isSetCollection) {
       menuItems.add(
@@ -4333,6 +4527,24 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               Icon(Icons.edit, size: 18),
               SizedBox(width: 8),
               Text(AppLocalizations.of(context)!.rename),
+            ],
+          ),
+        ),
+      );
+    }
+    if (isSmartCollection) {
+      menuItems.add(
+        PopupMenuItem(
+          value: _CollectionAction.editFilter,
+          child: Row(
+            children: [
+              const Icon(Icons.tune, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                _isItalianUi()
+                    ? 'Modifica filtro'
+                    : 'Edit filter',
+              ),
             ],
           ),
         ),
@@ -4399,6 +4611,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     if (selection == _CollectionAction.rename) {
       await _renameCollection(collection);
+    } else if (selection == _CollectionAction.editFilter) {
+      await _editSmartCollectionFilter(collection);
     } else if (selection == _CollectionAction.importDeckFile) {
       await _importDeckFileIntoCollection(collection);
     } else if (selection == _CollectionAction.exportDeckArena) {
@@ -4483,6 +4697,54 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       }
     });
+  }
+
+  Future<void> _editSmartCollectionFilter(CollectionInfo collection) async {
+    if (collection.type != CollectionType.smart) {
+      return;
+    }
+    final isItalian = _isItalianUi();
+    final updatedFilter = await Navigator.of(context).push<CollectionFilter>(
+      MaterialPageRoute(
+        builder: (_) => _CollectionFilterBuilderPage(
+          name: collection.name,
+          submitLabel: isItalian ? 'Salva filtro' : 'Save filter',
+          initialFilter: collection.filter,
+        ),
+      ),
+    );
+    if (!mounted || updatedFilter == null) {
+      return;
+    }
+    if (!_hasAtLeastOneSmartFilter(updatedFilter)) {
+      showAppSnackBar(
+        context,
+        isItalian
+            ? 'Imposta almeno un filtro.'
+            : 'Choose at least one filter.',
+      );
+      return;
+    }
+    await ScryfallDatabase.instance.updateCollectionFilter(
+      collection.id,
+      filter: updatedFilter,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final index = _collections.indexWhere((item) => item.id == collection.id);
+      if (index != -1) {
+        _collections[index] = CollectionInfo(
+          id: collection.id,
+          name: collection.name,
+          cardCount: collection.cardCount,
+          type: collection.type,
+          filter: updatedFilter,
+        );
+      }
+    });
+    await _loadCollections();
   }
 
   Future<void> _deleteCollection(CollectionInfo collection) async {
@@ -4922,13 +5184,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               });
                             },
                           ),
-                          if (_hasRealProAccess) ...[
-                            const SizedBox(width: 8),
-                            _ProPreviewToggleButton(
-                              proModeActive: !_forceFreePreview,
-                              onTap: _toggleProPreviewMode,
-                            ),
-                          ],
+                          const SizedBox(width: 8),
+                          _ProPreviewToggleButton(
+                            proModeActive: _hasRealProAccess && !_forceFreePreview,
+                            enabled: _hasRealProAccess,
+                            onTap: _toggleProPreviewMode,
+                          ),
                           const Spacer(),
                           IconButton(
                             tooltip: l10n.settings,
@@ -5292,49 +5553,48 @@ class _GameMenuBadge extends StatelessWidget {
 
 class _MenuPillButton extends StatelessWidget {
   const _MenuPillButton({
-    required this.label,
+    required this.icon,
+    required this.tooltip,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final IconData icon;
+  final String tooltip;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 170),
-          curve: Curves.easeOutCubic,
-          height: 36,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 170),
+            curve: Curves.easeOutCubic,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
               color: selected
-                  ? const Color(0xFFE9C46A)
-                  : const Color(0xFF5D4731).withValues(alpha: 0.45),
+                  ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selected
+                    ? const Color(0xFFE9C46A)
+                    : const Color(0xFF5D4731).withValues(alpha: 0.45),
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.fade,
-            softWrap: false,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            child: Icon(
+              icon,
+              size: 17,
               color: selected
                   ? const Color(0xFFEFD28B)
-                  : const Color(0xFFBFAE95),
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+                  : const Color(0xFFE9C46A).withValues(alpha: 0.9),
             ),
           ),
         ),
@@ -5393,10 +5653,12 @@ class _HomeIconButton extends StatelessWidget {
 class _ProPreviewToggleButton extends StatelessWidget {
   const _ProPreviewToggleButton({
     required this.proModeActive,
+    required this.enabled,
     required this.onTap,
   });
 
   final bool proModeActive;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
@@ -5405,7 +5667,7 @@ class _ProPreviewToggleButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
+        onTap: enabled ? onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOutCubic,
@@ -5415,18 +5677,22 @@ class _ProPreviewToggleButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: proModeActive
                 ? const Color(0xFFE9C46A).withValues(alpha: 0.18)
-                : const Color(0x221D1712),
+                : (enabled ? const Color(0x221D1712) : const Color(0x1A1D1712)),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: proModeActive
+              color: !enabled
+                  ? const Color(0xFF3E3327)
+                  : proModeActive
                   ? const Color(0xFFE9C46A)
                   : const Color(0xFF5D4731),
             ),
           ),
           child: Text(
-            proModeActive ? 'PRO' : 'FREE',
+            enabled ? (proModeActive ? 'PRO' : 'FREE') : 'PRO',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: proModeActive
+              color: !enabled
+                  ? const Color(0xFF8E7A62)
+                  : proModeActive
                   ? const Color(0xFFEFD28B)
                   : const Color(0xFFBFAE95),
               fontWeight: FontWeight.w900,
@@ -5715,10 +5981,12 @@ class _CollectionFilterBuilderPage extends StatefulWidget {
   const _CollectionFilterBuilderPage({
     required this.name,
     this.submitLabel,
+    this.initialFilter,
   });
 
   final String name;
   final String? submitLabel;
+  final CollectionFilter? initialFilter;
 
   @override
   State<_CollectionFilterBuilderPage> createState() =>
@@ -5786,6 +6054,29 @@ class _CollectionFilterBuilderPageState
   @override
   void initState() {
     super.initState();
+    final initial = widget.initialFilter;
+    if (initial != null) {
+      _nameController.text = initial.name?.trim() ?? '';
+      _artistController.text = initial.artist?.trim() ?? '';
+      if (initial.manaMin != null) {
+        _manaMinController.text = initial.manaMin!.toString();
+      }
+      if (initial.manaMax != null) {
+        _manaMaxController.text = initial.manaMax!.toString();
+      }
+      _selectedSets.addAll(
+        initial.sets.map((value) => value.trim().toLowerCase()),
+      );
+      _selectedRarities.addAll(
+        initial.rarities.map((value) => value.trim().toLowerCase()),
+      );
+      _selectedColors.addAll(
+        initial.colors.map((value) => value.trim().toUpperCase()),
+      );
+      _selectedTypes.addAll(
+        initial.types.map((value) => value.trim()).where((value) => value.isNotEmpty),
+      );
+    }
     _loadSets();
     _schedulePreviewUpdate();
   }
@@ -6292,11 +6583,13 @@ class _CreateCollectionSheet extends StatelessWidget {
   const _CreateCollectionSheet({
     required this.canCreateSet,
     required this.canCreateCustom,
+    required this.canCreateSmart,
     required this.canCreateDeck,
   });
 
   final bool canCreateSet;
   final bool canCreateCustom;
+  final bool canCreateSmart;
   final bool canCreateDeck;
 
   Widget _buildCreateOption(
@@ -6378,6 +6671,19 @@ class _CreateCollectionSheet extends StatelessWidget {
           ),
           _buildCreateOption(
             context,
+            icon: Icons.auto_fix_high_rounded,
+            title: _isItalianUi(context)
+                ? 'Smart collection'
+                : 'Smart collection',
+            subtitle: _isItalianUi(context)
+                ? 'Salva un filtro dinamico e mostra solo le carte possedute.'
+                : 'Save a dynamic filter and show only owned cards.',
+            enabled: canCreateSmart,
+            onTap: () =>
+                Navigator.of(context).pop(_CollectionCreateAction.smart),
+          ),
+          _buildCreateOption(
+            context,
             icon: Icons.view_carousel_rounded,
             title: l10n.deckCollectionTitle,
             subtitle: l10n.deckCollectionSubtitle,
@@ -6388,6 +6694,13 @@ class _CreateCollectionSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _isItalianUi(BuildContext context) {
+    return Localizations.localeOf(context)
+        .languageCode
+        .toLowerCase()
+        .startsWith('it');
   }
 }
 
@@ -7691,17 +8004,18 @@ class _ParsedDeckList {
 
 enum _CollectionAction {
   rename,
+  editFilter,
   importDeckFile,
   exportDeckArena,
   exportDeckMtgo,
   delete,
 }
 
-enum _HomeCollectionsMenu { home, set, collection, wish, deck }
+enum _HomeCollectionsMenu { home, set, custom, smart, wish, deck }
 
 enum _HomeAddAction { addByScan, addCards, addCollection, addWishlist }
 
-enum _CollectionCreateAction { custom, setBased, deck }
+enum _CollectionCreateAction { custom, smart, setBased, deck }
 
 class _SnakeProgressBar extends StatelessWidget {
   const _SnakeProgressBar({required this.animation, required this.value});

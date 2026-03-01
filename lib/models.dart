@@ -195,7 +195,7 @@ String _formatSetLabelWithProgress({
   return '$label • $collectorProgress';
 }
 
-enum CollectionType { all, set, wishlist, custom, deck, basicLands }
+enum CollectionType { all, set, wishlist, custom, smart, deck, basicLands }
 
 CollectionType collectionTypeFromDb(String? value) {
   switch (value?.toLowerCase()) {
@@ -207,6 +207,8 @@ CollectionType collectionTypeFromDb(String? value) {
       return CollectionType.wishlist;
     case 'custom':
       return CollectionType.custom;
+    case 'smart':
+      return CollectionType.smart;
     case 'deck':
       return CollectionType.deck;
     case 'basic_lands':
@@ -226,6 +228,8 @@ String collectionTypeToDb(CollectionType type) {
       return 'wishlist';
     case CollectionType.custom:
       return 'custom';
+    case CollectionType.smart:
+      return 'smart';
     case CollectionType.deck:
       return 'deck';
     case CollectionType.basicLands:
