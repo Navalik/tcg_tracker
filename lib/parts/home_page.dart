@@ -83,7 +83,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     });
     await ScryfallDatabase.instance.open();
     await _loadCollections();
+    await _maybeShowLatestReleaseNotesBeforeDbDownloads();
+    if (!mounted || !context.mounted) {
+      return;
+    }
     unawaited(_initializeForCurrentGame());
+  }
+
+  Future<void> _maybeShowLatestReleaseNotesBeforeDbDownloads() async {
+    final lastSeen = await AppSettings.loadLastSeenReleaseNotesId();
+    if (lastSeen == _latestReleaseNotesId || !mounted) {
+      return;
+    }
+    await _showLatestReleaseNotesPanel(context);
   }
 
   Future<void> _ensurePrimaryGameSelectionOnFirstLaunch() async {
@@ -664,18 +676,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   bool _canCreateDeckCollection() {
     return _isProUnlocked || _deckCollectionCount() < _freeDeckCollectionLimit;
-  }
-
-  bool _filterHasCriteria(CollectionFilter filter) {
-    return (filter.name?.trim().isNotEmpty ?? false) ||
-        (filter.artist?.trim().isNotEmpty ?? false) ||
-        filter.manaMin != null ||
-        filter.manaMax != null ||
-        (filter.format?.trim().isNotEmpty ?? false) ||
-        filter.sets.isNotEmpty ||
-        filter.rarities.isNotEmpty ||
-        filter.colors.isNotEmpty ||
-        filter.types.isNotEmpty;
   }
 
   Future<void> _showCollectionLimitDialog() async {
@@ -1559,18 +1559,62 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!mounted) {
       return;
     }
+    final createdWishlist = CollectionInfo(
+      id: id,
+      name: name,
+      cardCount: 0,
+      type: CollectionType.wishlist,
+      filter: null,
+    );
     setState(() {
-      _collections.add(
-        CollectionInfo(
-          id: id,
-          name: name,
-          cardCount: 0,
-          type: CollectionType.wishlist,
-          filter: null,
-        ),
-      );
+      _collections.add(createdWishlist);
     });
+
+    if (!context.mounted) {
+      return;
+    }
+    final shouldAddCardsNow =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            final l10n = AppLocalizations.of(context)!;
+            return AlertDialog(
+              title: Text(l10n.addCardsNowTitle),
+              content: Text(l10n.addCardsNowBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(l10n.no),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text(l10n.yes),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+    if (!mounted || !context.mounted) {
+      return;
+    }
     await _loadCollections();
+    if (!mounted || !context.mounted || !shouldAddCardsNow) {
+      return;
+    }
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => CollectionDetailPage(
+              collectionId: createdWishlist.id,
+              name: _collectionDisplayName(createdWishlist),
+              isWishlistCollection: true,
+              filter: createdWishlist.filter,
+              autoOpenAddCard: true,
+            ),
+          ),
+        )
+        .then((_) => _loadCollections());
   }
 
   Future<void> _addCustomCollection(BuildContext context) async {
@@ -1618,31 +1662,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
-    final filter = await Navigator.of(context).push<CollectionFilter>(
-      MaterialPageRoute(
-        builder: (_) => _CollectionFilterBuilderPage(name: name),
-      ),
-    );
-    if (filter == null) {
-      return;
-    }
-    if (!_filterHasCriteria(filter)) {
-      if (!context.mounted) {
-        return;
-      }
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.selectFiltersFirst,
-      );
-      return;
-    }
-
     int id;
     try {
       id = await ScryfallDatabase.instance.addCollection(
         name,
         type: CollectionType.custom,
-        filter: filter,
+        filter: null,
       );
     } catch (_) {
       if (!context.mounted) {
@@ -1657,18 +1682,59 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!mounted) {
       return;
     }
+    final createdCollection = CollectionInfo(
+      id: id,
+      name: name,
+      cardCount: 0,
+      type: CollectionType.custom,
+      filter: null,
+    );
     setState(() {
-      _collections.add(
-        CollectionInfo(
-          id: id,
-          name: name,
-          cardCount: 0,
-          type: CollectionType.custom,
-          filter: filter,
-        ),
-      );
+      _collections.add(createdCollection);
     });
+
+    if (!context.mounted) {
+      return;
+    }
+    final shouldAddCardsNow =
+        await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            final l10n = AppLocalizations.of(context)!;
+            return AlertDialog(
+              title: Text(l10n.addCardsNowTitle),
+              content: Text(l10n.addCardsNowBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: Text(l10n.no),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: Text(l10n.yes),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
     await _loadCollections();
+    if (!mounted || !context.mounted || !shouldAddCardsNow) {
+      return;
+    }
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => CollectionDetailPage(
+              collectionId: createdCollection.id,
+              name: _collectionDisplayName(createdCollection),
+              filter: createdCollection.filter,
+              autoOpenAddCard: true,
+            ),
+          ),
+        )
+        .then((_) => _loadCollections());
   }
 
   Future<void> _addSetCollection(BuildContext context) async {

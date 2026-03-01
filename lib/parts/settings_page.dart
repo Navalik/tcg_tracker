@@ -1,4 +1,4 @@
-part of 'package:tcg_tracker/main.dart';
+﻿part of 'package:tcg_tracker/main.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -186,8 +186,8 @@ class _SettingsPageState extends State<SettingsPage> {
     showAppSnackBar(
       context,
       _isItalianUi
-          ? 'Il gioco primario è fisso. Usa Reset test per cambiarlo.'
-          : 'Primary game is fixed. Use Reset test to change it.',
+          ? 'Il gioco primario è fisso.'
+          : 'Primary game is fixed.',
     );
   }
 
@@ -364,7 +364,7 @@ class _SettingsPageState extends State<SettingsPage> {
         showAppSnackBar(
           context,
           _isItalianUi
-              ? 'Acquisto già presente su Google Play. Entitlement sincronizzato.'
+              ? 'Acquisto giÃ  presente su Google Play. Entitlement sincronizzato.'
               : 'Purchase already owned on Google Play. Entitlement synced.',
         );
       }
@@ -592,7 +592,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           content: Text(
             isItalian
-                ? 'Verranno cancellate solo le carte nel database $gameLabel e riscaricate da zero. Collezioni, deck e quantità restano invariati.'
+                ? 'Verranno cancellate solo le carte nel database $gameLabel e riscaricate da zero. Collezioni, deck e quantitÃ  restano invariati.'
                 : 'Only $gameLabel cards will be deleted and reimported from scratch. Collections, decks, and quantities stay unchanged.',
           ),
           actions: [
@@ -669,7 +669,7 @@ class _SettingsPageState extends State<SettingsPage> {
     showAppSnackBar(
       context,
       isItalian
-          ? 'Database $gameLabel resettato. Verrà riscaricato in modo pulito.'
+          ? 'Database $gameLabel resettato. VerrÃ  riscaricato in modo pulito.'
           : '$gameLabel database reset. It will be downloaded again cleanly.',
     );
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
@@ -697,7 +697,7 @@ class _SettingsPageState extends State<SettingsPage> {
             : 'Complete catalog via API. Large download.';
       case 'expanded':
         return _isItalianUi
-            ? 'Più carte offline, download più grande.'
+            ? 'PiÃ¹ carte offline, download piÃ¹ grande.'
             : 'More offline cards, larger download.';
       case 'standard':
         return _isItalianUi
@@ -1024,60 +1024,6 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     }
   }
-
-  Future<void> _resetPrimaryGameTestState() async {
-    final isItalian = _isItalianUi;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          isItalian
-              ? 'Reset scenario primo avvio'
-              : 'Reset first-launch scenario',
-        ),
-        content: Text(
-          isItalian
-              ? 'Verrà ripristinata la scelta TCG primario e saranno azzerati gli acquisti (Plus e sblocchi TCG). Collezioni e carte salvate non verranno eliminate.'
-              : 'This will reset primary TCG selection and clear purchases (Plus and TCG unlocks). Saved collections and cards will not be deleted.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(isItalian ? 'Annulla' : 'Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(isItalian ? 'Reset test' : 'Reset test'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
-
-    await AppSettings.resetPrimaryGameSelectionFlow();
-    final manager = PurchaseManager.instance;
-    await manager.resetPurchaseStateForTest();
-    await manager.syncPrimaryGameFromSettings();
-    await TcgEnvironmentController.instance.setGame(TcgGame.mtg);
-
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _primaryGame = TcgGame.mtg;
-      _ownedTcgs = const <String>{};
-    });
-    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
-    showAppSnackBar(
-      context,
-      isItalian
-          ? 'Scenario test ripristinato: scegli di nuovo il TCG primario. Acquisti azzerati.'
-          : 'Test scenario restored: choose your primary TCG again. Purchases cleared.',
-    );
-  }
-
   Widget _buildProfileTile(User? user) {
     final displayName = user?.displayName?.trim();
     final email = user?.email?.trim();
@@ -1237,7 +1183,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   icon: Icons.sports_esports_rounded,
                   title: _isItalianUi ? 'Giochi' : 'Games',
                   subtitle: _isItalianUi
-                      ? 'Il primo gioco scelto è gratis per sempre. L’altro richiede acquisto.'
+                      ? 'Il primo gioco scelto Ã¨ gratis per sempre. Lâ€™altro richiede acquisto.'
                       : 'The first selected game stays free forever. The other requires purchase.',
                   children: [
                     Text(
@@ -1598,15 +1544,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         spacing: 8,
                         children: [
                           OutlinedButton(
-                            onPressed: _resetPrimaryGameTestState,
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF5D4731)),
-                            ),
-                            child: Text(
-                              _isItalianUi ? 'Reset test' : 'Reset test',
-                            ),
-                          ),
-                          OutlinedButton(
                             onPressed: () =>
                                 _showLatestReleaseNotesPanel(context),
                             style: OutlinedButton.styleFrom(
@@ -1627,3 +1564,4 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+
