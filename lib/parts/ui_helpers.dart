@@ -1,5 +1,9 @@
 part of 'package:tcg_tracker/main.dart';
 
+final Map<String, Future<String?>> _mtgSetIconSvgCache =
+    <String, Future<String?>>{};
+final RegExp _setCodeSafePattern = RegExp(r'^[a-z0-9]+$');
+
 String _formatBytes(int bytes) {
   if (bytes < 1024) {
     return '${bytes}B';
@@ -21,14 +25,67 @@ String _setIconUrl(String setCode) {
   if (code.isEmpty) {
     return '';
   }
+  final encoded = Uri.encodeComponent(code);
   if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
-    return 'https://images.pokemontcg.io/$code/symbol.png';
+    return 'https://images.pokemontcg.io/$encoded/symbol.png';
   }
-  return 'https://svgs.scryfall.io/sets/$code.svg';
+  return 'https://svgs.scryfall.io/sets/$encoded.svg';
+}
+
+String _normalizeCardImageUrlForDisplay(String? rawImageUri) {
+  final imageUrl = (rawImageUri ?? '').trim();
+  if (imageUrl.isEmpty) {
+    return '';
+  }
+  final uri = Uri.tryParse(imageUrl);
+  if (uri == null) {
+    return imageUrl;
+  }
+  final isPokemonGame =
+      TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
+  if (!isPokemonGame || uri.host.toLowerCase() != 'images.pokemontcg.io') {
+    return imageUrl;
+  }
+  if (uri.pathSegments.isEmpty) {
+    return imageUrl;
+  }
+  final segments = uri.pathSegments.toList(growable: false);
+  final fileName = segments.last;
+  if (!fileName.toLowerCase().endsWith('_hires.png')) {
+    return imageUrl;
+  }
+  final normalizedFileName = fileName.replaceFirst(
+    RegExp(r'_hires\.png$', caseSensitive: false),
+    '.png',
+  );
+  final updated = List<String>.from(segments);
+  updated[updated.length - 1] = normalizedFileName;
+  return uri.replace(pathSegments: updated).toString();
+}
+
+Future<String?> _loadMtgSetSvg(String setCode) {
+  return _mtgSetIconSvgCache.putIfAbsent(setCode, () async {
+    try {
+      final response = await http
+          .get(Uri.parse(_setIconUrl(setCode)))
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode != 200) {
+        return null;
+      }
+      final body = response.body.trimLeft();
+      if (!body.startsWith('<svg')) {
+        return null;
+      }
+      return body;
+    } catch (_) {
+      return null;
+    }
+  });
 }
 
 Widget _buildSetIcon(String setCode, {double size = 28}) {
-  if (setCode.trim().isEmpty) {
+  final code = setCode.trim().toLowerCase();
+  if (code.isEmpty || !_setCodeSafePattern.hasMatch(code)) {
     return _emptySetIcon(size);
   }
   final isPokemonGame =
@@ -46,19 +103,26 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
     ),
     child: isPokemonGame
         ? Image.network(
-            _setIconUrl(setCode),
+            _setIconUrl(code),
             fit: BoxFit.contain,
             errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
           )
-        : SvgPicture.network(
-            _setIconUrl(setCode),
-            fit: BoxFit.contain,
-            colorFilter: const ColorFilter.mode(
-              Color(0xFFE9C46A),
-              BlendMode.srcIn,
-            ),
-            placeholderBuilder: (_) => _emptySetIcon(size - 12),
-            errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
+        : FutureBuilder<String?>(
+            future: _loadMtgSetSvg(code),
+            builder: (context, snapshot) {
+              final svg = snapshot.data;
+              if (svg == null || svg.isEmpty) {
+                return _emptySetIcon(size - 12);
+              }
+              return SvgPicture.string(
+                svg,
+                fit: BoxFit.contain,
+                colorFilter: const ColorFilter.mode(
+                  Color(0xFFE9C46A),
+                  BlendMode.srcIn,
+                ),
+              );
+            },
           ),
   );
 }

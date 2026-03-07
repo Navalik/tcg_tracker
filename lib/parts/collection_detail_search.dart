@@ -2492,7 +2492,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     final showMissingQuickAdd = isMissing && showAdd;
     final quickAddButtonKey = GlobalKey();
-    final imageUrl = card.imageUri?.trim() ?? '';
+    final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
     final setLabel = _setLabelForSearch(card);
     final hasRarity = card.rarity.trim().isNotEmpty;
     return Stack(
@@ -3068,7 +3068,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   void _showPreview(CardSearchResult card) {
-    final imageUrl = card.imageUri ?? '';
+    final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
     if (imageUrl.isEmpty) {
       return;
     }

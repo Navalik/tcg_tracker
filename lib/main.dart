@@ -52,6 +52,23 @@ part 'parts/ui_helpers.dart';
 bool _firebaseReady = false;
 bool _crashReportingReady = false;
 
+bool _isNonFatalUiResourceError(Object error, {String? reason}) {
+  if (error is NetworkImageLoadException) {
+    return true;
+  }
+  final message = error.toString().toLowerCase();
+  final context = (reason ?? '').toLowerCase();
+  if (message.contains('error thrown resolving an image codec') ||
+      message.contains('http request failed, statuscode: 404') ||
+      message.contains('bad state: invalid svg data')) {
+    return true;
+  }
+  if (context.contains('resolving an image codec')) {
+    return true;
+  }
+  return false;
+}
+
 enum AppVisualTheme { magic, vault }
 
 AppVisualTheme appVisualThemeFromCode(String? rawCode) {
@@ -155,12 +172,13 @@ Future<void> main() async {
   runZonedGuarded(
     () => runApp(const TCGTracker()),
     (error, stackTrace) {
+      final reason = 'run_zoned_guarded';
       unawaited(
         _recordAppError(
           error,
           stackTrace,
-          fatal: true,
-          reason: 'run_zoned_guarded',
+          fatal: !_isNonFatalUiResourceError(error, reason: reason),
+          reason: reason,
         ),
       );
     },
@@ -176,12 +194,13 @@ Future<void> _configureCrashReporting() async {
   );
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
+    final reason = details.context?.toDescription();
     unawaited(
       _recordAppError(
         details.exception,
         details.stack ?? StackTrace.current,
-        fatal: true,
-        reason: details.context?.toDescription(),
+        fatal: !_isNonFatalUiResourceError(details.exception, reason: reason),
+        reason: reason,
       ),
     );
   };

@@ -3258,10 +3258,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   Future<void> _showHomeAddOptions(BuildContext context) async {
     final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
+    final addContext = switch (_activeCollectionsMenu) {
+      _HomeCollectionsMenu.home => _HomeAddContext.home,
+      _HomeCollectionsMenu.wish => _HomeAddContext.wishlist,
+      _ => _HomeAddContext.collections,
+    };
     final selection = await showModalBottomSheet<_HomeAddAction>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _HomeAddSheet(canCreateWishlist: canCreateWishlist),
+      builder: (context) => _HomeAddSheet(
+        addContext: addContext,
+        canCreateWishlist: canCreateWishlist,
+      ),
     );
     if (!context.mounted) {
       return;
@@ -6029,7 +6038,7 @@ class _RecentAddedCardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = card.imageUri?.trim() ?? '';
+    final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
     final setLabel = card.setName.trim().isNotEmpty
         ? card.setName.trim()
         : card.setCode.toUpperCase();
@@ -6149,78 +6158,136 @@ class _DividerGlow extends StatelessWidget {
 }
 
 class _HomeAddSheet extends StatelessWidget {
-  const _HomeAddSheet({required this.canCreateWishlist});
+  const _HomeAddSheet({
+    required this.addContext,
+    required this.canCreateWishlist,
+  });
 
+  final _HomeAddContext addContext;
   final bool canCreateWishlist;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(l10n.addTitle, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          ListTile(
-            leading: const Icon(Icons.document_scanner_outlined),
-            title: Text(l10n.addViaScanTitle),
-            subtitle: Text(l10n.scanCardWithLiveOcrSubtitle),
-            onTap: () => Navigator.of(context).pop(_HomeAddAction.addByScan),
-          ),
-          ListTile(
-            leading: const Icon(Icons.add_circle_outline),
-            title: Text(l10n.addCards),
-            subtitle: Text(l10n.addCardsToCatalogSubtitle),
-            onTap: () => Navigator.of(context).pop(_HomeAddAction.addCards),
-          ),
-          ListTile(
-            leading: const Icon(Icons.collections_bookmark),
-            title: Text(l10n.addCollection),
-            subtitle: Text(l10n.addCollectionSubtitle),
-            onTap: () =>
-                Navigator.of(context).pop(_HomeAddAction.addCollection),
-          ),
-          Opacity(
-            opacity: canCreateWishlist ? 1.0 : 0.55,
-            child: ListTile(
-              leading: const Icon(Icons.favorite_border_rounded),
-              title: Text(l10n.addWishlist),
-              subtitle: canCreateWishlist
-                  ? Text(l10n.addWishlistSubtitle)
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n.upgradeToPro,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: const Color(0xFFE9C46A),
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                        Text(l10n.addWishlistSubtitle),
-                      ],
+    final media = MediaQuery.of(context);
+    final maxSheetHeight = media.size.height - media.padding.top - 24;
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        constraints: BoxConstraints(maxHeight: maxSheetHeight),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 18,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.addTitle,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                if (addContext == _HomeAddContext.home) ...[
+                  ListTile(
+                    leading: const Icon(Icons.document_scanner_outlined),
+                    title: Text(l10n.addViaScanTitle),
+                    subtitle: Text(l10n.scanCardWithLiveOcrSubtitle),
+                    onTap: () =>
+                        Navigator.of(context).pop(_HomeAddAction.addByScan),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.add_circle_outline),
+                    title: Text(l10n.addCards),
+                    subtitle: Text(l10n.addCardsToCatalogSubtitle),
+                    onTap: () =>
+                        Navigator.of(context).pop(_HomeAddAction.addCards),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.collections_bookmark),
+                    title: Text(l10n.addCollection),
+                    subtitle: Text(l10n.addCollectionSubtitle),
+                    onTap: () =>
+                        Navigator.of(context).pop(_HomeAddAction.addCollection),
+                  ),
+                  Opacity(
+                    opacity: canCreateWishlist ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.favorite_border_rounded),
+                      title: Text(l10n.addWishlist),
+                      subtitle: canCreateWishlist
+                          ? Text(l10n.addWishlistSubtitle)
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.upgradeToPro,
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: const Color(0xFFE9C46A),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                                Text(l10n.addWishlistSubtitle),
+                              ],
+                            ),
+                      onTap: canCreateWishlist
+                          ? () =>
+                                Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                          : null,
                     ),
-              onTap: canCreateWishlist
-                  ? () => Navigator.of(context).pop(_HomeAddAction.addWishlist)
-                  : null,
+                  ),
+                ] else if (addContext == _HomeAddContext.wishlist) ...[
+                  Opacity(
+                    opacity: canCreateWishlist ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.favorite_border_rounded),
+                      title: Text(l10n.addWishlist),
+                      subtitle: canCreateWishlist
+                          ? Text(l10n.addWishlistSubtitle)
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.upgradeToPro,
+                                  style: Theme.of(context).textTheme.labelMedium
+                                      ?.copyWith(
+                                        color: const Color(0xFFE9C46A),
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                ),
+                                Text(l10n.addWishlistSubtitle),
+                              ],
+                            ),
+                      onTap: canCreateWishlist
+                          ? () =>
+                                Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                          : null,
+                    ),
+                  ),
+                ] else ...[
+                  ListTile(
+                    leading: const Icon(Icons.collections_bookmark),
+                    title: Text(l10n.addCollection),
+                    subtitle: Text(l10n.addCollectionSubtitle),
+                    onTap: () =>
+                        Navigator.of(context).pop(_HomeAddAction.addCollection),
+                  ),
+                ],
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -6978,6 +7045,8 @@ class _ResolvedScanSelection {
 
 enum _ScanPreviewAction { add, retry }
 
+enum _HomeAddContext { home, collections, wishlist }
+
 Future<CardSearchResult?> _pickCardPrintingForName(
   BuildContext context,
   String cardName, {
@@ -7257,8 +7326,8 @@ class _PickPrintingSheet extends StatelessWidget {
   }
 
   Widget _buildCardPreview(CardSearchResult card) {
-    final uri = card.imageUri?.trim();
-    if (uri == null || uri.isEmpty) {
+    final uri = _normalizeCardImageUrlForDisplay(card.imageUri);
+    if (uri.isEmpty) {
       return _buildSetIcon(card.setCode, size: 22);
     }
     return ClipRRect(
