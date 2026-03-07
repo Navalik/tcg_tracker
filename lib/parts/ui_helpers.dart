@@ -102,10 +102,16 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
       ),
     ),
     child: isPokemonGame
-        ? Image.network(
-            _setIconUrl(code),
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
+        ? ColorFiltered(
+            colorFilter: const ColorFilter.mode(
+              Color(0xFFE9C46A),
+              BlendMode.srcIn,
+            ),
+            child: Image.network(
+              _setIconUrl(code),
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
+            ),
           )
         : FutureBuilder<String?>(
             future: _loadMtgSetSvg(code),

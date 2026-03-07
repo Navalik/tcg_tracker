@@ -35,6 +35,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   String? _pokemonSyncStatus;
   String? _bulkUpdatedAtRaw;
   bool _cardsMissing = false;
+  String _priceCurrency = 'eur';
+  bool _showPrices = true;
   bool _initialCollectionsLoading = true;
   bool _collectionsLoadInProgress = false;
   int _totalCardCount = 0;
@@ -77,9 +79,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   Future<void> _initializeEnvironmentAndData() async {
     await _purchaseManager.init();
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    final showPrices = await AppSettings.loadShowPrices();
     final firstOpenFlag = await AppSettings.loadAppFirstOpenFlag();
     if (mounted) {
       setState(() {
+        _priceCurrency = priceCurrency;
+        _showPrices = showPrices;
         _appFirstOpenFlag = firstOpenFlag;
       });
     }
@@ -683,6 +689,27 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     return false;
+  }
+
+  String _nextProgressiveCollectionName(String baseLabel) {
+    final base = baseLabel.trim().isEmpty ? 'Collection' : baseLabel.trim();
+    final matcher = RegExp(
+      '^${RegExp.escape(base)}\\s*(\\d+)?\$',
+      caseSensitive: false,
+    );
+    var maxIndex = 0;
+    for (final item in _collections) {
+      final match = matcher.firstMatch(item.name.trim());
+      if (match == null) {
+        continue;
+      }
+      final rawNumber = match.group(1);
+      final parsed = rawNumber == null ? 1 : int.tryParse(rawNumber) ?? 1;
+      if (parsed > maxIndex) {
+        maxIndex = parsed;
+      }
+    }
+    return '$base ${maxIndex + 1}';
   }
 
   IconData _collectionIcon(CollectionInfo collection) {
@@ -1483,11 +1510,463 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         ),
         itemBuilder: (context, index) {
           final card = _recentAllCards[index];
-          return _RecentAddedCardTile(card: card);
+          final priceLabel = _recentCardPriceLabel(card);
+          return _RecentAddedCardTile(
+            card: card,
+            priceLabel: priceLabel,
+            showPrice: _showPrices,
+            onTap: () => _showRecentCardDetails(card),
+          );
         },
       ),
     );
     return widgets;
+  }
+
+  String _recentCardPriceLabel(CardSearchResult card) {
+    final currency = _priceCurrency.trim().toLowerCase() == 'usd'
+        ? 'usd'
+        : 'eur';
+    final symbol = currency == 'usd' ? r'$' : '\u20AC';
+    final primary = currency == 'usd' ? card.priceUsd : card.priceEur;
+    final fallback = currency == 'usd' ? card.priceUsdFoil : card.priceEurFoil;
+    final value = _normalizePriceValue(primary) ?? _normalizePriceValue(fallback);
+    if (value == null) {
+      return 'N/A';
+    }
+    return '$symbol$value';
+  }
+
+  Future<void> _showRecentCardDetails(CardSearchResult card) async {
+    FocusScope.of(context).unfocus();
+    final allCardsId = await ScryfallDatabase.instance.ensureAllCardsCollectionId();
+    final entry = await ScryfallDatabase.instance.fetchCardEntryById(
+      card.id,
+      collectionId: allCardsId,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (entry == null) {
+      showAppSnackBar(
+        context,
+        AppLocalizations.of(context)!.networkErrorTryAgain,
+      );
+      return;
+    }
+
+    final imageUrl = _normalizeCardImageUrlForDisplay(entry.imageUri);
+    List<String> legalFormats = const [];
+    try {
+      legalFormats = await ScryfallDatabase.instance.fetchCardLegalFormats(
+        entry.cardId,
+      );
+    } catch (_) {
+      legalFormats = const [];
+    }
+    if (!mounted) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final priceCurrency = await AppSettings.loadPriceCurrency();
+    if (!mounted) {
+      return;
+    }
+    final details = _parseRecentCardDetails(
+      l10n,
+      entry,
+      legalFormats,
+      priceCurrency,
+    );
+    final typeLine = entry.typeLine.trim();
+    final manaCost = entry.manaCost.trim();
+    final oracleText = entry.oracleText.trim();
+    final stats = _joinStats(entry.power.trim(), entry.toughness.trim());
+    final loyalty = entry.loyalty.trim();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        final addButtonKey = GlobalKey();
+        var showCheck = false;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            Future<void> handleAdd() async {
+              final added = await _addCardToAllCards(card.id);
+              if (!added || !mounted) {
+                return;
+              }
+              setModalState(() {
+                showCheck = true;
+              });
+              await Future<void>.delayed(const Duration(milliseconds: 700));
+              if (!mounted) {
+                return;
+              }
+              setModalState(() {
+                showCheck = false;
+              });
+            }
+
+            return DraggableScrollableSheet(
+              expand: false,
+              initialChildSize: 0.7,
+              minChildSize: 0.4,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) {
+                return Container(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: ListView(
+                    controller: scrollController,
+                    children: [
+                      Row(
+                        children: [
+                          if (manaCost.isNotEmpty) _buildRecentManaCostPips(manaCost),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              entry.name,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          FilledButton(
+                            key: addButtonKey,
+                            onPressed: () async {
+                              await handleAdd();
+                            },
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              transitionBuilder: (child, animation) =>
+                                  ScaleTransition(
+                                    scale: animation,
+                                    child: FadeTransition(
+                                      opacity: animation,
+                                      child: child,
+                                    ),
+                                  ),
+                              child: showCheck
+                                  ? const Icon(Icons.check, key: ValueKey('check'))
+                                  : const Icon(Icons.add, key: ValueKey('add')),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          _buildSetIcon(entry.setCode, size: 22),
+                          const SizedBox(width: 8),
+                          Text(
+                            _subtitleLabelForRecentEntry(entry),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
+                          ),
+                        ],
+                      ),
+                      if (typeLine.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          typeLine,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: const Color(0xFFE3D4B8)),
+                        ),
+                      ],
+                      if (oracleText.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF201A14),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFF3A2F24)),
+                          ),
+                          child: Text(
+                            oracleText,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                      if (stats.isNotEmpty || loyalty.isNotEmpty) ...[
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (stats.isNotEmpty) _buildBadge(stats),
+                            if (loyalty.isNotEmpty)
+                              _buildBadge(l10n.loyaltyLabel(loyalty)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      if (imageUrl.isNotEmpty)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Image.network(imageUrl, fit: BoxFit.contain),
+                        ),
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.details,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildRecentDetailGrid(details),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<String> _recentManaTokens(String manaCost) {
+    final source = manaCost.trim();
+    if (source.isEmpty) {
+      return const [];
+    }
+    final matches = RegExp(r'\{([^}]+)\}').allMatches(source).toList();
+    if (matches.isEmpty) {
+      return [source];
+    }
+    return matches
+        .map((match) => (match.group(1) ?? '').trim().toUpperCase())
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Color _recentManaPipColor(String token) {
+    switch (token) {
+      case 'W':
+        return const Color(0xFFF3E6B2);
+      case 'U':
+        return const Color(0xFF7DB7FF);
+      case 'B':
+        return const Color(0xFF5C5C66);
+      case 'R':
+        return const Color(0xFFE27A5E);
+      case 'G':
+        return const Color(0xFF74B77F);
+      case 'C':
+        return const Color(0xFF9AA2AD);
+      default:
+        if (RegExp(r'^\d+$').hasMatch(token)) {
+          return const Color(0xFF8F949C);
+        }
+        return const Color(0xFF7A8088);
+    }
+  }
+
+  Widget _buildRecentManaCostPips(String manaCost) {
+    final tokens = _recentManaTokens(manaCost);
+    if (tokens.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: tokens.map((token) {
+        final color = _recentManaPipColor(token);
+        final isColoredSingle = const {'W', 'U', 'B', 'R', 'G'}.contains(token);
+        final label = isColoredSingle ? '' : token;
+        return Container(
+          width: 23,
+          height: 23,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: const Color(0xFF3A2F24)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: label.isEmpty
+              ? null
+              : Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF1A1714),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+        );
+      }).toList(growable: false),
+    );
+  }
+
+  String _subtitleLabelForRecentEntry(CollectionCardEntry entry) {
+    final setLabel = entry.setName.trim().isNotEmpty
+        ? entry.setName.trim()
+        : entry.setCode.toUpperCase();
+    final progress = entry.collectorNumber.trim();
+    if (setLabel.isEmpty) {
+      return progress;
+    }
+    if (progress.isEmpty) {
+      return setLabel;
+    }
+    return '$setLabel \u2022 $progress';
+  }
+
+  List<_CardDetail> _parseRecentCardDetails(
+    AppLocalizations l10n,
+    CollectionCardEntry entry,
+    List<String> legalFormats,
+    String priceCurrency,
+  ) {
+    final setLabel = entry.setName.trim().isNotEmpty
+        ? entry.setName.trim()
+        : entry.setCode.toUpperCase();
+    final details = <_CardDetail>[
+      _CardDetail(l10n.detailSet, setLabel),
+      _CardDetail(l10n.detailCollector, entry.collectorNumber),
+    ];
+
+    void add(String label, String value) {
+      final text = value.trim();
+      if (text.isEmpty) {
+        return;
+      }
+      details.add(_CardDetail(label, text));
+    }
+
+    add(l10n.detailRarity, entry.rarity);
+    add(l10n.detailSetName, entry.setName);
+    add(l10n.detailLanguage, entry.lang);
+    add(l10n.detailRelease, entry.releasedAt);
+    add(l10n.detailArtist, entry.artist);
+    final legalFormatLabels = _normalizeFormatLabels(legalFormats);
+    if (legalFormatLabels.isNotEmpty) {
+      add(l10n.detailFormat, legalFormatLabels.join(', '));
+    }
+    final normalizedCurrency = priceCurrency.trim().toLowerCase();
+    if (normalizedCurrency == 'usd') {
+      add('Price (USD)', _displayRecentUsdPrice(entry));
+    } else {
+      add('Price (EUR)', _displayRecentEurPrice(entry));
+    }
+    return details.where((item) => item.value.isNotEmpty).toList();
+  }
+
+  String _displayRecentEurPrice(CollectionCardEntry entry) {
+    final base = _normalizePriceValue(entry.priceEur);
+    final foil = _normalizePriceValue(entry.priceEurFoil);
+    final selected = entry.foil ? (foil ?? base) : base;
+    if (selected == null) {
+      return '\u2014';
+    }
+    return 'EUR $selected';
+  }
+
+  String _displayRecentUsdPrice(CollectionCardEntry entry) {
+    final base = _normalizePriceValue(entry.priceUsd);
+    final foil = _normalizePriceValue(entry.priceUsdFoil);
+    final selected = entry.foil ? (foil ?? base) : base;
+    if (selected == null) {
+      return '\u2014';
+    }
+    return 'USD $selected';
+  }
+
+  String? _normalizePriceValue(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
+  }
+
+  List<String> _normalizeFormatLabels(List<String> rawFormats) {
+    final normalized = <String>{};
+    for (final item in rawFormats) {
+      final value = item.trim().toLowerCase();
+      if (value.isNotEmpty) {
+        normalized.add(value);
+      }
+    }
+    final values = normalized.toList();
+    values.sort((a, b) {
+      final ai = kSupportedDeckFormats.indexOf(a);
+      final bi = kSupportedDeckFormats.indexOf(b);
+      if (ai == -1 && bi == -1) {
+        return a.compareTo(b);
+      }
+      if (ai == -1) {
+        return 1;
+      }
+      if (bi == -1) {
+        return -1;
+      }
+      return ai.compareTo(bi);
+    });
+    return values.map(deckFormatLabel).toList();
+  }
+
+  String _joinStats(String power, String toughness) {
+    final p = power.trim();
+    final t = toughness.trim();
+    if (p.isEmpty && t.isEmpty) {
+      return '';
+    }
+    if (p.isEmpty) {
+      return t;
+    }
+    if (t.isEmpty) {
+      return p;
+    }
+    return '$p/$t';
+  }
+
+  Widget _buildRecentDetailGrid(List<_CardDetail> details) {
+    if (details.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = (constraints.maxWidth - 12) / 2;
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: details
+              .map(
+                (item) => SizedBox(
+                  width: width,
+                  child: _DetailRow(label: item.label, value: item.value),
+                ),
+              )
+              .toList(),
+        );
+      },
+    );
   }
 
   Widget _buildCollectionsMenu() {
@@ -2012,7 +2491,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    final controller = TextEditingController(text: l10n.wishlistDefaultName);
+    final defaultName = _nextProgressiveCollectionName(
+      l10n.wishlistCollectionTitle,
+    );
+    final controller = TextEditingController(text: defaultName);
     final name = await showDialog<String>(
       context: context,
       builder: (context) {
@@ -2033,7 +2515,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 final value = controller.text.trim();
                 Navigator.of(
                   context,
-                ).pop(value.isEmpty ? l10n.wishlistDefaultName : value);
+                ).pop(value.isEmpty ? defaultName : value);
               },
               child: Text(l10n.create),
             ),
@@ -2141,11 +2623,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _showCustomCollectionLimitDialog();
       return;
     }
-    final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
+    final defaultName = _nextProgressiveCollectionName(
+      l10n.customCollectionTitle,
+    );
+    final controller = TextEditingController(text: defaultName);
     final name = await showDialog<String>(
       context: context,
       builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
         return AlertDialog(
           title: Text(l10n.newCollectionTitle),
           content: TextField(
@@ -2161,7 +2646,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             FilledButton(
               onPressed: () {
                 final value = controller.text.trim();
-                Navigator.of(context).pop(value.isEmpty ? null : value);
+                Navigator.of(context).pop(value.isEmpty ? defaultName : value);
               },
               child: Text(l10n.create),
             ),
@@ -2272,7 +2757,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    final defaultName = l10n.smartCollectionDefaultName;
+    final defaultName = _nextProgressiveCollectionName(
+      l10n.smartCollectionDefaultName,
+    );
     final controller = TextEditingController(text: defaultName);
     final name = await showDialog<String>(
       context: context,
@@ -2514,14 +3001,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _showDeckCollectionLimitDialog();
       return;
     }
-    final controller = TextEditingController();
+    final l10n = AppLocalizations.of(context)!;
+    final defaultName = _nextProgressiveCollectionName(l10n.deckCollectionTitle);
+    final controller = TextEditingController(text: defaultName);
     final allowDeckImport = _isMtgActiveGame;
     String? selectedFormat;
     _DeckImportSource? importSource;
     final request = await showDialog<_DeckCreateRequest>(
       context: context,
       builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
@@ -2612,13 +3100,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 FilledButton(
                   onPressed: () {
                     final value = controller.text.trim();
-                    if (value.isEmpty) {
-                      Navigator.of(context).pop();
-                      return;
-                    }
                     Navigator.of(context).pop(
                       _DeckCreateRequest(
-                        name: value,
+                        name: value.isEmpty ? defaultName : value,
                         format: allowDeckImport ? selectedFormat : null,
                         importSource: allowDeckImport ? importSource : null,
                       ),
@@ -3257,11 +3741,35 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _showHomeAddOptions(BuildContext context) async {
+    switch (_activeCollectionsMenu) {
+      case _HomeCollectionsMenu.set:
+        return _addSetCollection(context);
+      case _HomeCollectionsMenu.custom:
+        return _addCustomCollection(context);
+      case _HomeCollectionsMenu.smart:
+        return _addSmartCollection(context);
+      case _HomeCollectionsMenu.deck:
+        return _addDeckCollection(context);
+      case _HomeCollectionsMenu.wish:
+        return _addWishlistCollection(context);
+      case _HomeCollectionsMenu.home:
+        break;
+    }
+
+    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
+    final canCreateCustom =
+        _canCreateCollection() && _canCreateCustomCollection();
+    final canCreateSmart =
+        _canCreateCollection() && _canCreateCustomCollection();
     final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
+    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
     final addContext = switch (_activeCollectionsMenu) {
       _HomeCollectionsMenu.home => _HomeAddContext.home,
+      _HomeCollectionsMenu.set => _HomeAddContext.set,
+      _HomeCollectionsMenu.custom => _HomeAddContext.custom,
+      _HomeCollectionsMenu.smart => _HomeAddContext.smart,
+      _HomeCollectionsMenu.deck => _HomeAddContext.deck,
       _HomeCollectionsMenu.wish => _HomeAddContext.wishlist,
-      _ => _HomeAddContext.collections,
     };
     final selection = await showModalBottomSheet<_HomeAddAction>(
       context: context,
@@ -3269,6 +3777,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       backgroundColor: Colors.transparent,
       builder: (context) => _HomeAddSheet(
         addContext: addContext,
+        canCreateSet: canCreateSet,
+        canCreateCustom: canCreateCustom,
+        canCreateSmart: canCreateSmart,
+        canCreateDeck: canCreateDeck,
         canCreateWishlist: canCreateWishlist,
       ),
     );
@@ -3281,6 +3793,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _openAddCardsForAllCards(context);
     } else if (selection == _HomeAddAction.addCollection) {
       await _showCreateCollectionOptions(context);
+    } else if (selection == _HomeAddAction.addSetCollection) {
+      await _addSetCollection(context);
+    } else if (selection == _HomeAddAction.addCustomCollection) {
+      await _addCustomCollection(context);
+    } else if (selection == _HomeAddAction.addSmartCollection) {
+      await _addSmartCollection(context);
+    } else if (selection == _HomeAddAction.addDeck) {
+      await _addDeckCollection(context);
     } else if (selection == _HomeAddAction.addWishlist) {
       await _addWishlistCollection(context);
     }
@@ -6032,9 +6552,97 @@ class _CollectionCard extends StatelessWidget {
 }
 
 class _RecentAddedCardTile extends StatelessWidget {
-  const _RecentAddedCardTile({required this.card});
+  const _RecentAddedCardTile({
+    required this.card,
+    required this.priceLabel,
+    required this.showPrice,
+    required this.onTap,
+  });
 
   final CardSearchResult card;
+  final String priceLabel;
+  final bool showPrice;
+  final VoidCallback onTap;
+
+  Decoration _homeCardTintDecoration(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surface;
+    final accents = _accentColorsForCard(
+      colors: card.colors,
+      colorIdentity: card.colorIdentity,
+      typeLine: card.typeLine,
+    );
+    if (accents.isEmpty) {
+      return BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      );
+    }
+    final tintStops = accents
+        .map((color) => Color.lerp(base, color, 0.35) ?? base)
+        .toList();
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: tintStops.length == 1 ? [base, tintStops.first] : tintStops,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.35),
+          blurRadius: 18,
+          offset: const Offset(0, 10),
+        ),
+      ],
+    );
+  }
+
+  Decoration _homePriceBadgeDecoration(BuildContext context) {
+    final base = Theme.of(context).colorScheme.surface;
+    final accents = _accentColorsForCard(
+      colors: card.colors,
+      colorIdentity: card.colorIdentity,
+      typeLine: card.typeLine,
+    );
+    if (accents.isEmpty) {
+      return BoxDecoration(
+        color: Color.lerp(base, Colors.black, 0.08) ?? base,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0x4A5D4731)),
+      );
+    }
+    final tintStops = accents
+        .map((color) => Color.lerp(base, color, 0.35) ?? base)
+        .toList();
+    return BoxDecoration(
+      gradient: LinearGradient(
+        colors: tintStops.length == 1 ? [base, tintStops.first] : tintStops,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0x4A5D4731)),
+    );
+  }
+
+  Widget _buildRaritySquare(String rarity) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: _rarityColor(rarity),
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: const Color(0xFF3A2F24)),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6042,66 +6650,111 @@ class _RecentAddedCardTile extends StatelessWidget {
     final setLabel = card.setName.trim().isNotEmpty
         ? card.setName.trim()
         : card.setCode.toUpperCase();
-    return Container(
+    return SizedBox(
       width: 164,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0x335D4731)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Stack(
+          clipBehavior: Clip.none,
           children: [
-            Expanded(
-              child: imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: const Color(0x221D1712),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.image_not_supported,
-                          color: Color(0xFFBFAE95),
-                        ),
-                      ),
-                    )
-                  : Container(
-                      color: const Color(0x221D1712),
-                      alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.image_not_supported,
-                        color: Color(0xFFBFAE95),
-                      ),
-                    ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
-              color: const Color(0xA81D1712),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    card.name,
+            if (showPrice)
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: -6,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(12, 11, 12, 2),
+                  decoration: _homePriceBadgeDecoration(context),
+                  child: Text(
+                    AppLocalizations.of(context)!.priceLabel(priceLabel),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: const Color(0xFFF3E8D0),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    setLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFFBFAE95),
+                      color: const Color(0xFFEFE7D8),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                ],
+                ),
+              ),
+            Container(
+              margin: EdgeInsets.only(bottom: showPrice ? 18 : 0),
+              decoration: _homeCardTintDecoration(context),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: imageUrl.isNotEmpty
+                          ? Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Container(
+                                    color: const Color(0x221D1712),
+                                    alignment: Alignment.center,
+                                    child: const Icon(
+                                      Icons.image_not_supported,
+                                      color: Color(0xFFBFAE95),
+                                    ),
+                                  ),
+                            )
+                          : Container(
+                              color: const Color(0x221D1712),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.image_not_supported,
+                                color: Color(0xFFBFAE95),
+                              ),
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: 22,
+                            child: Text(
+                              card.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(
+                                    color: const Color(0xFFF3E8D0),
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              _buildSetIcon(card.setCode, size: 20),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  setLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFFBFAE95),
+                                      ),
+                                ),
+                              ),
+                              if (card.rarity.trim().isNotEmpty) ...[
+                                const SizedBox(width: 6),
+                                _buildRaritySquare(card.rarity),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -6160,10 +6813,18 @@ class _DividerGlow extends StatelessWidget {
 class _HomeAddSheet extends StatelessWidget {
   const _HomeAddSheet({
     required this.addContext,
+    required this.canCreateSet,
+    required this.canCreateCustom,
+    required this.canCreateSmart,
+    required this.canCreateDeck,
     required this.canCreateWishlist,
   });
 
   final _HomeAddContext addContext;
+  final bool canCreateSet;
+  final bool canCreateCustom;
+  final bool canCreateSmart;
+  final bool canCreateDeck;
   final bool canCreateWishlist;
 
   @override
@@ -6221,6 +6882,19 @@ class _HomeAddSheet extends StatelessWidget {
                         Navigator.of(context).pop(_HomeAddAction.addCollection),
                   ),
                   Opacity(
+                    opacity: canCreateDeck ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.view_carousel_rounded),
+                      title: Text(l10n.deckCollectionTitle),
+                      subtitle: canCreateDeck
+                          ? Text(l10n.deckCollectionSubtitle)
+                          : Text(l10n.upgradeToPro),
+                      onTap: canCreateDeck
+                          ? () => Navigator.of(context).pop(_HomeAddAction.addDeck)
+                          : null,
+                    ),
+                  ),
+                  Opacity(
                     opacity: canCreateWishlist ? 1.0 : 0.55,
                     child: ListTile(
                       leading: const Icon(Icons.favorite_border_rounded),
@@ -6244,6 +6918,64 @@ class _HomeAddSheet extends StatelessWidget {
                       onTap: canCreateWishlist
                           ? () =>
                                 Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                          : null,
+                    ),
+                  ),
+                ] else if (addContext == _HomeAddContext.set) ...[
+                  Opacity(
+                    opacity: canCreateSet ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_awesome_mosaic),
+                      title: Text(l10n.setCollectionTitle),
+                      subtitle: Text(l10n.setCollectionSubtitle),
+                      onTap: canCreateSet
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addSetCollection)
+                          : null,
+                    ),
+                  ),
+                ] else if (addContext == _HomeAddContext.custom) ...[
+                  Opacity(
+                    opacity: canCreateCustom ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.tune),
+                      title: Text(l10n.customCollectionTitle),
+                      subtitle: Text(l10n.customCollectionSubtitle),
+                      onTap: canCreateCustom
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addCustomCollection)
+                          : null,
+                    ),
+                  ),
+                ] else if (addContext == _HomeAddContext.smart) ...[
+                  Opacity(
+                    opacity: canCreateSmart ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_fix_high_rounded),
+                      title: Text(_isItalianUi(context) ? 'Smart collection' : 'Smart collection'),
+                      subtitle: Text(
+                        _isItalianUi(context)
+                            ? 'Salva un filtro dinamico e mostra solo le carte possedute.'
+                            : 'Save a dynamic filter and show only owned cards.',
+                      ),
+                      onTap: canCreateSmart
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addSmartCollection)
+                          : null,
+                    ),
+                  ),
+                ] else if (addContext == _HomeAddContext.deck) ...[
+                  Opacity(
+                    opacity: canCreateDeck ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.view_carousel_rounded),
+                      title: Text(l10n.deckCollectionTitle),
+                      subtitle: Text(l10n.deckCollectionSubtitle),
+                      onTap: canCreateDeck
+                          ? () => Navigator.of(context).pop(_HomeAddAction.addDeck)
                           : null,
                     ),
                   ),
@@ -6275,14 +7007,6 @@ class _HomeAddSheet extends StatelessWidget {
                           : null,
                     ),
                   ),
-                ] else ...[
-                  ListTile(
-                    leading: const Icon(Icons.collections_bookmark),
-                    title: Text(l10n.addCollection),
-                    subtitle: Text(l10n.addCollectionSubtitle),
-                    onTap: () =>
-                        Navigator.of(context).pop(_HomeAddAction.addCollection),
-                  ),
                 ],
               ],
             ),
@@ -6290,6 +7014,13 @@ class _HomeAddSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool _isItalianUi(BuildContext context) {
+    return Localizations.localeOf(context)
+        .languageCode
+        .toLowerCase()
+        .startsWith('it');
   }
 }
 
@@ -7045,7 +7776,7 @@ class _ResolvedScanSelection {
 
 enum _ScanPreviewAction { add, retry }
 
-enum _HomeAddContext { home, collections, wishlist }
+enum _HomeAddContext { home, set, custom, smart, deck, wishlist }
 
 Future<CardSearchResult?> _pickCardPrintingForName(
   BuildContext context,
@@ -8657,7 +9388,16 @@ enum _CollectionAction {
 
 enum _HomeCollectionsMenu { home, set, custom, smart, wish, deck }
 
-enum _HomeAddAction { addByScan, addCards, addCollection, addWishlist }
+enum _HomeAddAction {
+  addByScan,
+  addCards,
+  addCollection,
+  addSetCollection,
+  addCustomCollection,
+  addSmartCollection,
+  addDeck,
+  addWishlist,
+}
 
 enum _CollectionCreateAction { custom, smart, setBased, deck }
 
