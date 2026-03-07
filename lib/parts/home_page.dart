@@ -8202,6 +8202,12 @@ class _CardScannerPageState extends State<_CardScannerPage>
       return;
     }
     final l10n = AppLocalizations.of(context)!;
+    final showPokemonNote =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
+    final localeCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final pokemonTutorialNote = localeCode.startsWith('it')
+        ? 'Nota Pokemon: l\'OCR puo avere difficolta a identificare la carta corretta, perche molti nomi non sono univoci. Lo scanner verra migliorato nelle prossime release.'
+        : 'Pokemon note: OCR can struggle to identify the exact card because many card names are not unique. Scanner accuracy will improve in upcoming releases.';
     var dontShowAgain = false;
     await showDialog<void>(
       context: context,
@@ -8220,6 +8226,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 Text(l10n.scannerTutorialFoil),
                 Text(l10n.scannerTutorialCheck),
                 Text(l10n.scannerTutorialFlash),
+                if (showPokemonNote) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    pokemonTutorialNote,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: const Color(0xFFE9C46A),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 CheckboxListTile(
                   value: dontShowAgain,
