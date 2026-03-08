@@ -219,14 +219,21 @@ String _whatsNewLabel(BuildContext context) {
 Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
   final l10n = AppLocalizations.of(context)!;
   final title = l10n.whatsNewDialogTitle;
-  final lines = <String>[
-    l10n.whatsNewLine1,
-    l10n.whatsNewLine2,
+  final localeIsItalian = Localizations.localeOf(
+    context,
+  ).languageCode.toLowerCase().startsWith('it');
+  final featureSectionTitle = localeIsItalian ? 'Feature' : 'Features';
+  final bugFixSectionTitle = localeIsItalian ? 'Bug fix' : 'Bug fixes';
+  final featureLines = <String>[
     l10n.whatsNewLine3,
     l10n.whatsNewLine4,
     l10n.whatsNewLine5,
     l10n.whatsNewLine6,
     l10n.whatsNewLine7,
+  ];
+  final bugFixLines = <String>[
+    l10n.whatsNewLine1,
+    l10n.whatsNewLine2,
     l10n.whatsNewLine8,
     l10n.whatsNewLine9,
   ];
@@ -242,7 +249,23 @@ Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final line in lines)
+              Text(
+                featureSectionTitle,
+                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              for (final line in featureLines)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('- $line', style: textTheme.bodyMedium),
+                ),
+              const SizedBox(height: 4),
+              Text(
+                bugFixSectionTitle,
+                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              for (final line in bugFixLines)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text('- $line', style: textTheme.bodyMedium),

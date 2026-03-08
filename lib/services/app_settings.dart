@@ -31,6 +31,8 @@ class AppSettings {
   static const _prefsKeyExtraTcgSlots = 'extra_tcg_slots';
   static const _prefsKeyPokemonDatasetProfile = 'pokemon_dataset_profile';
   static const _prefsKeyAppFirstOpenFlag = 'app_first_open_flag';
+  static const _prefsKeyCardLanguageOnboardingDone =
+      'card_language_onboarding_done';
   static const _prefsKeyCollectionCoherenceCheckVersionPrefix =
       'collection_coherence_check_version';
   static const _prefsKeyPrimaryGamePromptVersion = 'primary_game_prompt_version';
@@ -46,22 +48,6 @@ class AppSettings {
   static const List<String> languageCodes = [
     'en',
     'it',
-    'fr',
-    'de',
-    'es',
-    'pt',
-    'ja',
-    'ko',
-    'ru',
-    'zhs',
-    'zht',
-    'ar',
-    'he',
-    'la',
-    'grc',
-    'sa',
-    'ph',
-    'qya',
   ];
 
   static const List<String> defaultLanguages = ['en'];
@@ -438,6 +424,7 @@ class AppSettings {
     await prefs.remove(_prefsKeyExtraTcgSlots);
     await prefs.remove(_prefsKeyPokemonDatasetProfile);
     await prefs.remove(_prefsKeyAppFirstOpenFlag);
+    await prefs.remove(_prefsKeyCardLanguageOnboardingDone);
     await prefs.remove(
       _prefsKeyCollectionCoherenceCheckVersionForGame(AppTcgGame.mtg),
     );
@@ -478,6 +465,16 @@ class AppSettings {
     final prefs = await SharedPreferences.getInstance();
     final normalized = value == 0 ? 0 : 1;
     await prefs.setInt(_prefsKeyAppFirstOpenFlag, normalized);
+  }
+
+  static Future<bool> loadCardLanguageOnboardingDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_prefsKeyCardLanguageOnboardingDone) ?? false;
+  }
+
+  static Future<void> saveCardLanguageOnboardingDone(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyCardLanguageOnboardingDone, value);
   }
 
   static Future<CollectionViewMode> loadCollectionViewMode() async {

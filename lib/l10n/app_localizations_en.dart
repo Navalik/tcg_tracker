@@ -1693,19 +1693,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whatsNewLine2 =>
-      'Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.';
+      'Add (+1) behavior and free limits are now coherent: deleting a collection always frees the promised slot.';
 
   @override
   String get whatsNewLine3 =>
-      'Improved multi-TCG support: data is isolated between Magic and Pokemon.';
+      'Languages updated: guided onboarding for app language and card languages; Pokemon source is currently English-only (Italian coming soon).';
 
   @override
   String get whatsNewLine4 =>
-      'Home updated: under All cards you now see the latest additions in gallery mode.';
+      'New Home gallery look: under All cards, latest additions are now clearer and easier to scan.';
 
   @override
   String get whatsNewLine5 =>
-      'Better first-open onboarding message to help users start faster.';
+      'First-open onboarding is now sequential: steps appear one after another with no overlap.';
 
   @override
   String get whatsNewLine6 =>

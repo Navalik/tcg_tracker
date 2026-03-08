@@ -120,6 +120,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         () => AppSettings.loadAppFirstOpenFlag(),
       ) ??
           0;
+      final cardLanguageOnboardingDone =
+          await runStep<bool>(
+        'load_card_language_onboarding_done',
+        () => AppSettings.loadCardLanguageOnboardingDone(),
+      ) ??
+          false;
+      final shouldRunCardLanguageOnboarding = !cardLanguageOnboardingDone;
       if (mounted) {
         setState(() {
           _priceCurrency = priceCurrency;
@@ -128,9 +135,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         });
       }
       final isFirstOpen = firstOpenFlag == 1;
-      if (isFirstOpen) {
-        await runStep('save_first_open_flag', () => AppSettings.saveAppFirstOpenFlag(0));
-      }
       await runStep(
         'release_notes_pre',
         () => _maybeShowLatestReleaseNotesBeforeDbDownloads(),
@@ -141,12 +145,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         () => _ensurePrimaryGameSelectionOnFirstLaunch(),
         nonBlocking: true,
       );
-      if (isFirstOpen) {
+      if (shouldRunCardLanguageOnboarding) {
         await runStep(
-          'first_open_language_steps',
+          'card_language_onboarding',
           () => _runFirstOpenLanguageSteps(),
-          nonBlocking: true,
         );
+        await runStep(
+          'save_card_language_onboarding_done',
+          () => AppSettings.saveCardLanguageOnboardingDone(true),
+        );
+      }
+      if (isFirstOpen) {
+        await runStep('save_first_open_flag', () => AppSettings.saveAppFirstOpenFlag(0));
       }
       await runStep('env_init', () => TcgEnvironmentController.instance.init());
       if (!mounted) {
@@ -178,7 +188,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await runStep(
         'primary_game_prompt',
         () => _maybePromptPrimaryGameSelectionForCurrentRelease(
-          skipForFirstOpen: isFirstOpen,
+          skipForFirstOpen: isFirstOpen || shouldRunCardLanguageOnboarding,
         ),
         nonBlocking: true,
       );
@@ -332,16 +342,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       barrierDismissible: false,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final italian = Localizations.localeOf(
+          context,
+        ).languageCode.toLowerCase().startsWith('it');
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
               title: Text(
-                Localizations.localeOf(context)
-                        .languageCode
-                        .toLowerCase()
-                        .startsWith('it')
-                    ? 'Lingue carte'
-                    : 'Card languages',
+                italian ? 'Lingue carte' : 'Card languages',
               ),
               content: SizedBox(
                 width: 360,
@@ -351,13 +359,39 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        Localizations.localeOf(context)
-                                .languageCode
-                                .toLowerCase()
-                                .startsWith('it')
+                        italian
                             ? 'Inglese sempre incluso. Seleziona eventuali lingue aggiuntive.'
                             : 'English is always included. Select any additional languages.',
                         style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0x33A06A1A),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE9C46A)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.warning_amber_rounded,
+                              size: 18,
+                              color: Color(0xFFE9C46A),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                italian
+                                    ? 'Attenzione: le lingue aggiuntive funzionano offline solo con il database "All Cards". Con database piu piccoli, ricerca e risultati nelle lingue aggiuntive useranno internet.'
+                                    : 'Warning: additional languages work offline only with the "All Cards" database. With smaller databases, search and results in additional languages will use internet.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       ...choices.map(
@@ -389,12 +423,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(<String>{...mutable}),
                   child: Text(
-                    Localizations.localeOf(context)
-                            .languageCode
-                            .toLowerCase()
-                            .startsWith('it')
-                        ? 'Avanti'
-                        : 'Next',
+                    italian ? 'Avanti' : 'Next',
                   ),
                 ),
               ],
@@ -413,6 +442,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     bool skipForFirstOpen = false,
   }) async {
     if (skipForFirstOpen) {
+      return;
+    }
+    final alreadySelected = await AppSettings.hasPrimaryGameSelection();
+    if (alreadySelected) {
+      await AppSettings.savePrimaryGamePromptVersion(_latestReleaseNotesId);
       return;
     }
     final promptedVersion = await AppSettings.loadPrimaryGamePromptVersion();
@@ -3951,37 +3985,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _loadCollections();
   }
 
-  Future<void> _showCreateCollectionOptions(BuildContext context) async {
-    final canCreateSet = _canCreateSetCollection();
-    final canCreateCustom = _canCreateCustomCollection();
-    final canCreateSmart = _canCreateSmartCollection();
-    final canCreateDeck = _canCreateDeckCollection();
-    final selection = await showModalBottomSheet<_CollectionCreateAction>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _CreateCollectionSheet(
-          canCreateSet: canCreateSet,
-          canCreateCustom: canCreateCustom,
-          canCreateSmart: canCreateSmart,
-          canCreateDeck: canCreateDeck,
-        );
-      },
-    );
-    if (!context.mounted) {
-      return;
-    }
-    if (selection == _CollectionCreateAction.custom) {
-      await _addCustomCollection(context);
-    } else if (selection == _CollectionCreateAction.smart) {
-      await _addSmartCollection(context);
-    } else if (selection == _CollectionCreateAction.setBased) {
-      await _addSetCollection(context);
-    } else if (selection == _CollectionCreateAction.deck) {
-      await _addDeckCollection(context);
-    }
-  }
-
   Future<void> _showHomeAddOptions(BuildContext context) async {
     switch (_activeCollectionsMenu) {
       case _HomeCollectionsMenu.set:
@@ -4031,17 +4034,30 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _onScanCardPressed();
     } else if (selection == _HomeAddAction.addCards) {
       await _openAddCardsForAllCards(context);
-    } else if (selection == _HomeAddAction.addCollection) {
-      await _showCreateCollectionOptions(context);
     } else if (selection == _HomeAddAction.addSetCollection) {
+      setState(() {
+        _activeCollectionsMenu = _HomeCollectionsMenu.set;
+      });
       await _addSetCollection(context);
     } else if (selection == _HomeAddAction.addCustomCollection) {
+      setState(() {
+        _activeCollectionsMenu = _HomeCollectionsMenu.custom;
+      });
       await _addCustomCollection(context);
     } else if (selection == _HomeAddAction.addSmartCollection) {
+      setState(() {
+        _activeCollectionsMenu = _HomeCollectionsMenu.smart;
+      });
       await _addSmartCollection(context);
     } else if (selection == _HomeAddAction.addDeck) {
+      setState(() {
+        _activeCollectionsMenu = _HomeCollectionsMenu.deck;
+      });
       await _addDeckCollection(context);
     } else if (selection == _HomeAddAction.addWishlist) {
+      setState(() {
+        _activeCollectionsMenu = _HomeCollectionsMenu.wish;
+      });
       await _addWishlistCollection(context);
     }
   }
@@ -7287,12 +7303,64 @@ class _HomeAddSheet extends StatelessWidget {
                     onTap: () =>
                         Navigator.of(context).pop(_HomeAddAction.addCards),
                   ),
-                  ListTile(
-                    leading: const Icon(Icons.collections_bookmark),
-                    title: Text(l10n.addCollection),
-                    subtitle: Text(l10n.addCollectionSubtitle),
-                    onTap: () =>
-                        Navigator.of(context).pop(_HomeAddAction.addCollection),
+                  Opacity(
+                    opacity: canCreateSet ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_awesome_mosaic),
+                      title: Text(
+                        _isItalianUi(context)
+                            ? 'Aggiungi set tracker'
+                            : 'Add set tracker',
+                      ),
+                      subtitle: Text(
+                        _isItalianUi(context)
+                            ? 'Crea una collezione basata su set.'
+                            : 'Create a set-based collection.',
+                      ),
+                      onTap: canCreateSet
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addSetCollection)
+                          : null,
+                    ),
+                  ),
+                  Opacity(
+                    opacity: canCreateCustom ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.tune),
+                      title: Text(
+                        _isItalianUi(context)
+                            ? 'Aggiungi custom collection'
+                            : 'Add custom collection',
+                      ),
+                      subtitle: Text(l10n.customCollectionSubtitle),
+                      onTap: canCreateCustom
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addCustomCollection)
+                          : null,
+                    ),
+                  ),
+                  Opacity(
+                    opacity: canCreateSmart ? 1.0 : 0.55,
+                    child: ListTile(
+                      leading: const Icon(Icons.auto_fix_high_rounded),
+                      title: Text(
+                        _isItalianUi(context)
+                            ? 'Aggiungi smart collection'
+                            : 'Add smart collection',
+                      ),
+                      subtitle: Text(
+                        _isItalianUi(context)
+                            ? 'Salva un filtro dinamico e mostra solo le carte possedute.'
+                            : 'Save a dynamic filter and show only owned cards.',
+                      ),
+                      onTap: canCreateSmart
+                          ? () => Navigator.of(
+                                context,
+                              ).pop(_HomeAddAction.addSmartCollection)
+                          : null,
+                    ),
                   ),
                   Opacity(
                     opacity: canCreateDeck ? 1.0 : 0.55,
@@ -8036,131 +8104,6 @@ class _CollectionFilterBuilderPageState
         ],
       ),
     );
-  }
-}
-
-class _CreateCollectionSheet extends StatelessWidget {
-  const _CreateCollectionSheet({
-    required this.canCreateSet,
-    required this.canCreateCustom,
-    required this.canCreateSmart,
-    required this.canCreateDeck,
-  });
-
-  final bool canCreateSet;
-  final bool canCreateCustom;
-  final bool canCreateSmart;
-  final bool canCreateDeck;
-
-  Widget _buildCreateOption(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    final l10n = AppLocalizations.of(context)!;
-    return Opacity(
-      opacity: enabled ? 1.0 : 0.55,
-      child: ListTile(
-        leading: Icon(icon),
-        title: Text(title),
-        subtitle: enabled
-            ? Text(subtitle)
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.upgradeToPro,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: const Color(0xFFE9C46A),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(subtitle),
-                ],
-              ),
-        onTap: enabled ? onTap : null,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            l10n.createCollectionTitle,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 12),
-          _buildCreateOption(
-            context,
-            icon: Icons.auto_awesome_mosaic,
-            title: l10n.setCollectionTitle,
-            subtitle: l10n.setCollectionSubtitle,
-            enabled: canCreateSet,
-            onTap: () =>
-                Navigator.of(context).pop(_CollectionCreateAction.setBased),
-          ),
-          _buildCreateOption(
-            context,
-            icon: Icons.tune,
-            title: l10n.customCollectionTitle,
-            subtitle: l10n.customCollectionSubtitle,
-            enabled: canCreateCustom,
-            onTap: () =>
-                Navigator.of(context).pop(_CollectionCreateAction.custom),
-          ),
-          _buildCreateOption(
-            context,
-            icon: Icons.auto_fix_high_rounded,
-            title: _isItalianUi(context)
-                ? 'Smart collection'
-                : 'Smart collection',
-            subtitle: _isItalianUi(context)
-                ? 'Salva un filtro dinamico e mostra solo le carte possedute.'
-                : 'Save a dynamic filter and show only owned cards.',
-            enabled: canCreateSmart,
-            onTap: () =>
-                Navigator.of(context).pop(_CollectionCreateAction.smart),
-          ),
-          _buildCreateOption(
-            context,
-            icon: Icons.view_carousel_rounded,
-            title: l10n.deckCollectionTitle,
-            subtitle: l10n.deckCollectionSubtitle,
-            enabled: canCreateDeck,
-            onTap: () =>
-                Navigator.of(context).pop(_CollectionCreateAction.deck),
-          ),
-        ],
-      ),
-    );
-  }
-
-  bool _isItalianUi(BuildContext context) {
-    return Localizations.localeOf(context)
-        .languageCode
-        .toLowerCase()
-        .startsWith('it');
   }
 }
 
@@ -10049,15 +9992,12 @@ enum _HomeCollectionsMenu { home, set, custom, smart, wish, deck }
 enum _HomeAddAction {
   addByScan,
   addCards,
-  addCollection,
   addSetCollection,
   addCustomCollection,
   addSmartCollection,
   addDeck,
   addWishlist,
 }
-
-enum _CollectionCreateAction { custom, smart, setBased, deck }
 
 class _SnakeProgressBar extends StatelessWidget {
   const _SnakeProgressBar({required this.animation, required this.value});

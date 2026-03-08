@@ -1714,19 +1714,19 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get whatsNewLine2 =>
-      'Comportamento coerente per Set, Custom, Smart e Wishlist, con regole di auto-aggiornamento.';
+      'Comportamento add (+1) e limiti free resi coerenti: eliminando una collezione si libera sempre lo slot promesso.';
 
   @override
   String get whatsNewLine3 =>
-      'Supporto multi-TCG migliorato: dati separati tra Magic e Pokemon.';
+      'Lingue aggiornate: onboarding guidato per lingua app e lingue carte; su Pokemon la sorgente attuale e solo inglese (italiano in arrivo).';
 
   @override
   String get whatsNewLine4 =>
-      'Home aggiornata: sotto All cards trovi gli ultimi inserimenti in galleria.';
+      'Nuova grafica galleria in Home: sotto All cards gli ultimi inserimenti sono piu chiari e leggibili.';
 
   @override
   String get whatsNewLine5 =>
-      'Prima apertura migliorata con messaggio onboarding per iniziare piu rapidamente.';
+      'Onboarding primo avvio reso sequenziale: i passaggi ora compaiono uno dopo l\'altro senza sovrapporsi.';
 
   @override
   String get whatsNewLine6 =>

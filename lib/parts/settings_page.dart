@@ -7,6 +7,8 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SettingsPageState();
 }
 
+enum _BackupTarget { local, cloud }
+
 class _SettingsPageState extends State<SettingsPage> {
   static const String _pokemonOwnershipKey =
       PurchaseManager.pokemonOwnershipKey;
@@ -29,6 +31,109 @@ class _SettingsPageState extends State<SettingsPage> {
   Set<String> _ownedTcgs = const <String>{};
   late final PurchaseManager _purchaseManager;
   late final VoidCallback _purchaseListener;
+
+  Future<_BackupTarget?> _pickBackupTarget({required bool forImport}) async {
+    if (!mounted) {
+      return null;
+    }
+    final italian = _isItalianUi;
+    final title = italian
+        ? (forImport ? 'Import backup' : 'Export backup')
+        : (forImport ? 'Import backup' : 'Export backup');
+    final localSubtitle = italian
+        ? (forImport
+              ? 'Seleziona un file locale sul dispositivo.'
+              : 'Salva un file locale sul dispositivo.')
+        : (forImport
+              ? 'Select a local file on this device.'
+              : 'Save a local file on this device.');
+    final cloudSubtitle = italian
+        ? 'Backup cloud (in arrivo).'
+        : 'Cloud backup (coming soon).';
+    return showDialog<_BackupTarget>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.phone_android_rounded),
+              title: Text(italian ? 'Locale' : 'Local'),
+              subtitle: Text(localSubtitle),
+              onTap: () => Navigator.of(context).pop(_BackupTarget.local),
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_outlined),
+              title: Text('Cloud'),
+              subtitle: Text(cloudSubtitle),
+              onTap: () => Navigator.of(context).pop(_BackupTarget.cloud),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(AppLocalizations.of(context)!.cancel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showCloudBackupComingSoon({required bool forImport}) async {
+    if (!mounted) {
+      return;
+    }
+    final italian = _isItalianUi;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          italian ? 'Backup cloud in arrivo' : 'Cloud backup coming soon',
+        ),
+        content: Text(
+          italian
+              ? 'Il backup cloud non e ancora attivo in questa release. Usa il backup locale per ora.'
+              : 'Cloud backup is not enabled in this release yet. Use local backup for now.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              forImport
+                  ? AppLocalizations.of(context)!.backupImport
+                  : AppLocalizations.of(context)!.backupExport,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _exportBackup() async {
+    final target = await _pickBackupTarget(forImport: false);
+    if (target == null || !mounted) {
+      return;
+    }
+    if (target == _BackupTarget.local) {
+      await _exportLocalBackup();
+      return;
+    }
+    await _showCloudBackupComingSoon(forImport: false);
+  }
+
+  Future<void> _importBackup() async {
+    final target = await _pickBackupTarget(forImport: true);
+    if (target == null || !mounted) {
+      return;
+    }
+    if (target == _BackupTarget.local) {
+      await _importLocalBackup();
+      return;
+    }
+    await _showCloudBackupComingSoon(forImport: true);
+  }
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
   bool get _isItalianUi => Localizations.localeOf(
@@ -791,30 +896,38 @@ class _SettingsPageState extends State<SettingsPage> {
     final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
     final normalizedBulk = (bulkType ?? '').trim().toLowerCase();
     final requiresAllCards = enabled && normalizedBulk != 'all_cards';
+    final canReimportNow = !requiresAllCards;
     final shouldReimportNow = await showDialog<bool>(
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
         final body = requiresAllCards
             ? (_isItalianUi
-                  ? 'Lingue $gameLabel aggiornate. Per la ricerca locale in italiano usa il database "All Cards". Poi reimporta.'
-                  : '$gameLabel languages updated. For Italian local search, use the "All Cards" database. Then reimport.')
+                  ? 'Lingue $gameLabel aggiornate. Con il database corrente le carte italiane saranno visibili solo online. Per averle in locale devi usare il database "All Cards".'
+                  : '$gameLabel languages updated. With the current database, Italian cards will be visible online only. To have them locally, switch to the "All Cards" database.')
             : (_isItalianUi
                   ? 'Lingue $gameLabel aggiornate. Per applicare la modifica devi reimportare il database locale.'
                   : '$gameLabel languages updated. Reimport the local database to apply this change.');
         return AlertDialog(
           title: Text(_isItalianUi ? 'Lingue aggiornate' : 'Languages updated'),
           content: Text(body),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(l10n.notNow),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(_reimportLabel()),
-            ),
-          ],
+          actions: canReimportNow
+              ? [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(l10n.notNow),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: Text(_reimportLabel()),
+                  ),
+                ]
+              : [
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: Text(l10n.continueLabel),
+                  ),
+                ],
         );
       },
     );
@@ -2121,7 +2234,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       children: [
                         Expanded(
                           child: OutlinedButton.icon(
-                            onPressed: _backupBusy ? null : _exportLocalBackup,
+                            onPressed: _backupBusy ? null : _exportBackup,
                             icon: const Icon(Icons.upload_file_rounded),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
@@ -2132,7 +2245,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         const SizedBox(width: 10),
                         Expanded(
                           child: FilledButton.icon(
-                            onPressed: _backupBusy ? null : _importLocalBackup,
+                            onPressed: _backupBusy ? null : _importBackup,
                             icon: const Icon(Icons.download_rounded),
                             label: Text(l10n.backupImport),
                           ),

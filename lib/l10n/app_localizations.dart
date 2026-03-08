@@ -3071,25 +3071,25 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.'**
+  /// **'Add (+1) behavior and free limits are now coherent: deleting a collection always frees the promised slot.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'Improved multi-TCG support: data is isolated between Magic and Pokemon.'**
+  /// **'Languages updated: guided onboarding for app language and card languages; Pokemon source is currently English-only (Italian coming soon).'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Home updated: under All cards you now see the latest additions in gallery mode.'**
+  /// **'New Home gallery look: under All cards, latest additions are now clearer and easier to scan.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'Better first-open onboarding message to help users start faster.'**
+  /// **'First-open onboarding is now sequential: steps appear one after another with no overlap.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.

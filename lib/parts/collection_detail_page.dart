@@ -154,6 +154,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Set<String>? _cachedKnownSetCodesForScan;
   String _priceCurrency = 'eur';
   bool _showPrices = true;
+  bool _showOfflineLanguageDbWarning = false;
+  CollectionFilter? _collectionFilterOverride;
   static const List<String> _basicLandManaOrder = ['W', 'U', 'B', 'R', 'G'];
   InventoryService get _inventoryService => InventoryService.instance;
 
@@ -310,6 +312,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Future<void> _initialize() async {
     final priceCurrency = await AppSettings.loadPriceCurrency();
     final showPrices = await AppSettings.loadShowPrices();
+    await _refreshOfflineLanguageDbWarning();
     if (mounted) {
       setState(() {
         _priceCurrency = priceCurrency;
@@ -348,6 +351,24 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       });
     }
     await _loadCards();
+  }
+
+  Future<void> _refreshOfflineLanguageDbWarning() async {
+    final filter = _effectiveFilter();
+    final normalizedLanguages = (filter?.languages ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiresAdditionalLanguage = normalizedLanguages.any(
+      (value) => value != 'en',
+    );
+    if (!requiresAdditionalLanguage || _isPokemonActive) {
+      _showOfflineLanguageDbWarning = false;
+      return;
+    }
+    final mtgBulkType = await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
+    final normalizedBulk = (mtgBulkType ?? '').trim().toLowerCase();
+    _showOfflineLanguageDbWarning = normalizedBulk != 'all_cards';
   }
 
   Future<void> _loadViewMode() async {
@@ -695,7 +716,165 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         widget.isSetCollection && (widget.setCode?.trim().isNotEmpty ?? false)
         ? CollectionFilter(sets: {widget.setCode!.trim().toLowerCase()})
         : null;
-    return widget.filter ?? fallbackFilter;
+    return _collectionFilterOverride ?? widget.filter ?? fallbackFilter;
+  }
+
+  String _languageLabelForCode(AppLocalizations l10n, String code) {
+    final normalized = code.trim().toLowerCase();
+    if (normalized == 'it') {
+      return l10n.languageItalian;
+    }
+    return l10n.languageEnglish;
+  }
+
+  bool get _isSetCollectionUsingNonEnglishLanguage {
+    if (!widget.isSetCollection) {
+      return false;
+    }
+    final languages = (_effectiveFilter()?.languages ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    return languages.any((value) => value != 'en');
+  }
+
+  Future<void> _applySetCollectionLanguage(String languageCode) async {
+    final normalizedNext = languageCode.trim().toLowerCase();
+    if (normalizedNext.isEmpty) {
+      return;
+    }
+    final currentFilter = _effectiveFilter();
+    final currentLang =
+        (currentFilter?.languages.toList() ?? const <String>['en'])
+            .map((value) => value.trim().toLowerCase())
+            .firstWhere(
+              (value) => value.isNotEmpty,
+              orElse: () => 'en',
+            );
+    if (currentLang == normalizedNext) {
+      return;
+    }
+    final fallbackSetCode = widget.setCode?.trim().toLowerCase();
+    final nextSets = (currentFilter?.sets.isNotEmpty ?? false)
+        ? currentFilter!.sets
+        : (fallbackSetCode == null || fallbackSetCode.isEmpty)
+        ? const <String>{}
+        : <String>{fallbackSetCode};
+    final nextFilter = CollectionFilter(
+      name: currentFilter?.name,
+      artist: currentFilter?.artist,
+      manaMin: currentFilter?.manaMin,
+      manaMax: currentFilter?.manaMax,
+      format: currentFilter?.format,
+      languages: <String>{normalizedNext},
+      sets: nextSets,
+      rarities: currentFilter?.rarities ?? const <String>{},
+      colors: currentFilter?.colors ?? const <String>{},
+      types: currentFilter?.types ?? const <String>{},
+    );
+    await ScryfallDatabase.instance.updateCollectionFilter(
+      widget.collectionId,
+      filter: nextFilter,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _collectionFilterOverride = nextFilter;
+      _loading = true;
+      _cards.clear();
+      _loadedOffset = 0;
+      _hasMore = true;
+    });
+    await _refreshOfflineLanguageDbWarning();
+    await _loadCards();
+  }
+
+  Future<void> _changeSetCollectionLanguage() async {
+    if (!widget.isSetCollection) {
+      return;
+    }
+    final selectedGame = _isPokemonActive ? AppTcgGame.pokemon : AppTcgGame.mtg;
+    final available = (await AppSettings.loadCardLanguagesForGame(selectedGame))
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+      ..add('en');
+    final options = available.toList()..sort();
+    if (!mounted) {
+      return;
+    }
+    if (options.length <= 1) {
+      showAppSnackBar(
+        context,
+        Localizations.localeOf(context).languageCode.toLowerCase().startsWith('it')
+            ? 'Solo inglese disponibile per questa configurazione.'
+            : 'Only English is available for this setup.',
+      );
+      return;
+    }
+    final currentFilter = _effectiveFilter();
+    final currentLang =
+        (currentFilter?.languages.toList() ?? const <String>['en'])
+            .map((value) => value.trim().toLowerCase())
+            .firstWhere(
+              (value) => value.isNotEmpty,
+              orElse: () => 'en',
+            );
+    var selected = options.contains(currentLang) ? currentLang : options.first;
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return StatefulBuilder(
+          builder: (context, setModalState) => AlertDialog(
+            title: Text(
+              Localizations.localeOf(
+                context,
+              ).languageCode.toLowerCase().startsWith('it')
+                  ? 'Lingua della collezione'
+                  : 'Collection language',
+            ),
+            content: RadioGroup<String>(
+              groupValue: selected,
+              onChanged: (value) {
+                if (value == null) {
+                  return;
+                }
+                setModalState(() {
+                  selected = value;
+                });
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: options
+                    .map(
+                      (code) => RadioListTile<String>(
+                        value: code,
+                        title: Text(_languageLabelForCode(l10n, code)),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(selected),
+                child: Text(l10n.continueLabel),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (!mounted || picked == null) {
+      return;
+    }
+    await _applySetCollectionLanguage(picked);
   }
 
   CollectionFilter? _requiredSearchFilter() {
@@ -5181,6 +5360,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               )
             : null,
         actions: [
+          if (widget.isSetCollection)
+            IconButton(
+              tooltip: Localizations.localeOf(
+                        context,
+                      ).languageCode.toLowerCase().startsWith('it')
+                  ? 'Cambia lingua collezione'
+                  : 'Change collection language',
+              icon: const Icon(Icons.translate_rounded),
+              onPressed: _changeSetCollectionLanguage,
+            ),
           PopupMenuButton<_CardSortMode>(
             tooltip: l10n.sortBy,
             icon: const Icon(Icons.sort),
@@ -5292,26 +5481,75 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      widget.isAllCards
-                          ? l10n.noOwnedCardsYet
-                          : _isFilterCollection
-                          ? l10n.noCardsMatchFilters
-                          : l10n.noCardsYet,
+                      _showOfflineLanguageDbWarning
+                          ? (Localizations.localeOf(
+                                      context,
+                                    ).languageCode.toLowerCase().startsWith('it')
+                                ? 'Nessun risultato locale con questo database'
+                                : 'No local results with this database')
+                          : (widget.isAllCards
+                                ? l10n.noOwnedCardsYet
+                                : _isFilterCollection
+                                ? l10n.noCardsMatchFilters
+                                : l10n.noCardsYet),
                       style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _isFilterCollection
-                          ? l10n.tryEnablingOwnedOrMissing
-                          : widget.isAllCards
-                          ? l10n.addCardsHereOrAny
-                          : l10n.addFirstCardToStartCollection,
+                      _showOfflineLanguageDbWarning
+                          ? (Localizations.localeOf(
+                                      context,
+                                    ).languageCode.toLowerCase().startsWith('it')
+                                ? 'Questa collezione usa lingue aggiuntive (es. IT). Per ricerca offline serve il database "All Cards". Con il database attuale, i risultati in lingua aggiuntiva sono disponibili solo online.'
+                                : 'This collection uses additional languages (for example IT). Offline search requires the "All Cards" database. With the current database, additional-language results are available online only.')
+                          : (_isFilterCollection
+                                ? l10n.tryEnablingOwnedOrMissing
+                                : widget.isAllCards
+                                ? l10n.addCardsHereOrAny
+                                : l10n.addFirstCardToStartCollection),
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: const Color(0xFFBFAE95),
                       ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
+                    if (_showOfflineLanguageDbWarning)
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsPage(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings_rounded),
+                        label: Text(
+                          Localizations.localeOf(context)
+                                  .languageCode
+                                  .toLowerCase()
+                                  .startsWith('it')
+                              ? 'Apri impostazioni database'
+                              : 'Open database settings',
+                        ),
+                      ),
+                    if (_showOfflineLanguageDbWarning &&
+                        _isSetCollectionUsingNonEnglishLanguage) ...[
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: () => _applySetCollectionLanguage('en'),
+                        icon: const Icon(Icons.swap_horiz_rounded),
+                        label: Text(
+                          Localizations.localeOf(context)
+                                  .languageCode
+                                  .toLowerCase()
+                                  .startsWith('it')
+                              ? 'Passa a Inglese'
+                              : 'Switch to English',
+                        ),
+                      ),
+                    ],
+                    if (_showOfflineLanguageDbWarning) const SizedBox(height: 10),
                     if (!widget.isSetCollection &&
                         !widget.isBasicLandsCollection)
                       FilledButton.icon(
