@@ -971,56 +971,6 @@ class _SettingsPageState extends State<SettingsPage> {
       ? 'Reimport database $gameLabel completato.'
       : '$gameLabel database reimport completed.';
 
-  Future<void> _showImportLanguageSummaryDialog({
-    required String title,
-    required Map<String, int> languageCounts,
-    List<String> details = const <String>[],
-  }) async {
-    if (!mounted || languageCounts.isEmpty) {
-      return;
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 320,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: languageCounts.entries
-                  .map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text('${entry.key.toUpperCase()}: ${entry.value}'),
-                    ),
-                  )
-                  .toList()
-                ..addAll(
-                  details.map(
-                    (line) => Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        line,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppLocalizations.of(context)!.closeLabel),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _reimportFailedLabel(Object error) {
     if (_isStorageSpaceError(error)) {
       return _storageSpaceErrorMessage(italian: _isItalianUi);
@@ -1120,9 +1070,6 @@ class _SettingsPageState extends State<SettingsPage> {
       }
     }
 
-    var importedLanguageCounts = <String, int>{};
-    var localBulkCacheFiles = -1;
-    var cleanedBulkFiles = 0;
     try {
       await TcgEnvironmentController.instance.init();
       final activeGame = TcgEnvironmentController.instance.currentGame;
@@ -1170,18 +1117,13 @@ class _SettingsPageState extends State<SettingsPage> {
             bulkType: bulkType,
             allowedLanguages: languages.toList()..sort(),
           );
-          cleanedBulkFiles = await _cleanupMtgBulkFilesKeepingType(bulkType);
-          localBulkCacheFiles = await _countMtgBulkCacheFiles();
-          importedLanguageCounts = await ScryfallDatabase.instance
-              .fetchCardCountsByLanguage();
+          await _cleanupMtgBulkFilesKeepingType(bulkType);
         } else {
           await PokemonBulkService.instance.reimportFromLocalCache(
             onProgress: (value) =>
                 updateProgress(value, _reimportProgressLabel(gameLabel)),
             onStatus: (value) => updateProgress(progress, value),
           );
-          importedLanguageCounts = await ScryfallDatabase.instance
-              .fetchCardCountsByLanguage();
         }
       } finally {
         await ScryfallDatabase.instance.setDatabaseFileName(
@@ -1202,20 +1144,6 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) {
       Navigator.of(context).pop();
     }
-    if (!mounted) {
-      return;
-    }
-    await _showImportLanguageSummaryDialog(
-      title: _isItalianUi
-          ? 'Carte importate per lingua'
-          : 'Imported cards by language',
-      languageCounts: importedLanguageCounts,
-      details: localBulkCacheFiles >= 0
-          ? <String>[
-              'Local bulk cache files: $localBulkCacheFiles (cleaned: $cleanedBulkFiles)',
-            ]
-          : const <String>[],
-    );
     if (!mounted) {
       return;
     }

@@ -86,13 +86,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       Duration timeout = const Duration(seconds: 20),
       bool nonBlocking = false,
     }) async {
-      debugPrint('startup:$label:start');
       try {
         final result = await action().timeout(timeout);
-        debugPrint('startup:$label:done');
         return result;
       } catch (error, stackTrace) {
-        debugPrint('startup:$label:error:$error');
         if (kDebugMode) {
           debugPrintStack(stackTrace: stackTrace);
         }
@@ -130,14 +127,27 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _appFirstOpenFlag = firstOpenFlag;
         });
       }
-      if (firstOpenFlag == 1) {
+      final isFirstOpen = firstOpenFlag == 1;
+      if (isFirstOpen) {
         await runStep('save_first_open_flag', () => AppSettings.saveAppFirstOpenFlag(0));
       }
+      await runStep(
+        'release_notes_pre',
+        () => _maybeShowLatestReleaseNotesBeforeDbDownloads(),
+        nonBlocking: true,
+      );
       await runStep(
         'ensure_primary_game',
         () => _ensurePrimaryGameSelectionOnFirstLaunch(),
         nonBlocking: true,
       );
+      if (isFirstOpen) {
+        await runStep(
+          'first_open_language_steps',
+          () => _runFirstOpenLanguageSteps(),
+          nonBlocking: true,
+        );
+      }
       await runStep('env_init', () => TcgEnvironmentController.instance.init());
       if (!mounted) {
         return;
@@ -166,13 +176,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         timeout: const Duration(seconds: 35),
       );
       await runStep(
-        'release_notes_pre',
-        () => _maybeShowLatestReleaseNotesBeforeDbDownloads(),
-        nonBlocking: true,
-      );
-      await runStep(
         'primary_game_prompt',
-        () => _maybePromptPrimaryGameSelectionForCurrentRelease(),
+        () => _maybePromptPrimaryGameSelectionForCurrentRelease(
+          skipForFirstOpen: isFirstOpen,
+        ),
         nonBlocking: true,
       );
       await runStep(
@@ -183,7 +190,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted || !context.mounted) {
         return;
       }
-      unawaited(_initializeForCurrentGame());
+      await runStep(
+        'initialize_current_game',
+        () => _initializeForCurrentGame(),
+        nonBlocking: true,
+      );
     } catch (_) {
       if (mounted && _initialCollectionsLoading) {
         setState(() {
@@ -229,17 +240,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     _releaseNotesDialogQueued = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        _releaseNotesDialogQueued = false;
-        return;
-      }
-      unawaited(
-        _showLatestReleaseNotesPanel(context).whenComplete(() {
-          _releaseNotesDialogQueued = false;
-        }),
-      );
-    });
+    try {
+      await _showLatestReleaseNotesPanel(context);
+    } finally {
+      _releaseNotesDialogQueued = false;
+    }
   }
 
   Future<void> _ensurePrimaryGameSelectionOnFirstLaunch() async {
@@ -267,7 +272,116 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     });
   }
 
-  Future<void> _maybePromptPrimaryGameSelectionForCurrentRelease() async {
+  Future<void> _runFirstOpenLanguageSteps() async {
+    if (!mounted) {
+      return;
+    }
+    await _showCardLanguagesOnboardingStep();
+  }
+
+  Future<void> _showCardLanguagesOnboardingStep() async {
+    if (!mounted) {
+      return;
+    }
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final current = (await AppSettings.loadCardLanguagesForGame(selectedGame)).toSet();
+    current.add('en');
+    if (!mounted) {
+      return;
+    }
+    final mutable = <String>{...current};
+    final choices = AppSettings.languageCodes
+        .map((code) => code.trim().toLowerCase())
+        .where((code) => code.isNotEmpty)
+        .toList();
+    final picked = await showDialog<Set<String>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: Text(
+                Localizations.localeOf(context)
+                        .languageCode
+                        .toLowerCase()
+                        .startsWith('it')
+                    ? 'Lingue carte'
+                    : 'Card languages',
+              ),
+              content: SizedBox(
+                width: 360,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        Localizations.localeOf(context)
+                                .languageCode
+                                .toLowerCase()
+                                .startsWith('it')
+                            ? 'Inglese sempre incluso. Seleziona eventuali lingue aggiuntive.'
+                            : 'English is always included. Select any additional languages.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      ...choices.map(
+                        (code) => CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: mutable.contains(code),
+                          title: Text(_languageLabelForCode(l10n, code)),
+                          onChanged: code == 'en'
+                              ? null
+                              : (value) {
+                                  setModalState(() {
+                                    if (value == true) {
+                                      mutable.add(code);
+                                    } else {
+                                      mutable.remove(code);
+                                    }
+                                    mutable.add('en');
+                                  });
+                                },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(<String>{...mutable}),
+                  child: Text(
+                    Localizations.localeOf(context)
+                            .languageCode
+                            .toLowerCase()
+                            .startsWith('it')
+                        ? 'Avanti'
+                        : 'Next',
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (!mounted || picked == null) {
+      return;
+    }
+    await AppSettings.saveCardLanguagesForGame(selectedGame, picked);
+  }
+
+  Future<void> _maybePromptPrimaryGameSelectionForCurrentRelease({
+    bool skipForFirstOpen = false,
+  }) async {
+    if (skipForFirstOpen) {
+      return;
+    }
     final promptedVersion = await AppSettings.loadPrimaryGamePromptVersion();
     if (promptedVersion == _latestReleaseNotesId || !mounted) {
       return;
@@ -994,16 +1108,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     _collectionsLoadInProgress = true;
     try {
-      debugPrint('load_collections:fetch_collections:start');
       final collections = await ScryfallDatabase.instance
           .fetchCollections()
           .timeout(const Duration(seconds: 15));
-      debugPrint('load_collections:fetch_collections:done:${collections.length}');
-      debugPrint('load_collections:count_owned:start');
       final owned = await ScryfallDatabase.instance.countOwnedCards().timeout(
         const Duration(seconds: 15),
       );
-      debugPrint('load_collections:count_owned:done:$owned');
       if (!mounted) {
         return;
       }
@@ -1089,11 +1199,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           setCodes.add(setCode);
         }
       }
-      debugPrint('load_collections:set_names:start:${setCodes.length}');
       final setNames = await ScryfallDatabase.instance
           .fetchSetNamesForCodes(setCodes)
           .timeout(const Duration(seconds: 8), onTimeout: () => const {});
-      debugPrint('load_collections:set_names:done:${setNames.length}');
       final deckSideCounts = <int, int>{};
       for (final collection in renamed) {
         if (collection.type != CollectionType.deck) {
@@ -1113,7 +1221,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         (item) => item?.name == _allCardsCollectionName,
         orElse: () => null,
       );
-      debugPrint('load_collections:recent_cards:start');
       final recentAllCards = allCardsCollection == null
           ? const <CardSearchResult>[]
           : await ScryfallDatabase.instance
@@ -1125,7 +1232,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 const Duration(seconds: 6),
                 onTimeout: () => const <CardSearchResult>[],
               );
-      debugPrint('load_collections:recent_cards:done:${recentAllCards.length}');
       if (!mounted) {
         return;
       }
@@ -5575,26 +5681,28 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
               content: SizedBox(
                 width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: options
-                      .map(
-                        (code) => RadioListTile<String>(
-                          contentPadding: EdgeInsets.zero,
-                          value: code,
-                          groupValue: selected,
-                          title: Text(_languageLabelForCode(l10n, code)),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setState(() {
-                              selected = value;
-                            });
-                          },
-                        ),
-                      )
-                      .toList(),
+                child: RadioGroup<String>(
+                  groupValue: selected,
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    setState(() {
+                      selected = value;
+                    });
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: options
+                        .map(
+                          (code) => RadioListTile<String>(
+                            contentPadding: EdgeInsets.zero,
+                            value: code,
+                            title: Text(_languageLabelForCode(l10n, code)),
+                          ),
+                        )
+                        .toList(),
+                  ),
                 ),
               ),
               actions: [
@@ -5837,13 +5945,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           });
         },
       );
-      var deletedBulkFiles = 0;
       if (_selectedBulkType != null) {
-        deletedBulkFiles = await _cleanupMtgBulkFilesKeepingType(
-          _selectedBulkType!,
-        );
+        await _cleanupMtgBulkFilesKeepingType(_selectedBulkType!);
       }
-      final remainingBulkFiles = await _countMtgBulkCacheFiles();
 
       if (!mounted) {
         return;
@@ -5854,15 +5958,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return;
       }
       final total = await ScryfallDatabase.instance.countOwnedCards();
-      final languageCounts = await ScryfallDatabase.instance
-          .fetchCardCountsByLanguage();
-      final sampleEn = preflight.languageCounts['en'] ?? 0;
-      final sampleIt = preflight.languageCounts['it'] ?? 0;
-      debugPrint(
-        'import:bulk_type=$normalizedBulkType file=$filePath sample_cards=${preflight.sampledCards} '
-        'sample_en=$sampleEn sample_it=$sampleIt db_en=${languageCounts['en'] ?? 0} db_it=${languageCounts['it'] ?? 0} '
-        'allowed=${allowedLanguages.toList()..sort()}',
-      );
       if (!mounted) {
         return;
       }
@@ -5882,20 +5977,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         await _softRestartAfterDatabaseBootstrap();
       }
       await _maybeShowLatestReleaseNotesAfterDbImport();
-      await _showImportLanguageSummaryDialog(
-        title: _isItalianUi()
-            ? 'Carte importate per lingua'
-            : 'Imported cards by language',
-        languageCounts: languageCounts,
-        details: <String>[
-          'Bulk type: $normalizedBulkType',
-          'File: $filePath',
-          'Expected size: ${_bulkExpectedSizeBytes ?? 0}',
-          'Allowed langs: ${(allowedLanguages.toList()..sort()).join(',')}',
-          'File sample (${preflight.sampledCards}): EN=$sampleEn IT=$sampleIt',
-          'Local bulk cache files: $remainingBulkFiles (cleaned: $deletedBulkFiles)',
-        ],
-      );
       if (!mounted) {
         return;
       }
@@ -5931,56 +6012,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     await _showLatestReleaseNotesPanel(context);
-  }
-
-  Future<void> _showImportLanguageSummaryDialog({
-    required String title,
-    required Map<String, int> languageCounts,
-    List<String> details = const <String>[],
-  }) async {
-    if (!mounted || languageCounts.isEmpty) {
-      return;
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: SizedBox(
-          width: 320,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: languageCounts.entries
-                  .map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text('${entry.key.toUpperCase()}: ${entry.value}'),
-                    ),
-                  )
-                  .toList()
-                ..addAll(
-                  details.map(
-                    (line) => Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        line,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(AppLocalizations.of(context)!.closeLabel),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _rebuildSearchIndex() async {

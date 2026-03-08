@@ -444,9 +444,77 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
     if (!mounted) {
       return;
     }
+    await _ensureGuiLanguageSelectedBeforeAuth();
+    if (!mounted) {
+      return;
+    }
     setState(() {
       _showAuthGate = true;
     });
+  }
+
+  Future<void> _ensureGuiLanguageSelectedBeforeAuth() async {
+    final firstOpenFlag = await AppSettings.loadAppFirstOpenFlag();
+    if (firstOpenFlag != 1 || !mounted) {
+      return;
+    }
+    var selected = _appLocaleNotifier.value.languageCode.trim().toLowerCase();
+    if (selected != 'it') {
+      selected = 'en';
+    }
+    final picked = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return AlertDialog(
+              title: Text(selected == 'it' ? 'Scegli lingua' : 'Choose language'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioGroup<String>(
+                    groupValue: selected,
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      setModalState(() {
+                        selected = value;
+                      });
+                    },
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        RadioListTile<String>(
+                          value: 'en',
+                          title: Text('English'),
+                        ),
+                        RadioListTile<String>(
+                          value: 'it',
+                          title: Text('Italiano'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(selected),
+                  child: Text(selected == 'it' ? 'Avanti' : 'Next'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    if (!mounted || picked == null) {
+      return;
+    }
+    await AppSettings.saveAppLocale(picked);
+    _appLocaleNotifier.value = Locale(picked);
   }
 
   @override
