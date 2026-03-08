@@ -10,6 +10,7 @@ class AppSettings {
   static const _prefsKeySearchLanguages = 'search_languages';
   static const _prefsKeySearchAllLanguages = 'search_all_languages';
   static const _prefsKeyAvailableLanguages = 'available_languages';
+  static const _prefsKeyCardLanguagesPrefix = 'card_languages';
   static const _prefsKeyCollectionViewMode = 'collection_view_mode';
   static const _prefsKeyBulkType = 'scryfall_bulk_type';
   static const _prefsKeyPriceCurrency = 'price_currency';
@@ -39,6 +40,8 @@ class AppSettings {
     AppTcgGame game,
   ) =>
       '${_prefsKeyCollectionCoherenceCheckVersionPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+  static String _prefsKeyCardLanguagesForGame(AppTcgGame game) =>
+      '${_prefsKeyCardLanguagesPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
 
   static const List<String> languageCodes = [
     'en',
@@ -64,8 +67,56 @@ class AppSettings {
   static const List<String> defaultLanguages = ['en'];
   static const List<String> supportedAppLocales = ['en', 'it'];
 
+  static List<String> _normalizeCardLanguages(Iterable<String> languages) {
+    final allowed = languageCodes.map((value) => value.toLowerCase()).toSet();
+    final normalized = languages
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => allowed.contains(item))
+        .toSet();
+    normalized.add('en');
+    final result = normalized.toList()..sort();
+    return result;
+  }
+
+  static Future<List<String>> loadCardLanguagesForGame(AppTcgGame game) async {
+    final prefs = await SharedPreferences.getInstance();
+    final gameKey = _prefsKeyCardLanguagesForGame(game);
+    final stored = prefs.getStringList(gameKey);
+    if (stored != null && stored.isNotEmpty) {
+      final normalized = _normalizeCardLanguages(stored);
+      if (normalized.join(',') != stored.join(',')) {
+        await prefs.setStringList(gameKey, normalized);
+      }
+      return normalized;
+    }
+
+    if (game == AppTcgGame.mtg) {
+      final legacy = prefs.getStringList(_prefsKeySearchLanguages);
+      if (legacy != null && legacy.isNotEmpty) {
+        final migrated = _normalizeCardLanguages(legacy);
+        await prefs.setStringList(gameKey, migrated);
+        return migrated;
+      }
+    }
+
+    const fallback = <String>['en'];
+    await prefs.setStringList(gameKey, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveCardLanguagesForGame(
+    AppTcgGame game,
+    Set<String> languages,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = _normalizeCardLanguages(languages);
+    await prefs.setStringList(_prefsKeyCardLanguagesForGame(game), normalized);
+  }
+
   static Future<Set<String>> loadSearchLanguages() async {
-    return {'en'};
+    final selectedGame = await loadSelectedTcgGame();
+    final languages = await loadCardLanguagesForGame(selectedGame);
+    return languages.toSet();
   }
 
   static Future<bool> loadSearchAllLanguages() async {
@@ -74,8 +125,8 @@ class AppSettings {
   }
 
   static Future<void> saveSearchLanguages(Set<String> languages) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_prefsKeySearchLanguages, ['en']);
+    final selectedGame = await loadSelectedTcgGame();
+    await saveCardLanguagesForGame(selectedGame, languages);
   }
 
   static Future<void> saveSearchAllLanguages(bool value) async {
@@ -371,6 +422,8 @@ class AppSettings {
     await prefs.remove(_prefsKeySearchLanguages);
     await prefs.remove(_prefsKeySearchAllLanguages);
     await prefs.remove(_prefsKeyAvailableLanguages);
+    await prefs.remove(_prefsKeyCardLanguagesForGame(AppTcgGame.mtg));
+    await prefs.remove(_prefsKeyCardLanguagesForGame(AppTcgGame.pokemon));
     await prefs.remove(_prefsKeyCollectionViewMode);
     await prefs.remove(_prefsKeyBulkType);
     await prefs.remove(_prefsKeyBulkTypeForGame(AppTcgGame.mtg));

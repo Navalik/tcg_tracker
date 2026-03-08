@@ -93,6 +93,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   AppTcgGame _activeSearchGame = AppTcgGame.mtg;
   bool _showPrices = true;
   String _priceCurrency = 'eur';
+  List<String> _searchLanguages = const ['en'];
   final Map<String, _SearchPriceData> _priceDataByCardId = {};
   final Set<String> _priceRefreshQueued = {};
   Map<String, bool> _deckLegalityByCardId = const {};
@@ -148,15 +149,25 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _loadBulkCoverageState() async {
-    final selectedGame = await AppSettings.loadSelectedTcgGame();
-    final bulkType = await AppSettings.loadBulkTypeForGame(selectedGame);
+    final runtimeGame =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    final bulkType = await AppSettings.loadBulkTypeForGame(runtimeGame);
+    final cardLanguages = await AppSettings.loadCardLanguagesForGame(
+      runtimeGame,
+    );
     if (!mounted) {
       return;
     }
     setState(() {
-      _activeSearchGame = selectedGame;
+      _activeSearchGame = runtimeGame;
       _limitedPrintCoverage = _isLimitedPrintCoverage(bulkType);
+      _searchLanguages = cardLanguages;
     });
+    if (_query.trim().isNotEmpty) {
+      await _runSearch(forceRefresh: true);
+    }
   }
 
   Future<void> _loadPricePreferences() async {
@@ -183,7 +194,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   void _onQueryChanged() {
-    final value = _controller.text.trim();
+    final value = _controller.text;
     if (value == _query) {
       return;
     }
@@ -193,9 +204,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Future<void> _runSearch({bool forceRefresh = false}) async {
+    final trimmedQuery = _query.trim();
+    final meetsMinQueryLength = _query.length >= 2;
     final shouldFetchByFilters =
-        _query.isEmpty && _hasActiveAdvancedFilters() && _hasNarrowingFilters();
-    if (_query.isEmpty && !shouldFetchByFilters) {
+        trimmedQuery.isEmpty &&
+        _hasActiveAdvancedFilters() &&
+        _hasNarrowingFilters();
+    if (!meetsMinQueryLength && !shouldFetchByFilters) {
       if (mounted) {
         setState(() {
           _results = [];
@@ -289,7 +304,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<String> _effectiveLanguages() {
-    return const ['en'];
+    return _searchLanguages;
   }
 
   Future<void> _loadNextPage(String query, {bool replace = false}) async {
@@ -509,6 +524,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     String query, {
     int maxPages = 4,
   }) async {
+    final allowMultilingual = _effectiveLanguages().any((lang) => lang != 'en');
     Uri buildSearchUri(String q) {
       return Uri.https('api.scryfall.com', '/cards/search', {
         'q': q,
@@ -516,7 +532,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         'dir': 'desc',
         'unique': 'prints',
         'include_extras': 'true',
-        'include_multilingual': 'false',
+        'include_multilingual': allowMultilingual ? 'true' : 'false',
         'include_variations': 'true',
       });
     }
@@ -563,15 +579,25 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (raw is! Map<String, dynamic>) {
       return null;
     }
+    final allowedLanguages = _effectiveLanguages()
+        .map((lang) => lang.trim().toLowerCase())
+        .where((lang) => lang.isNotEmpty)
+        .toSet();
+    if (allowedLanguages.isEmpty) {
+      allowedLanguages.add('en');
+    }
     final lang = (raw['lang'] as String?)?.trim().toLowerCase();
-    if (lang != null && lang.isNotEmpty && lang != 'en') {
+    final effectiveLang = (lang == null || lang.isEmpty) ? 'en' : lang;
+    if (!allowedLanguages.contains(effectiveLang)) {
       return null;
     }
     final id = (raw['id'] as String?)?.trim() ?? '';
     final name = (raw['name'] as String?)?.trim() ?? '';
+    final printedName = (raw['printed_name'] as String?)?.trim() ?? '';
+    final displayName = printedName.isNotEmpty ? printedName : name;
     final setCode = (raw['set'] as String?)?.trim().toLowerCase() ?? '';
     final collector = (raw['collector_number'] as String?)?.trim() ?? '';
-    if (id.isEmpty || name.isEmpty || setCode.isEmpty || collector.isEmpty) {
+    if (id.isEmpty || displayName.isEmpty || setCode.isEmpty || collector.isEmpty) {
       return null;
     }
     final setName = (raw['set_name'] as String?)?.trim() ?? '';
@@ -583,7 +609,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final setTotal = _extractSetTotal(raw);
     return CardSearchResult(
       id: id,
-      name: name,
+      name: displayName,
       setCode: setCode,
       setName: setName,
       setTotal: setTotal,
@@ -829,7 +855,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<String> _tokenizeSearch(String value) {
-    final normalized = value
+    final normalized = _foldLatinDiacritics(value)
         .trim()
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
@@ -839,6 +865,72 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       return const [];
     }
     return normalized.split(' ');
+  }
+
+  String _foldLatinDiacritics(String value) {
+    const replacements = <String, String>{
+      '\u00E0': 'a',
+      '\u00E1': 'a',
+      '\u00E2': 'a',
+      '\u00E4': 'a',
+      '\u00E3': 'a',
+      '\u00E5': 'a',
+      '\u00E7': 'c',
+      '\u00E8': 'e',
+      '\u00E9': 'e',
+      '\u00EA': 'e',
+      '\u00EB': 'e',
+      '\u00EC': 'i',
+      '\u00ED': 'i',
+      '\u00EE': 'i',
+      '\u00EF': 'i',
+      '\u00F1': 'n',
+      '\u00F2': 'o',
+      '\u00F3': 'o',
+      '\u00F4': 'o',
+      '\u00F6': 'o',
+      '\u00F5': 'o',
+      '\u00F9': 'u',
+      '\u00FA': 'u',
+      '\u00FB': 'u',
+      '\u00FC': 'u',
+      '\u00FD': 'y',
+      '\u00FF': 'y',
+      '\u00C0': 'a',
+      '\u00C1': 'a',
+      '\u00C2': 'a',
+      '\u00C4': 'a',
+      '\u00C3': 'a',
+      '\u00C5': 'a',
+      '\u00C7': 'c',
+      '\u00C8': 'e',
+      '\u00C9': 'e',
+      '\u00CA': 'e',
+      '\u00CB': 'e',
+      '\u00CC': 'i',
+      '\u00CD': 'i',
+      '\u00CE': 'i',
+      '\u00CF': 'i',
+      '\u00D1': 'n',
+      '\u00D2': 'o',
+      '\u00D3': 'o',
+      '\u00D4': 'o',
+      '\u00D6': 'o',
+      '\u00D5': 'o',
+      '\u00D9': 'u',
+      '\u00DA': 'u',
+      '\u00DB': 'u',
+      '\u00DC': 'u',
+      '\u00DD': 'y',
+    };
+    if (value.isEmpty) {
+      return value;
+    }
+    final buffer = StringBuffer();
+    for (final char in value.split('')) {
+      buffer.write(replacements[char] ?? char);
+    }
+    return buffer.toString();
   }
 
   String _resultRarity(CardSearchResult card) {
@@ -1659,7 +1751,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   Widget _buildLimitedCoverageBadge() {
-    final l10n = AppLocalizations.of(context)!;
+    final message = _limitedCoverageMessage();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1675,7 +1767,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               maxWidth: MediaQuery.of(context).size.width * 0.72,
             ),
             child: Text(
-              l10n.limitedCoverageTapAllArtworks,
+              message,
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Color(0xFFEFDDBA),
@@ -1687,6 +1779,29 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         ],
       ),
     );
+  }
+
+  String _limitedCoverageMessage() {
+    final isItalian = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('it');
+    final langs = _effectiveLanguages()
+        .map((lang) => lang.trim().toLowerCase())
+        .where((lang) => lang.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    final readableLangs = langs
+        .map((lang) => lang.toUpperCase())
+        .join(', ');
+    if (isItalian) {
+      return 'Copertura locale limitata ($readableLangs). '
+          'Per ricerca offline multilingua usa database All Cards, '
+          'oppure tocca "Search online".';
+    }
+    return 'Limited local coverage ($readableLangs). '
+        'For multilingual offline search use the All Cards database, '
+        'or tap "Search online".';
   }
 
   bool _isMissingCard(CardSearchResult card) {

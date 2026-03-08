@@ -2,6 +2,16 @@ part of 'package:tcg_tracker/main.dart';
 
 typedef ImportProgressCallback = void Function(int count, double progress);
 
+class BulkLanguageInspectResult {
+  const BulkLanguageInspectResult({
+    required this.sampledCards,
+    required this.languageCounts,
+  });
+
+  final int sampledCards;
+  final Map<String, int> languageCounts;
+}
+
 bool _isAllowedScryfallDownloadUri(String? rawUri) {
   if (rawUri == null || rawUri.trim().isEmpty) {
     return false;
@@ -24,7 +34,34 @@ bool _isAllowedScryfallDownloadUri(String? rawUri) {
 }
 
 class ScryfallBulkImporter {
-  static const _batchSize = 200;
+  static const _batchSize = 20;
+
+  Future<BulkLanguageInspectResult> inspectLocalBulkLanguageCounts(
+    String filePath, {
+    int maxCards = 120000,
+  }) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw FileSystemException('bulk_file_not_found', filePath);
+    }
+    final counts = <String, int>{};
+    final parser = JsonArrayObjectParser(file.openRead().transform(utf8.decoder));
+    var read = 0;
+    await for (final card in parser.objects()) {
+      final lang = (card['lang'] as String?)?.trim().toLowerCase();
+      if (lang != null && lang.isNotEmpty) {
+        counts[lang] = (counts[lang] ?? 0) + 1;
+      }
+      read += 1;
+      if (read >= maxCards) {
+        break;
+      }
+    }
+    return BulkLanguageInspectResult(
+      sampledCards: read,
+      languageCounts: counts,
+    );
+  }
 
   Future<void> importAllCardsJson(
     String filePath, {
@@ -50,37 +87,33 @@ class ScryfallBulkImporter {
     Object? error;
 
     try {
-      await database.transaction(() async {
-        await ScryfallDatabase.instance.deleteAllCards(database);
-        await for (final message in receivePort) {
-          if (message is Map) {
-            final type = message['type'] as String?;
-            if (type == 'progress') {
-              count = message['count'] as int? ?? count;
-              final progress = message['progress'] as double? ?? 0;
-              onProgress(count, progress);
-            } else if (type == 'batch') {
-              final items = message['items'] as List<dynamic>? ?? [];
-              final mapped = items
-                  .whereType<Map<String, dynamic>>()
-                  .toList(growable: false);
-              await ScryfallDatabase.instance.insertCardsBatch(
-                database,
-                mapped,
-              );
-              count += items.length;
-              onProgress(count, message['progress'] as double? ?? 0);
-            } else if (type == 'done') {
-              count = message['count'] as int? ?? count;
-              onProgress(count, 1);
-              break;
-            } else if (type == 'error') {
-              error = message['message'];
-              break;
-            }
+      await ScryfallDatabase.instance.deleteAllCards(database);
+      await for (final message in receivePort) {
+        if (message is Map) {
+          final type = message['type'] as String?;
+          if (type == 'progress') {
+            count = message['count'] as int? ?? count;
+            final progress = message['progress'] as double? ?? 0;
+            onProgress(count, progress);
+          } else if (type == 'batch') {
+            final items = (message['items'] as List?)?.cast<Map<String, dynamic>>();
+            final mapped = items ?? const <Map<String, dynamic>>[];
+            await ScryfallDatabase.instance.insertCardsBatch(
+              database,
+              mapped,
+            );
+            count += mapped.length;
+            onProgress(count, message['progress'] as double? ?? 0);
+          } else if (type == 'done') {
+            count = message['count'] as int? ?? count;
+            onProgress(count, 1);
+            break;
+          } else if (type == 'error') {
+            error = message['message'];
+            break;
           }
         }
-      });
+      }
     } finally {
       receivePort.close();
       isolate.kill(priority: Isolate.immediate);
@@ -89,6 +122,8 @@ class ScryfallBulkImporter {
     if (error != null) {
       throw Exception(error);
     }
+
+    await ScryfallDatabase.instance.rebuildPrintedNameSearchIndex();
 
     if (updatedAtRaw != null && bulkType != null) {
       await ScryfallBulkChecker()
@@ -186,7 +221,7 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
   final totalBytes = await file.length();
   var bytesRead = 0;
   var count = 0;
-  final batch = <Map<String, dynamic>>[];
+  var batch = <Map<String, dynamic>>[];
   var lastProgress = DateTime.now();
 
   void sendProgress() {
@@ -217,16 +252,17 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
           continue;
         }
       }
-      batch.add(card);
+      batch.add(_compactScryfallCard(card));
       count += 1;
       if (batch.length >= config.batchSize) {
         final progress = totalBytes > 0 ? bytesRead / totalBytes : 0;
+        final outgoing = batch;
+        batch = <Map<String, dynamic>>[];
         config.sendPort.send({
           'type': 'batch',
-          'items': List<Map<String, dynamic>>.from(batch),
+          'items': outgoing,
           'progress': progress,
         });
-        batch.clear();
       }
     }
 
@@ -234,10 +270,9 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
       final progress = totalBytes > 0 ? bytesRead / totalBytes : 0;
       config.sendPort.send({
         'type': 'batch',
-        'items': List<Map<String, dynamic>>.from(batch),
+        'items': batch,
         'progress': progress,
       });
-      batch.clear();
     }
 
     config.sendPort.send({
@@ -252,6 +287,114 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
   }
 }
 
+Map<String, dynamic> _compactScryfallCard(Map<String, dynamic> card) {
+  final compact = <String, dynamic>{};
+
+  void copyScalar(String key) {
+    final value = card[key];
+    if (value != null) {
+      compact[key] = value;
+    }
+  }
+
+  copyScalar('id');
+  copyScalar('name');
+  copyScalar('oracle_id');
+  copyScalar('set');
+  copyScalar('set_name');
+  copyScalar('collector_number');
+  copyScalar('rarity');
+  copyScalar('type_line');
+  copyScalar('mana_cost');
+  copyScalar('oracle_text');
+  copyScalar('cmc');
+  copyScalar('artist');
+  copyScalar('power');
+  copyScalar('toughness');
+  copyScalar('loyalty');
+  copyScalar('lang');
+  copyScalar('released_at');
+  copyScalar('printed_name');
+  copyScalar('set_type');
+
+  final colors = card['colors'];
+  if (colors is List) {
+    compact['colors'] = colors.whereType<String>().toList(growable: false);
+  }
+  final colorIdentity = card['color_identity'];
+  if (colorIdentity is List) {
+    compact['color_identity'] = colorIdentity
+        .whereType<String>()
+        .toList(growable: false);
+  }
+  final imageUris = card['image_uris'];
+  if (imageUris is Map) {
+    compact['image_uris'] = Map<String, dynamic>.from(imageUris);
+  }
+  final cardFaces = card['card_faces'];
+  if (cardFaces is List) {
+    final normalizedFaces = <Map<String, dynamic>>[];
+    for (final face in cardFaces) {
+      if (face is! Map) {
+        continue;
+      }
+      final faceMap = Map<String, dynamic>.from(face);
+      final minimalFace = <String, dynamic>{};
+      for (final key in const [
+        'name',
+        'printed_name',
+        'type_line',
+        'oracle_text',
+        'mana_cost',
+        'image_uris',
+        'colors',
+        'color_identity',
+        'artist',
+        'power',
+        'toughness',
+        'loyalty',
+      ]) {
+        final value = faceMap[key];
+        if (value != null) {
+          minimalFace[key] = value;
+        }
+      }
+      if (minimalFace.isNotEmpty) {
+        normalizedFaces.add(minimalFace);
+      }
+    }
+    if (normalizedFaces.isNotEmpty) {
+      compact['card_faces'] = normalizedFaces;
+    }
+  }
+  final prices = card['prices'];
+  if (prices is Map) {
+    final pricesMap = Map<String, dynamic>.from(prices);
+    final minimalPrices = <String, dynamic>{};
+    for (final key in const [
+      'usd',
+      'usd_foil',
+      'usd_etched',
+      'eur',
+      'eur_foil',
+      'tix',
+    ]) {
+      final value = pricesMap[key];
+      if (value != null) {
+        minimalPrices[key] = value;
+      }
+    }
+    if (minimalPrices.isNotEmpty) {
+      compact['prices'] = minimalPrices;
+    }
+  }
+  final legalities = card['legalities'];
+  if (legalities is Map) {
+    compact['legalities'] = Map<String, dynamic>.from(legalities);
+  }
+  return compact;
+}
+
 
 
 class ScryfallBulkCheckResult {
@@ -260,12 +403,14 @@ class ScryfallBulkCheckResult {
     this.updatedAt,
     this.downloadUri,
     this.updatedAtRaw,
+    this.sizeBytes,
   });
 
   final bool updateAvailable;
   final DateTime? updatedAt;
   final String? downloadUri;
   final String? updatedAtRaw;
+  final int? sizeBytes;
 }
 
 class ScryfallBulkChecker {
@@ -276,6 +421,8 @@ class ScryfallBulkChecker {
       'scryfall_${bulkType}_installed_updated_at';
   static String _prefsKeyDownloadUri(String bulkType) =>
       'scryfall_${bulkType}_download_uri';
+  static String _prefsKeyExpectedSize(String bulkType) =>
+      'scryfall_${bulkType}_expected_size';
 
   Future<ScryfallBulkCheckResult> _cachedResult(String bulkType) async {
     final prefs = await SharedPreferences.getInstance();
@@ -286,6 +433,8 @@ class ScryfallBulkChecker {
     final cachedDownloadUri = _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
         ? cachedDownloadUriRaw
         : null;
+    final sizeRaw = prefs.getString(_prefsKeyExpectedSize(bulkType));
+    final cachedSize = int.tryParse(sizeRaw ?? '');
     final cachedUpdatedAt = latestUpdatedAt == null
         ? null
         : DateTime.tryParse(latestUpdatedAt);
@@ -296,6 +445,7 @@ class ScryfallBulkChecker {
       updatedAt: cachedUpdatedAt,
       downloadUri: cachedDownloadUri,
       updatedAtRaw: latestUpdatedAt,
+      sizeBytes: cachedSize,
     );
   }
 
@@ -326,6 +476,7 @@ class ScryfallBulkChecker {
 
       final updatedAtRaw = entry['updated_at'] as String?;
       final downloadUriRaw = entry['download_uri'] as String?;
+      final sizeBytes = (entry['size'] as num?)?.toInt();
       final downloadUri = _isAllowedScryfallDownloadUri(downloadUriRaw)
           ? downloadUriRaw
           : null;
@@ -338,6 +489,9 @@ class ScryfallBulkChecker {
       }
       if (downloadUri != null) {
         await prefs.setString(_prefsKeyDownloadUri(bulkType), downloadUri);
+      }
+      if (sizeBytes != null && sizeBytes > 0) {
+        await prefs.setString(_prefsKeyExpectedSize(bulkType), '$sizeBytes');
       }
       final cachedDownloadUriRaw = prefs.getString(_prefsKeyDownloadUri(bulkType));
       final cachedDownloadUri =
@@ -355,6 +509,7 @@ class ScryfallBulkChecker {
         updatedAt: updatedAt,
         downloadUri: downloadUri ?? cachedDownloadUri,
         updatedAtRaw: updatedAtRaw,
+        sizeBytes: sizeBytes,
       );
     } catch (_) {
       return _cachedResult(bulkType);
@@ -375,6 +530,7 @@ class ScryfallBulkChecker {
       await prefs.remove(_prefsKeyLatestUpdatedAt(option.type));
       await prefs.remove(_prefsKeyInstalledUpdatedAt(option.type));
       await prefs.remove(_prefsKeyDownloadUri(option.type));
+      await prefs.remove(_prefsKeyExpectedSize(option.type));
     }
   }
 }

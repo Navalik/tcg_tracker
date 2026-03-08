@@ -13,6 +13,7 @@ const String _basicLandsCollectionName = '__basic_lands__';
 const String _bulkPickerResetAction = '__reset_db__';
 
 const List<_BulkOption> _bulkOptions = [
+  _BulkOption(type: 'all_cards'),
   _BulkOption(type: 'default_cards'),
   _BulkOption(type: 'oracle_cards'),
   _BulkOption(type: 'unique_artwork'),
@@ -39,12 +40,14 @@ String _bulkTypeLabel(AppLocalizations l10n, String? type) {
 
 String _bulkTypeTitle(AppLocalizations l10n, String type) {
   switch (type) {
+    case 'all_cards':
+      return 'All Cards (~2.3 GB)';
     case 'default_cards':
-      return l10n.bulkAllPrintingsTitle;
+      return 'Default Cards (~504 MB)';
     case 'oracle_cards':
-      return l10n.bulkOracleCardsTitle;
+      return 'Oracle Cards (~162 MB)';
     case 'unique_artwork':
-      return l10n.bulkUniqueArtworkTitle;
+      return 'Unique Artwork (~235 MB)';
     default:
       return type;
   }
@@ -52,12 +55,14 @@ String _bulkTypeTitle(AppLocalizations l10n, String type) {
 
 String _bulkTypeDescription(AppLocalizations l10n, String type) {
   switch (type) {
+    case 'all_cards':
+      return 'Every card object in every language and printing. Best for multilingual local search.';
     case 'default_cards':
-      return l10n.bulkAllPrintingsDescription;
+      return 'One card object per card face (English or single available printed language). Not every language/printing.';
     case 'oracle_cards':
-      return l10n.bulkOracleCardsDescription;
+      return 'One card object per Oracle ID. Fastest/smallest, but not print/language complete.';
     case 'unique_artwork':
-      return l10n.bulkUniqueArtworkDescription;
+      return 'One card object per unique artwork. Good image variety, not print/language complete.';
     default:
       return '';
   }
@@ -68,10 +73,55 @@ String _bulkTypeFileName(String type) {
   return 'scryfall_$sanitized.json';
 }
 
+Future<int> _cleanupMtgBulkFilesKeepingType(String keepType) async {
+  final directory = await getApplicationDocumentsDirectory();
+  final keepFileName = _bulkTypeFileName(keepType);
+  var deleted = 0;
+  await for (final entity in directory.list(followLinks: false)) {
+    if (entity is! File) {
+      continue;
+    }
+    final pathValue = entity.path;
+    final fileName = pathValue.split(RegExp(r'[\\/]')).last.toLowerCase();
+    final isMtgBulkFile =
+        fileName.startsWith('scryfall_') &&
+        (fileName.endsWith('.json') || fileName.endsWith('.download'));
+    if (!isMtgBulkFile) {
+      continue;
+    }
+    if (fileName == keepFileName.toLowerCase()) {
+      continue;
+    }
+    try {
+      await entity.delete();
+      deleted += 1;
+    } catch (_) {}
+  }
+  return deleted;
+}
+
+Future<int> _countMtgBulkCacheFiles() async {
+  final directory = await getApplicationDocumentsDirectory();
+  var count = 0;
+  await for (final entity in directory.list(followLinks: false)) {
+    if (entity is! File) {
+      continue;
+    }
+    final fileName = entity.path.split(RegExp(r'[\\/]')).last.toLowerCase();
+    final isMtgBulkFile =
+        fileName.startsWith('scryfall_') &&
+        (fileName.endsWith('.json') || fileName.endsWith('.download'));
+    if (isMtgBulkFile) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 bool _isLimitedPrintCoverage(String? bulkType) {
   return bulkType != null &&
       bulkType.isNotEmpty &&
-      bulkType.trim().toLowerCase() != 'default_cards';
+      bulkType.trim().toLowerCase() != 'all_cards';
 }
 
 String _pokemonDatasetProfileTitle(BuildContext context, String profile) {
@@ -267,8 +317,8 @@ Future<String?> _showBulkTypePicker(
                 ? 'Database Pokemon: scegli quale versione scaricare da Scryfall.'
                 : 'Pokemon database: choose which version to download from Scryfall.')
           : (isItalian
-                ? 'Database Magic: scegli quale versione scaricare da Scryfall.'
-                : 'Magic database: choose which version to download from Scryfall.');
+                ? 'Database Magic: scegli il dataset Scryfall. Per ricerca locale multilingua usa All Cards.'
+                : 'Magic database: choose the Scryfall dataset. For multilingual local search, use All Cards.');
       String currentSelection =
           selectedType ??
           (_bulkOptions.isNotEmpty ? _bulkOptions.first.type : '');

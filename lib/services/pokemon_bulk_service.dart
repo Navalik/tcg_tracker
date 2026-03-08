@@ -129,6 +129,8 @@ class PokemonBulkService {
     String? manifestFingerprint;
     String source = '';
     final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
+    final datasetDir = await _ensureDatasetDirectory();
+    await _clearDatasetJsonCacheDirectory(datasetDir);
     onProgress(0.03);
     Object? manifestError;
     Object? apiError;
@@ -224,6 +226,8 @@ class PokemonBulkService {
 
     onStatus?.call('Finalizing local database');
     onProgress(0.93);
+    await ScryfallDatabase.instance.rebuildPrintedNameSearchIndex();
+    onProgress(0.95);
     await database.rebuildFts();
     onProgress(0.97);
     await backfillSetNames();
@@ -242,6 +246,98 @@ class PokemonBulkService {
     }
     onStatus?.call('Completed');
     onProgress(1);
+  }
+
+  Future<void> reimportFromLocalCache({
+    required void Function(double progress) onProgress,
+    void Function(String status)? onStatus,
+  }) async {
+    final database = await ScryfallDatabase.instance.open();
+    final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
+    final datasetDir = await _ensureDatasetDirectory();
+    final files = datasetDir
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.toLowerCase().endsWith('.json'))
+        .toList()
+      ..sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+
+    if (files.isEmpty) {
+      throw const FormatException('pokemon_dataset_cache_empty');
+    }
+
+    onStatus?.call('Reimporting from local cache');
+    onProgress(0.02);
+
+    var inserted = 0;
+    await database.transaction(() async {
+      await ScryfallDatabase.instance.deleteAllCards(database);
+      for (var i = 0; i < files.length; i++) {
+        final file = files[i];
+        onStatus?.call('Reading ${p.basename(file.path)}');
+        final raw = await file.readAsString();
+        final parsed = jsonDecode(raw);
+        final rows = _extractDatasetRows(parsed);
+        final mapped = <Map<String, dynamic>>[];
+        for (final row in rows) {
+          if (row is! Map) {
+            continue;
+          }
+          final normalized = _mapPokemonCardPayload(
+            Map<String, dynamic>.from(row),
+          );
+          if (normalized != null) {
+            mapped.add(normalized);
+          }
+        }
+        if (mapped.isNotEmpty) {
+          for (var offset = 0; offset < mapped.length; offset += 400) {
+            final end = (offset + 400 < mapped.length)
+                ? offset + 400
+                : mapped.length;
+            await ScryfallDatabase.instance.insertPokemonCardsBatch(
+              database,
+              mapped.sublist(offset, end),
+            );
+          }
+          inserted += mapped.length;
+        }
+        final progress = 0.05 + (((i + 1) / files.length) * 0.90);
+        onProgress(progress.clamp(0.0, 0.98));
+      }
+    });
+
+    if (inserted <= 0) {
+      throw const FormatException('pokemon_dataset_cache_invalid');
+    }
+
+    await ScryfallDatabase.instance.rebuildPrintedNameSearchIndex();
+
+    final prefs = await SharedPreferences.getInstance();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await prefs.setString(_prefsKeyInstalledVersion, datasetVersion);
+    await prefs.setString(_prefsKeyInstalledSource, 'local_cache');
+    await prefs.setInt(_prefsKeyInstalledAt, nowMs);
+    await prefs.setString(_prefsKeyInstalledProfile, selectedProfile);
+    await prefs.setString(
+      _prefsKeyManifestFingerprint,
+      'local_cache:${files.length}:$inserted:$nowMs',
+    );
+    onStatus?.call('Completed');
+    onProgress(1);
+  }
+
+  List<dynamic> _extractDatasetRows(dynamic parsed) {
+    if (parsed is List) {
+      return parsed;
+    }
+    if (parsed is Map<String, dynamic>) {
+      final data = parsed['data'];
+      if (data is List) {
+        return data;
+      }
+    }
+    return const <dynamic>[];
   }
 
   Future<int> backfillSetNames({http.Client? client}) async {
@@ -630,6 +726,24 @@ class PokemonBulkService {
       await datasetDir.create(recursive: true);
     }
     return datasetDir;
+  }
+
+  Future<void> _clearDatasetJsonCacheDirectory(Directory datasetDir) async {
+    if (!await datasetDir.exists()) {
+      return;
+    }
+    await for (final entity in datasetDir.list(followLinks: false)) {
+      if (entity is! File) {
+        continue;
+      }
+      final lower = entity.path.toLowerCase();
+      if (!lower.endsWith('.json')) {
+        continue;
+      }
+      try {
+        await entity.delete();
+      } catch (_) {}
+    }
   }
 
   bool _isAllowedDownloadUri(String rawUri) {
