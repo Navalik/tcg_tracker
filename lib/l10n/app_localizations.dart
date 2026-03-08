@@ -3059,7 +3059,7 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.4.6'**
+  /// **'What\'s new in 0.4.7'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewLine1.

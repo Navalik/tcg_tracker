@@ -209,7 +209,7 @@ String _formatRarity(String raw) {
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.4.6+7';
+const String _latestReleaseNotesId = '0.4.7+8';
 
 String _whatsNewLabel(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;

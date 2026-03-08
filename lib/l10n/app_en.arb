@@ -794,7 +794,7 @@
   "checkCoherenceLabel": "Check coherence",
   "copyDiagnosticsLabel": "Copy diagnostics",
   "whatsNewButtonLabel": "What's new",
-  "whatsNewDialogTitle": "What's new in 0.4.6",
+  "whatsNewDialogTitle": "What's new in 0.4.7",
   "whatsNewLine1": "Collections logic updated: Inventory is now the single source of truth for quantities.",
   "whatsNewLine2": "Consistent behavior for Set, Custom, Smart, and Wishlist, with auto-update rules.",
   "whatsNewLine3": "Improved multi-TCG support: data is isolated between Magic and Pokemon.",

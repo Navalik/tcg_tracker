@@ -1706,7 +1706,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewButtonLabel => 'Novita';
 
   @override
-  String get whatsNewDialogTitle => 'Novita versione 0.4.6';
+  String get whatsNewDialogTitle => 'Novita versione 0.4.7';
 
   @override
   String get whatsNewLine1 =>

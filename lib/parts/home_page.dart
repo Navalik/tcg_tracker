@@ -284,6 +284,39 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final selectedGame = await AppSettings.loadSelectedTcgGame();
+    if (selectedGame == AppTcgGame.pokemon) {
+      await AppSettings.saveCardLanguagesForGame(
+        AppTcgGame.pokemon,
+        const <String>{'en'},
+      );
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) {
+          final italian = Localizations.localeOf(
+            context,
+          ).languageCode.toLowerCase().startsWith('it');
+          return AlertDialog(
+            title: Text(italian ? 'Pokemon: solo inglese' : 'Pokemon: English only'),
+            content: Text(
+              italian
+                  ? 'Con la sorgente dati attuale le carte Pokemon sono disponibili solo in inglese. Il supporto italiano arrivera in una futura release.'
+                  : 'With the current data source, Pokemon cards are available in English only. Italian support will arrive in a future release.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(italian ? 'Avanti' : 'Next'),
+              ),
+            ],
+          );
+        },
+      );
+      return;
+    }
     final current = (await AppSettings.loadCardLanguagesForGame(selectedGame)).toSet();
     current.add('en');
     if (!mounted) {

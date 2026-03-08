@@ -21,7 +21,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _pokemonItalianCardsEnabled = false;
   String _appLocaleCode = 'en';
   String _appThemeCode = 'magic';
-  String _appVersion = '0.4.4';
+  String _appVersion = '0.4.7';
   bool _backupBusy = false;
   bool _gamesBusy = false;
   bool _coherenceCheckBusy = false;
@@ -140,9 +140,19 @@ class _SettingsPageState extends State<SettingsPage> {
     final mtgCardLanguages = await AppSettings.loadCardLanguagesForGame(
       AppTcgGame.mtg,
     );
-    final pokemonCardLanguages = await AppSettings.loadCardLanguagesForGame(
+    final pokemonCardLanguagesRaw = await AppSettings.loadCardLanguagesForGame(
       AppTcgGame.pokemon,
     );
+    final pokemonCardLanguages = pokemonCardLanguagesRaw
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    if (pokemonCardLanguages.length != 1 || !pokemonCardLanguages.contains('en')) {
+      await AppSettings.saveCardLanguagesForGame(
+        AppTcgGame.pokemon,
+        const <String>{'en'},
+      );
+    }
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -158,7 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _priceCurrency = priceCurrency;
       _showPrices = showPrices;
       _mtgItalianCardsEnabled = mtgCardLanguages.contains('it');
-      _pokemonItalianCardsEnabled = pokemonCardLanguages.contains('it');
+      _pokemonItalianCardsEnabled = false;
       _appLocaleCode = appLocaleCode;
       _appThemeCode = appThemeCode;
       _appVersion = appVersion;
@@ -177,6 +187,30 @@ class _SettingsPageState extends State<SettingsPage> {
       _pokemonDatasetProfile = pokemonDatasetProfile;
       _loading = false;
     });
+  }
+
+  Future<void> _showPokemonItalianComingSoonDialog() async {
+    if (!mounted) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(_isItalianUi ? 'Pokemon: solo inglese' : 'Pokemon: English only'),
+        content: Text(
+          _isItalianUi
+              ? 'Le carte Pokemon sono disponibili solo in inglese con la sorgente attuale. Il supporto italiano e in arrivo in una futura release.'
+              : 'Pokemon cards are currently available in English only with the current data source. Italian support is planned for a future release.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(l10n.continueLabel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _changePrimaryGame(TcgGame selected) async {
@@ -721,6 +755,22 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _setItalianCardsEnabled(TcgGame game, bool enabled) async {
+    if (game == TcgGame.pokemon) {
+      await AppSettings.saveCardLanguagesForGame(
+        AppTcgGame.pokemon,
+        const <String>{'en'},
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pokemonItalianCardsEnabled = false;
+      });
+      if (enabled) {
+        await _showPokemonItalianComingSoonDialog();
+      }
+      return;
+    }
     final target = game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
     final languages = <String>{'en'};
     if (enabled) {
@@ -1952,7 +2002,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             : 'Include Italian cards',
                       ),
                       subtitle: Text(
-                        _isItalianUi ? 'Inglese sempre incluso' : 'English always included',
+                        _isItalianUi
+                            ? 'Sorgente attuale: solo inglese. Italiano in arrivo.'
+                            : 'Current source: English only. Italian coming soon.',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFBFAE95),
                         ),

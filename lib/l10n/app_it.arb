@@ -847,7 +847,7 @@
     "checkCoherenceLabel":  "Controlla coerenza",
     "copyDiagnosticsLabel":  "Copia diagnostica",
     "whatsNewButtonLabel":  "Novita",
-    "whatsNewDialogTitle":  "Novita versione 0.4.6",
+    "whatsNewDialogTitle":  "Novita versione 0.4.7",
     "whatsNewLine1":  "Logica collezioni aggiornata: Inventory e ora la fonte unica delle quantita.",
     "whatsNewLine2":  "Comportamento coerente per Set, Custom, Smart e Wishlist, con regole di auto-aggiornamento.",
     "whatsNewLine3":  "Supporto multi-TCG migliorato: dati separati tra Magic e Pokemon.",
