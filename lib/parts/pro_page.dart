@@ -297,6 +297,14 @@ class _ProPageState extends State<ProPage> {
                           highlightPlus: true,
                         ),
                         _buildFeatureRow(
+                          feature: isItalian
+                              ? 'Collezioni smart'
+                              : 'Smart collections',
+                          freeValue: '1',
+                          plusValue: l10n.unlimitedLabel,
+                          highlightPlus: true,
+                        ),
+                        _buildFeatureRow(
                           feature: l10n.decksFeature,
                           freeValue: '2',
                           plusValue: l10n.unlimitedLabel,

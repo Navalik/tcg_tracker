@@ -2553,9 +2553,18 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (cardName == null || cardName.isEmpty) {
       return seed;
     }
+    final activeGame = TcgEnvironmentController.instance.currentGame ==
+            TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    final cardLanguages = await AppSettings.loadCardLanguagesForGame(activeGame);
+    if (!mounted || !context.mounted) {
+      return seed;
+    }
     final picked = await _pickCardPrintingForName(
       context,
       cardName,
+      languages: cardLanguages,
       preferredSetCode: seed.setCode,
       preferredCollectorNumber: seed.collectorNumber,
     );
@@ -3476,7 +3485,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       builder: (context) {
         return Positioned(
           left: position.dx + (size.width / 2) - 18,
-          top: position.dy - 28,
+          top: position.dy - 34,
           child: Material(
             color: Colors.transparent,
             child: Container(
@@ -3522,7 +3531,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       builder: (context) {
         return Positioned(
           left: position.dx + (size.width / 2) - 18,
-          top: position.dy - 28,
+          top: position.dy - 34,
           child: Material(
             color: Colors.transparent,
             child: Container(

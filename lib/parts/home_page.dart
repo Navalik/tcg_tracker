@@ -11,9 +11,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     with TickerProviderStateMixin {
   final List<CollectionInfo> _collections = [];
   String? _selectedBulkType;
-  static const int _freeCollectionLimit = 7;
   static const int _freeSetCollectionLimit = 2;
   static const int _freeCustomCollectionLimit = 2;
+  static const int _freeSmartCollectionLimit = 1;
   static const int _freeDeckCollectionLimit = 2;
   static const int _freeWishlistLimit = 1;
   static const int _freeDailyScanLimit = 20;
@@ -28,6 +28,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   double _bulkDownloadProgress = 0;
   int _bulkDownloadReceived = 0;
   int _bulkDownloadTotal = 0;
+  int? _bulkExpectedSizeBytes;
   String? _bulkDownloadError;
   bool _bulkImporting = false;
   double _bulkImportProgress = 0;
@@ -39,6 +40,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _showPrices = true;
   bool _initialCollectionsLoading = true;
   bool _collectionsLoadInProgress = false;
+  bool _releaseNotesDialogQueued = false;
   int _totalCardCount = 0;
   int _appFirstOpenFlag = 1;
   List<CardSearchResult> _recentAllCards = const [];
@@ -78,39 +80,123 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _initializeEnvironmentAndData() async {
-    await _purchaseManager.init();
-    final priceCurrency = await AppSettings.loadPriceCurrency();
-    final showPrices = await AppSettings.loadShowPrices();
-    final firstOpenFlag = await AppSettings.loadAppFirstOpenFlag();
-    if (mounted) {
+    Future<T?> runStep<T>(
+      String label,
+      Future<T> Function() action, {
+      Duration timeout = const Duration(seconds: 20),
+      bool nonBlocking = false,
+    }) async {
+      debugPrint('startup:$label:start');
+      try {
+        final result = await action().timeout(timeout);
+        debugPrint('startup:$label:done');
+        return result;
+      } catch (error, stackTrace) {
+        debugPrint('startup:$label:error:$error');
+        if (kDebugMode) {
+          debugPrintStack(stackTrace: stackTrace);
+        }
+        if (nonBlocking) {
+          return null;
+        }
+        rethrow;
+      }
+    }
+
+    try {
+      await runStep('purchase_init', () => _purchaseManager.init());
+      final priceCurrency =
+          await runStep<String>(
+        'load_price_currency',
+        () => AppSettings.loadPriceCurrency(),
+      ) ??
+          'eur';
+      final showPrices =
+          await runStep<bool>(
+        'load_show_prices',
+        () => AppSettings.loadShowPrices(),
+      ) ??
+          true;
+      final firstOpenFlag =
+          await runStep<int>(
+        'load_first_open_flag',
+        () => AppSettings.loadAppFirstOpenFlag(),
+      ) ??
+          0;
+      if (mounted) {
+        setState(() {
+          _priceCurrency = priceCurrency;
+          _showPrices = showPrices;
+          _appFirstOpenFlag = firstOpenFlag;
+        });
+      }
+      if (firstOpenFlag == 1) {
+        await runStep('save_first_open_flag', () => AppSettings.saveAppFirstOpenFlag(0));
+      }
+      await runStep(
+        'ensure_primary_game',
+        () => _ensurePrimaryGameSelectionOnFirstLaunch(),
+        nonBlocking: true,
+      );
+      await runStep('env_init', () => TcgEnvironmentController.instance.init());
+      if (!mounted) {
+        return;
+      }
       setState(() {
-        _priceCurrency = priceCurrency;
-        _showPrices = showPrices;
-        _appFirstOpenFlag = firstOpenFlag;
+        _selectedHomeGame = TcgEnvironmentController.instance.currentGame;
       });
+      await runStep(
+        'ensure_game_unlocked_pre',
+        () => _ensureSelectedHomeGameUnlocked(),
+        nonBlocking: true,
+      );
+      await runStep(
+        'db_open',
+        () => ScryfallDatabase.instance.open(),
+        timeout: const Duration(seconds: 35),
+      );
+      await runStep(
+        'coherence_check',
+        () => _runCollectionCoherenceCheckIfNeeded(),
+        nonBlocking: true,
+      );
+      await runStep(
+        'load_collections',
+        () => _loadCollections(),
+        timeout: const Duration(seconds: 35),
+      );
+      await runStep(
+        'release_notes_pre',
+        () => _maybeShowLatestReleaseNotesBeforeDbDownloads(),
+        nonBlocking: true,
+      );
+      await runStep(
+        'primary_game_prompt',
+        () => _maybePromptPrimaryGameSelectionForCurrentRelease(),
+        nonBlocking: true,
+      );
+      await runStep(
+        'ensure_game_unlocked_post',
+        () => _ensureSelectedHomeGameUnlocked(),
+        nonBlocking: true,
+      );
+      if (!mounted || !context.mounted) {
+        return;
+      }
+      unawaited(_initializeForCurrentGame());
+    } catch (_) {
+      if (mounted && _initialCollectionsLoading) {
+        setState(() {
+          _initialCollectionsLoading = false;
+        });
+      }
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.downloadFailedGeneric,
+        );
+      }
     }
-    if (firstOpenFlag == 1) {
-      await AppSettings.saveAppFirstOpenFlag(0);
-    }
-    await _ensurePrimaryGameSelectionOnFirstLaunch();
-    await TcgEnvironmentController.instance.init();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _selectedHomeGame = TcgEnvironmentController.instance.currentGame;
-    });
-    await _ensureSelectedHomeGameUnlocked();
-    await ScryfallDatabase.instance.open();
-    await _runCollectionCoherenceCheckIfNeeded();
-    await _loadCollections();
-    await _maybeShowLatestReleaseNotesBeforeDbDownloads();
-    await _maybePromptPrimaryGameSelectionForCurrentRelease();
-    await _ensureSelectedHomeGameUnlocked();
-    if (!mounted || !context.mounted) {
-      return;
-    }
-    unawaited(_initializeForCurrentGame());
   }
 
   Future<void> _runCollectionCoherenceCheckIfNeeded() async {
@@ -139,7 +225,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (lastSeen == _latestReleaseNotesId || !mounted) {
       return;
     }
-    await _showLatestReleaseNotesPanel(context);
+    if (_releaseNotesDialogQueued) {
+      return;
+    }
+    _releaseNotesDialogQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _releaseNotesDialogQueued = false;
+        return;
+      }
+      unawaited(
+        _showLatestReleaseNotesPanel(context).whenComplete(() {
+          _releaseNotesDialogQueued = false;
+        }),
+      );
+    });
   }
 
   Future<void> _ensurePrimaryGameSelectionOnFirstLaunch() async {
@@ -747,20 +847,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return fallbackByName;
   }
 
-  int _userCollectionCount() {
-    return _collections
-        .where(
-          (item) =>
-              item.name != _allCardsCollectionName &&
-              !_isBasicLandsCollection(item),
-        )
-        .length;
-  }
-
-  bool _canCreateCollection() {
-    return _hasProAccess || _userCollectionCount() < _freeCollectionLimit;
-  }
-
   int _setCollectionCount() {
     return _collections.where(_isSetCollection).length;
   }
@@ -783,8 +869,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return _collections
         .where(
           (item) =>
-              item.type == CollectionType.custom ||
-              item.type == CollectionType.smart,
+              item.type == CollectionType.custom &&
+              !_isDeckSideboardCollection(item),
         )
         .length;
   }
@@ -792,6 +878,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   bool _canCreateCustomCollection() {
     return _hasProAccess ||
         _customCollectionCount() < _freeCustomCollectionLimit;
+  }
+
+  int _smartCollectionCount() {
+    return _collections
+        .where((item) => item.type == CollectionType.smart)
+        .length;
+  }
+
+  bool _canCreateSmartCollection() {
+    return _hasProAccess || _smartCollectionCount() < _freeSmartCollectionLimit;
   }
 
   int _deckCollectionCount() {
@@ -802,34 +898,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   bool _canCreateDeckCollection() {
     return _hasProAccess || _deckCollectionCount() < _freeDeckCollectionLimit;
-  }
-
-  Future<void> _showCollectionLimitDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.collectionLimitReachedTitle),
-          content: Text(l10n.collectionLimitReachedBody(_freeCollectionLimit)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(l10n.notNow),
-            ),
-            FilledButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
-              },
-              child: Text(l10n.upgrade),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _showWishlistLimitDialog() async {
@@ -926,12 +994,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     _collectionsLoadInProgress = true;
     try {
+      debugPrint('load_collections:fetch_collections:start');
       final collections = await ScryfallDatabase.instance
           .fetchCollections()
           .timeout(const Duration(seconds: 15));
+      debugPrint('load_collections:fetch_collections:done:${collections.length}');
+      debugPrint('load_collections:count_owned:start');
       final owned = await ScryfallDatabase.instance.countOwnedCards().timeout(
         const Duration(seconds: 15),
       );
+      debugPrint('load_collections:count_owned:done:$owned');
       if (!mounted) {
         return;
       }
@@ -1017,9 +1089,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           setCodes.add(setCode);
         }
       }
-      final setNames = await ScryfallDatabase.instance.fetchSetNamesForCodes(
-        setCodes,
-      );
+      debugPrint('load_collections:set_names:start:${setCodes.length}');
+      final setNames = await ScryfallDatabase.instance
+          .fetchSetNamesForCodes(setCodes)
+          .timeout(const Duration(seconds: 8), onTimeout: () => const {});
+      debugPrint('load_collections:set_names:done:${setNames.length}');
       final deckSideCounts = <int, int>{};
       for (final collection in renamed) {
         if (collection.type != CollectionType.deck) {
@@ -1039,12 +1113,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         (item) => item?.name == _allCardsCollectionName,
         orElse: () => null,
       );
+      debugPrint('load_collections:recent_cards:start');
       final recentAllCards = allCardsCollection == null
           ? const <CardSearchResult>[]
-          : await ScryfallDatabase.instance.fetchRecentOwnedCardPreviews(
-              allCardsCollection.id,
-              limit: 10,
-            );
+          : await ScryfallDatabase.instance
+              .fetchRecentOwnedCardPreviews(
+                allCardsCollection.id,
+                limit: 10,
+              )
+              .timeout(
+                const Duration(seconds: 6),
+                onTimeout: () => const <CardSearchResult>[],
+              );
+      debugPrint('load_collections:recent_cards:done:${recentAllCards.length}');
       if (!mounted) {
         return;
       }
@@ -1171,11 +1252,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
     widgets.add(const SizedBox(height: 12));
 
-    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
-    final canCreateCustom =
-        _canCreateCollection() && _canCreateCustomCollection();
-    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
-    final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
+    final canCreateSet = _canCreateSetCollection();
+    final canCreateCustom = _canCreateCustomCollection();
+    final canCreateSmart = _canCreateSmartCollection();
+    final canCreateDeck = _canCreateDeckCollection();
+    final canCreateWishlist = _canCreateWishlist();
     final setCollections = nonDeckCollections
         .where(_isSetCollection)
         .toList(growable: false);
@@ -1315,7 +1396,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             createIcon: Icons.auto_fix_high_rounded,
             createTitle: AppLocalizations.of(context)!.createSmartCollectionTitle,
             description: _sectionHelpText(_HomeCollectionsMenu.smart),
-            canCreate: canCreateCustom,
+            canCreate: canCreateSmart,
             onCreate: () => _addSmartCollection(context),
           );
         case _HomeCollectionsMenu.wish:
@@ -1409,6 +1490,36 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
 
     return widgets;
+  }
+
+  Future<void> _showSmartCollectionLimitDialog() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return AlertDialog(
+          title: Text(l10n.collectionLimitReachedTitle),
+          content: Text(
+            l10n.collectionLimitReachedBody(_freeSmartCollectionLimit),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+              },
+              child: Text(l10n.upgrade),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget? _buildPinnedAllCardsCard(BuildContext context) {
@@ -2105,9 +2216,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final customItems = userCollections
         .where(
           (item) =>
-              item.type == CollectionType.custom ||
-              item.type == CollectionType.smart,
+              item.type == CollectionType.custom &&
+              !_isDeckSideboardCollection(item),
         )
+        .toList();
+    final smartItems = userCollections
+        .where((item) => item.type == CollectionType.smart)
         .toList();
     final deckItems = userCollections
         .where((item) => item.type == CollectionType.deck)
@@ -2118,6 +2232,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     markDisabled(setItems, _freeSetCollectionLimit);
     markDisabled(customItems, _freeCustomCollectionLimit);
+    markDisabled(smartItems, _freeSmartCollectionLimit);
     markDisabled(deckItems, _freeDeckCollectionLimit);
     markDisabled(wishItems, _freeWishlistLimit);
 
@@ -2240,6 +2355,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkDownloadUri = null;
       _bulkUpdatedAt = null;
       _bulkUpdatedAtRaw = null;
+      _bulkExpectedSizeBytes = null;
       _bulkDownloadError = null;
     });
 
@@ -2310,6 +2426,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkDownloadUri = result.downloadUri;
       _bulkUpdatedAt = result.updatedAt;
       _bulkUpdatedAtRaw = result.updatedAtRaw;
+      _bulkExpectedSizeBytes = result.sizeBytes;
     });
 
     if (result.updateAvailable) {
@@ -2369,6 +2486,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkUpdatedAt = result.updatedAt ?? _bulkUpdatedAt;
       _bulkUpdatedAtRaw = result.updatedAtRaw ?? _bulkUpdatedAtRaw;
       _bulkUpdateAvailable = true;
+      _bulkExpectedSizeBytes = result.sizeBytes ?? _bulkExpectedSizeBytes;
     });
     if (!_cardsMissing) {
       await _maybeStartBulkDownload();
@@ -2482,10 +2600,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addWishlistCollection(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
     if (!_canCreateWishlist()) {
       await _showWishlistLimitDialog();
       return;
@@ -2615,10 +2729,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addCustomCollection(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
     if (!_canCreateCustomCollection()) {
       await _showCustomCollectionLimitDialog();
       return;
@@ -2748,12 +2858,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addSmartCollection(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
-    if (!_canCreateCustomCollection()) {
-      await _showCustomCollectionLimitDialog();
+    if (!_canCreateSmartCollection()) {
+      await _showSmartCollectionLimitDialog();
       return;
     }
     final l10n = AppLocalizations.of(context)!;
@@ -2859,10 +2965,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addSetCollection(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
     if (!_canCreateSetCollection()) {
       await _showSetCollectionLimitDialog();
       return;
@@ -2946,6 +3048,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!context.mounted) {
       return;
     }
+    final selectedLanguage = await _pickSetCollectionLanguage(context);
+    if (selectedLanguage == null || !context.mounted) {
+      return;
+    }
 
     final resolvedName = _setCollectionName(selected.code);
     if (_isCollectionNameTaken(resolvedName)) {
@@ -2957,7 +3063,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     int id;
-    final filter = CollectionFilter(sets: {selected.code.toLowerCase()});
+    final filter = CollectionFilter(
+      sets: {selected.code.toLowerCase()},
+      languages: {selectedLanguage},
+    );
     try {
       id = await ScryfallDatabase.instance.addCollection(
         resolvedName,
@@ -2993,10 +3102,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _addDeckCollection(BuildContext context) async {
-    if (!_canCreateCollection()) {
-      await _showCollectionLimitDialog();
-      return;
-    }
     if (!_canCreateDeckCollection()) {
       await _showDeckCollectionLimitDialog();
       return;
@@ -3708,12 +3813,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _showCreateCollectionOptions(BuildContext context) async {
-    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
-    final canCreateCustom =
-        _canCreateCollection() && _canCreateCustomCollection();
-    final canCreateSmart =
-        _canCreateCollection() && _canCreateCustomCollection();
-    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
+    final canCreateSet = _canCreateSetCollection();
+    final canCreateCustom = _canCreateCustomCollection();
+    final canCreateSmart = _canCreateSmartCollection();
+    final canCreateDeck = _canCreateDeckCollection();
     final selection = await showModalBottomSheet<_CollectionCreateAction>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -3756,13 +3859,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         break;
     }
 
-    final canCreateSet = _canCreateCollection() && _canCreateSetCollection();
-    final canCreateCustom =
-        _canCreateCollection() && _canCreateCustomCollection();
-    final canCreateSmart =
-        _canCreateCollection() && _canCreateCustomCollection();
-    final canCreateWishlist = _canCreateCollection() && _canCreateWishlist();
-    final canCreateDeck = _canCreateCollection() && _canCreateDeckCollection();
+    final canCreateSet = _canCreateSetCollection();
+    final canCreateCustom = _canCreateCustomCollection();
+    final canCreateSmart = _canCreateSmartCollection();
+    final canCreateWishlist = _canCreateWishlist();
+    final canCreateDeck = _canCreateDeckCollection();
     final addContext = switch (_activeCollectionsMenu) {
       _HomeCollectionsMenu.home => _HomeAddContext.home,
       _HomeCollectionsMenu.set => _HomeAddContext.set,
@@ -3982,10 +4083,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (cardName == null || cardName.isEmpty) {
       return _ResolvedScanSelection(seed: seed);
     }
+    final activeLanguages = await AppSettings.loadCardLanguagesForGame(
+      _activeSettingsGame,
+    );
+    final effectiveScanLanguages = (seed.scannerLanguageCode != null &&
+            seed.scannerLanguageCode!.trim().isNotEmpty)
+        ? <String>[seed.scannerLanguageCode!.trim().toLowerCase()]
+        : activeLanguages;
     final localBeforeSync = await ScryfallDatabase.instance
         .fetchCardsForAdvancedFilters(
           CollectionFilter(name: cardName),
-          languages: const ['en'],
+          languages: effectiveScanLanguages,
           limit: 250,
         );
     final normalizedName = _normalizeCardNameForMatch(cardName);
@@ -4008,6 +4116,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     var picked = await _pickCardPrintingForName(
       context,
       cardName,
+      languages: effectiveScanLanguages,
       preferredSetCode: seed.setCode,
       preferredCollectorNumber: seed.collectorNumber,
       localPrintingKeys: localBeforeSyncKeys,
@@ -4025,6 +4134,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         picked = await _pickCardPrintingForName(
           context,
           cardName,
+          languages: effectiveScanLanguages,
           preferredSetCode: onlineByNameAndSet.setCode,
           preferredCollectorNumber: onlineByNameAndSet.collectorNumber,
           localPrintingKeys: localBeforeSyncKeys,
@@ -4038,6 +4148,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           cardName: cardName,
           setCode: seed.setCode,
           collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
           isFoil: seed.isFoil,
         ),
       );
@@ -4052,6 +4163,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         collectorNumber: picked.collectorNumber.trim().isEmpty
             ? null
             : picked.collectorNumber.trim().toLowerCase(),
+        scannerLanguageCode: seed.scannerLanguageCode,
         isFoil: seed.isFoil,
       ),
       pickedCard: picked,
@@ -4204,6 +4316,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String? forcedName;
     String? forcedSet;
     String? selectedSetCode;
+    String? selectedLanguageCode;
     var isFoil = false;
     if (text.startsWith('__SCAN_PAYLOAD__')) {
       final payloadText = text.substring('__SCAN_PAYLOAD__'.length).trim();
@@ -4225,6 +4338,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           final payloadSet = (payload['selectedSetCode'] as String?)?.trim();
           if (payloadSet != null && payloadSet.isNotEmpty) {
             selectedSetCode = payloadSet;
+          }
+          final payloadLanguage =
+              (payload['selectedLanguageCode'] as String?)?.trim();
+          if (payloadLanguage != null && payloadLanguage.isNotEmpty) {
+            selectedLanguageCode = payloadLanguage;
           }
           final payloadFoil = payload['foil'];
           if (payloadFoil is bool) {
@@ -4351,6 +4469,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       cardName: bestName.isEmpty ? null : bestName,
       setCode: setCode,
       collectorNumber: collectorNumber,
+      scannerLanguageCode: selectedLanguageCode,
       isFoil: isFoil,
     );
   }
@@ -4396,7 +4515,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final strictCount = await ScryfallDatabase.instance
         .countCardsForFilterWithSearch(
-          CollectionFilter(sets: {setCode}),
+          CollectionFilter(
+            sets: {setCode},
+            languages: seed.scannerLanguageCode == null
+                ? const <String>{}
+                : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+          ),
           searchQuery: query,
         );
     if (strictCount > 0) {
@@ -4404,7 +4528,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (fallbackName != null && fallbackName.isNotEmpty) {
         final nameInSetCount = await ScryfallDatabase.instance
             .countCardsForFilterWithSearch(
-              CollectionFilter(sets: {setCode}),
+              CollectionFilter(
+                sets: {setCode},
+                languages: seed.scannerLanguageCode == null
+                    ? const <String>{}
+                    : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+              ),
               searchQuery: fallbackName,
             );
         if (nameInSetCount > 0) {
@@ -4430,7 +4559,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (fallbackName != null && fallbackName.isNotEmpty) {
       final nameInSetCount = await ScryfallDatabase.instance
           .countCardsForFilterWithSearch(
-            CollectionFilter(sets: {setCode}),
+            CollectionFilter(
+              sets: {setCode},
+              languages: seed.scannerLanguageCode == null
+                  ? const <String>{}
+                  : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+            ),
             searchQuery: fallbackName,
           );
       if (nameInSetCount > 0) {
@@ -4439,6 +4573,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           cardName: fallbackName,
           setCode: setCode,
           collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
           isFoil: seed.isFoil,
         );
       }
@@ -4447,6 +4582,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         cardName: fallbackName,
         setCode: null,
         collectorNumber: seed.collectorNumber,
+        scannerLanguageCode: seed.scannerLanguageCode,
         isFoil: seed.isFoil,
       );
     }
@@ -4455,6 +4591,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       cardName: seed.cardName,
       setCode: null,
       collectorNumber: seed.collectorNumber,
+      scannerLanguageCode: seed.scannerLanguageCode,
       isFoil: seed.isFoil,
     );
   }
@@ -4533,14 +4670,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               .toLowerCase();
         }
       }
+      final languageClause = _scryfallLanguageClauseForQuery(
+        await AppSettings.loadCardLanguagesForGame(_activeSettingsGame),
+      );
       Uri searchUri;
       if (oracleId != null && oracleId.isNotEmpty) {
         searchUri = Uri.parse(
-          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('oracleid:$oracleId lang:en unique:prints')}&order=released&dir=desc',
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('oracleid:$oracleId $languageClause unique:prints')}&order=released&dir=desc',
         );
       } else {
         searchUri = Uri.parse(
-          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('!"$name" lang:en unique:prints')}&order=released&dir=desc',
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('!"$name" $languageClause unique:prints')}&order=released&dir=desc',
         );
       }
       await _importScryfallSearchPages(
@@ -4617,7 +4757,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return null;
     }
     try {
-      final query = '!"$name" set:$set lang:en unique:prints';
+      final languageClause = _scryfallLanguageClauseForQuery(
+        await AppSettings.loadCardLanguagesForGame(_activeSettingsGame),
+      );
+      final query = '!"$name" set:$set $languageClause unique:prints';
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent(query)}',
       );
@@ -4650,7 +4793,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final localCandidates = await ScryfallDatabase.instance
           .fetchCardsForAdvancedFilters(
             CollectionFilter(name: name, sets: {set}),
-            languages: const ['en'],
+            languages: await AppSettings.loadCardLanguagesForGame(
+              _activeSettingsGame,
+            ),
             limit: 100,
           );
       if (localCandidates.isNotEmpty) {
@@ -5403,6 +5548,85 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _loadCollections();
   }
 
+  Future<String?> _pickSetCollectionLanguage(BuildContext context) async {
+    final available = (await AppSettings.loadCardLanguagesForGame(
+      _activeSettingsGame,
+    )).toSet()
+      ..add('en');
+    if (available.length <= 1) {
+      return 'en';
+    }
+    if (!context.mounted) {
+      return null;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    final options = available.toList()..sort();
+    var selected = options.contains('en') ? 'en' : options.first;
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(
+                _isItalianUi()
+                    ? 'Lingua collezione set'
+                    : 'Set collection language',
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: options
+                      .map(
+                        (code) => RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          value: code,
+                          groupValue: selected,
+                          title: Text(_languageLabelForCode(l10n, code)),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              selected = value;
+                            });
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(l10n.cancel),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(selected),
+                  child: Text(
+                    _isItalianUi() ? 'Crea collezione' : 'Create collection',
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _languageLabelForCode(AppLocalizations l10n, String code) {
+    final normalized = code.trim().toLowerCase();
+    if (normalized == 'en') {
+      return l10n.languageEnglish;
+    }
+    if (normalized == 'it') {
+      return l10n.languageItalian;
+    }
+    return normalized.toUpperCase();
+  }
+
   Future<void> _deleteCollection(CollectionInfo collection) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -5492,7 +5716,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final file = File(tempPath);
         final sink = file.openWrite();
 
-        final totalBytes = response.contentLength ?? 0;
+        final totalBytes = _bulkExpectedSizeBytes ?? response.contentLength ?? 0;
         if (mounted) {
           setState(() {
             _bulkDownloadTotal = totalBytes;
@@ -5519,6 +5743,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         }
         await sink.flush();
         await sink.close();
+        if (totalBytes > 0 && received != totalBytes) {
+          try {
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (_) {}
+          throw const HttpException('download_incomplete');
+        }
         await file.rename(targetPath);
 
         if (!mounted) {
@@ -5545,9 +5777,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return;
       }
       final l10n = AppLocalizations.of(context)!;
-      final message = (error is HttpException || error is SocketException)
-          ? l10n.networkErrorTryAgain
-          : l10n.downloadFailedGeneric;
+      final message = _isStorageSpaceError(error)
+          ? _storageSpaceErrorMessage(italian: _isItalianUi())
+          : ((error is HttpException || error is SocketException)
+                ? l10n.networkErrorTryAgain
+                : l10n.downloadFailedGeneric);
       setState(() {
         _bulkDownloading = false;
         _bulkDownloadError = message;
@@ -5568,7 +5802,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final messenger = ScaffoldMessenger.of(context);
     final l10n = AppLocalizations.of(context)!;
-    const allowedLanguages = {'en'};
+    final allowedLanguages = (await AppSettings.loadCardLanguagesForGame(
+      _activeSettingsGame,
+    )).toSet();
+    final normalizedBulkType = (_selectedBulkType ?? '').trim().toLowerCase();
     setState(() {
       _bulkImporting = true;
       _bulkImportProgress = 0;
@@ -5577,6 +5814,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     try {
       final importer = ScryfallBulkImporter();
+      final preflight = await importer.inspectLocalBulkLanguageCounts(filePath);
+      if (normalizedBulkType == 'all_cards' &&
+          allowedLanguages.contains('it')) {
+        final sampleIt = preflight.languageCounts['it'] ?? 0;
+        if (preflight.sampledCards >= 5000 && sampleIt < 50) {
+          throw const FormatException('bulk_local_missing_it');
+        }
+      }
       await importer.importAllCardsJson(
         filePath,
         updatedAtRaw: _bulkUpdatedAtRaw,
@@ -5592,6 +5837,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           });
         },
       );
+      var deletedBulkFiles = 0;
+      if (_selectedBulkType != null) {
+        deletedBulkFiles = await _cleanupMtgBulkFilesKeepingType(
+          _selectedBulkType!,
+        );
+      }
+      final remainingBulkFiles = await _countMtgBulkCacheFiles();
 
       if (!mounted) {
         return;
@@ -5602,6 +5854,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return;
       }
       final total = await ScryfallDatabase.instance.countOwnedCards();
+      final languageCounts = await ScryfallDatabase.instance
+          .fetchCardCountsByLanguage();
+      final sampleEn = preflight.languageCounts['en'] ?? 0;
+      final sampleIt = preflight.languageCounts['it'] ?? 0;
+      debugPrint(
+        'import:bulk_type=$normalizedBulkType file=$filePath sample_cards=${preflight.sampledCards} '
+        'sample_en=$sampleEn sample_it=$sampleIt db_en=${languageCounts['en'] ?? 0} db_it=${languageCounts['it'] ?? 0} '
+        'allowed=${allowedLanguages.toList()..sort()}',
+      );
       if (!mounted) {
         return;
       }
@@ -5621,24 +5882,43 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         await _softRestartAfterDatabaseBootstrap();
       }
       await _maybeShowLatestReleaseNotesAfterDbImport();
+      await _showImportLanguageSummaryDialog(
+        title: _isItalianUi()
+            ? 'Carte importate per lingua'
+            : 'Imported cards by language',
+        languageCounts: languageCounts,
+        details: <String>[
+          'Bulk type: $normalizedBulkType',
+          'File: $filePath',
+          'Expected size: ${_bulkExpectedSizeBytes ?? 0}',
+          'Allowed langs: ${(allowedLanguages.toList()..sort()).join(',')}',
+          'File sample (${preflight.sampledCards}): EN=$sampleEn IT=$sampleIt',
+          'Local bulk cache files: $remainingBulkFiles (cleaned: $deletedBulkFiles)',
+        ],
+      );
       if (!mounted) {
         return;
       }
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(l10n.importComplete)));
-    } catch (_) {
+    } catch (error) {
       if (!mounted) {
         return;
       }
       setState(() {
         _bulkImporting = false;
       });
+      final msg = error.toString().contains('bulk_local_missing_it')
+          ? (_isItalianUi()
+                ? 'File locale non coerente: poche carte IT. Riscarica All printings.'
+                : 'Local file mismatch: too few IT cards. Download All printings again.')
+          : (_isStorageSpaceError(error)
+                ? _storageSpaceErrorMessage(italian: _isItalianUi())
+                : l10n.importFailed('import_failed'));
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.importFailed('import_failed'))),
-        );
+        ..showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
@@ -5651,6 +5931,56 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     await _showLatestReleaseNotesPanel(context);
+  }
+
+  Future<void> _showImportLanguageSummaryDialog({
+    required String title,
+    required Map<String, int> languageCounts,
+    List<String> details = const <String>[],
+  }) async {
+    if (!mounted || languageCounts.isEmpty) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: languageCounts.entries
+                  .map(
+                    (entry) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text('${entry.key.toUpperCase()}: ${entry.value}'),
+                    ),
+                  )
+                  .toList()
+                ..addAll(
+                  details.map(
+                    (line) => Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        line,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(AppLocalizations.of(context)!.closeLabel),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _rebuildSearchIndex() async {
@@ -5802,6 +6132,25 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         ),
       ),
     );
+  }
+
+  String _scryfallLanguageClauseForQuery(List<String> languages) {
+    final allowed = AppSettings.languageCodes
+        .map((item) => item.toLowerCase())
+        .toSet();
+    final normalized = languages
+        .map((item) => item.trim().toLowerCase())
+        .where((item) => allowed.contains(item))
+        .toSet()
+        .toList()
+      ..sort();
+    if (normalized.isEmpty) {
+      return 'lang:en';
+    }
+    if (normalized.length == 1) {
+      return 'lang:${normalized.first}';
+    }
+    return '(${normalized.map((lang) => 'lang:$lang').join(' or ')})';
   }
 
   @override
@@ -7757,6 +8106,7 @@ class _OcrSearchSeed {
     this.cardName,
     this.setCode,
     this.collectorNumber,
+    this.scannerLanguageCode,
     this.isFoil = false,
   });
 
@@ -7764,6 +8114,7 @@ class _OcrSearchSeed {
   final String? cardName;
   final String? setCode;
   final String? collectorNumber;
+  final String? scannerLanguageCode;
   final bool isFoil;
 }
 
@@ -7781,6 +8132,7 @@ enum _HomeAddContext { home, set, custom, smart, deck, wishlist }
 Future<CardSearchResult?> _pickCardPrintingForName(
   BuildContext context,
   String cardName, {
+  required List<String> languages,
   String? preferredSetCode,
   String? preferredCollectorNumber,
   Set<String> localPrintingKeys = const {},
@@ -7791,14 +8143,14 @@ Future<CardSearchResult?> _pickCardPrintingForName(
   }
   var results = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
     CollectionFilter(name: cardName),
-    languages: const ['en'],
+    languages: languages,
     limit: 250,
   );
   if (results.isEmpty) {
     results = await ScryfallDatabase.instance.searchCardsByName(
       cardName,
       limit: 120,
-      languages: const ['en'],
+      languages: languages,
     );
   }
   if (results.isEmpty) {
@@ -7941,11 +8293,95 @@ int _levenshteinDistance(String a, String b) {
 }
 
 String _normalizeCardNameForMatch(String value) {
-  return value
+  return _foldLatinDiacritics(value)
       .toLowerCase()
       .replaceAll(RegExp(r"[^a-z0-9'\- ]"), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
+}
+
+bool _isStorageSpaceError(Object error) {
+  final raw = error.toString().toLowerCase();
+  return raw.contains('no space left on device') ||
+      raw.contains('enospc') ||
+      raw.contains('errno = 28') ||
+      raw.contains('errno 28') ||
+      raw.contains('os error: 28') ||
+      raw.contains('database or disk is full') ||
+      raw.contains('sqlite_full') ||
+      raw.contains('sqlite code 13');
+}
+
+String _storageSpaceErrorMessage({required bool italian}) {
+  return italian
+      ? 'Spazio insufficiente sul dispositivo. Libera spazio e riprova (consigliati almeno 3 GB). In alternativa passa a un database piu piccolo da Impostazioni (es. Oracle Cards / profilo Pokemon piu leggero).'
+      : 'Not enough free storage on this device. Free up space and retry (at least 3 GB recommended). Alternatively switch to a smaller database in Settings (for example Oracle Cards / a lighter Pokemon profile).';
+}
+
+String _foldLatinDiacritics(String value) {
+  const replacements = <String, String>{
+    '\u00E0': 'a',
+    '\u00E1': 'a',
+    '\u00E2': 'a',
+    '\u00E4': 'a',
+    '\u00E3': 'a',
+    '\u00E5': 'a',
+    '\u00E7': 'c',
+    '\u00E8': 'e',
+    '\u00E9': 'e',
+    '\u00EA': 'e',
+    '\u00EB': 'e',
+    '\u00EC': 'i',
+    '\u00ED': 'i',
+    '\u00EE': 'i',
+    '\u00EF': 'i',
+    '\u00F1': 'n',
+    '\u00F2': 'o',
+    '\u00F3': 'o',
+    '\u00F4': 'o',
+    '\u00F6': 'o',
+    '\u00F5': 'o',
+    '\u00F9': 'u',
+    '\u00FA': 'u',
+    '\u00FB': 'u',
+    '\u00FC': 'u',
+    '\u00FD': 'y',
+    '\u00FF': 'y',
+    '\u00C0': 'a',
+    '\u00C1': 'a',
+    '\u00C2': 'a',
+    '\u00C4': 'a',
+    '\u00C3': 'a',
+    '\u00C5': 'a',
+    '\u00C7': 'c',
+    '\u00C8': 'e',
+    '\u00C9': 'e',
+    '\u00CA': 'e',
+    '\u00CB': 'e',
+    '\u00CC': 'i',
+    '\u00CD': 'i',
+    '\u00CE': 'i',
+    '\u00CF': 'i',
+    '\u00D1': 'n',
+    '\u00D2': 'o',
+    '\u00D3': 'o',
+    '\u00D4': 'o',
+    '\u00D6': 'o',
+    '\u00D5': 'o',
+    '\u00D9': 'u',
+    '\u00DA': 'u',
+    '\u00DB': 'u',
+    '\u00DC': 'u',
+    '\u00DD': 'y',
+  };
+  if (value.isEmpty) {
+    return value;
+  }
+  final buffer = StringBuffer();
+  for (final char in value.split('')) {
+    buffer.write(replacements[char] ?? char);
+  }
+  return buffer.toString();
 }
 
 String _printingKeyForCard(CardSearchResult card) {
@@ -8119,6 +8555,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
   Set<String> _knownSetCodes = const {};
   Map<String, String> _knownSetNames = const {};
   String? _selectedSetFilterCode;
+  List<String> _scannerLanguageOptions = const <String>['en'];
+  String? _selectedLanguageFilterCode;
   bool _foilSelected = false;
   bool _torchEnabled = false;
   bool _torchAvailable = true;
@@ -8134,6 +8572,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
     unawaited(_loadBulkCoverageState());
+    unawaited(_loadScannerLanguageConfig());
     unawaited(_loadKnownSetCodesForScanner());
     unawaited(_initializeCamera());
   }
@@ -8187,6 +8626,106 @@ class _CardScannerPageState extends State<_CardScannerPage>
         _selectedSetFilterCode = null;
       }
     });
+  }
+
+  Future<List<String>> _loadScannerLanguageOptions() async {
+    final game = TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    final configured = (await AppSettings.loadCardLanguagesForGame(game))
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    configured.add('en');
+    final options = configured.toList()..sort();
+    return options;
+  }
+
+  Future<void> _loadScannerLanguageConfig() async {
+    final options = await _loadScannerLanguageOptions();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _scannerLanguageOptions = options;
+      if (options.length <= 1) {
+        _selectedLanguageFilterCode = 'en';
+        return;
+      }
+      final selected = _selectedLanguageFilterCode?.trim().toLowerCase();
+      if (selected == null || selected.isEmpty || !options.contains(selected)) {
+        _selectedLanguageFilterCode = null;
+      }
+    });
+  }
+
+  Future<void> _pickLanguageFilter() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (_scannerLanguageOptions.length <= 1) {
+      return;
+    }
+    final options = _scannerLanguageOptions;
+    final selected = await showModalBottomSheet<String?>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF5D4731)),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.public),
+                  title: Text(
+                    Localizations.localeOf(context)
+                            .languageCode
+                            .toLowerCase()
+                            .startsWith('it')
+                        ? 'Qualsiasi lingua'
+                        : 'Any language',
+                  ),
+                  onTap: () => Navigator.of(context).pop(''),
+                ),
+                const Divider(height: 1),
+                ...options.map(
+                  (code) => ListTile(
+                    leading: const Icon(Icons.translate_rounded),
+                    title: Text(_scannerLanguageLabel(l10n, code)),
+                    onTap: () => Navigator.of(context).pop(code),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || selected == null) {
+      return;
+    }
+    setState(() {
+      _selectedLanguageFilterCode =
+          selected.isEmpty ? null : selected.trim().toLowerCase();
+    });
+  }
+
+  String _scannerLanguageLabel(AppLocalizations l10n, String code) {
+    final normalized = code.trim().toLowerCase();
+    if (normalized == 'en') {
+      return l10n.languageEnglish;
+    }
+    if (normalized == 'it') {
+      return l10n.languageItalian;
+    }
+    return normalized.toUpperCase();
   }
 
   Future<void> _maybeShowScannerTutorialOnOpen() async {
@@ -8538,6 +9077,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
           'lockedName': _lockedName,
           'lockedSet': _lockedSet,
           'selectedSetCode': _selectedSetFilterCode,
+          'selectedLanguageCode': _selectedLanguageFilterCode,
           'foil': _foilSelected,
         });
         Navigator.of(context).pop('__SCAN_PAYLOAD__$payload');
@@ -9009,59 +9549,97 @@ class _CardScannerPageState extends State<_CardScannerPage>
             ),
           Positioned(
             left: 16,
-            bottom: 138,
-            child: SafeArea(
-              top: false,
-              child: OutlinedButton.icon(
-                onPressed: _pickSetFilter,
-                icon: const Icon(Icons.auto_awesome_mosaic, size: 16),
-                label: Text(
-                  _selectedSetFilterCode == null
-                      ? l10n.scannerSetAnyLabel
-                      : 'Set: ${_knownSetNames[_selectedSetFilterCode!] ?? _selectedSetFilterCode!.toUpperCase()}',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFE9C46A),
-                  side: const BorderSide(color: Color(0xFF5D4731)),
-                  backgroundColor: const Color(0xAA1B1511),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
             right: 16,
             bottom: 138,
             child: SafeArea(
               top: false,
-              child: FilledButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _foilSelected = !_foilSelected;
-                  });
-                },
-                icon: Icon(
-                  _foilSelected ? Icons.star : Icons.star_border_rounded,
-                  size: 16,
-                ),
-                label: Text(l10n.foilLabel),
-                style: FilledButton.styleFrom(
-                  foregroundColor: const Color(0xFF1C1510),
-                  backgroundColor: _foilSelected
-                      ? const Color(0xFFE9C46A)
-                      : const Color(0xCC3A2412),
-                  side: BorderSide(
-                    color: _foilSelected
-                        ? const Color(0xFFF5DEA0)
-                        : const Color(0xFF5D4731),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
-                  ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: _pickSetFilter,
+                      icon: const Icon(Icons.auto_awesome_mosaic, size: 16),
+                      label: Text(
+                        _selectedSetFilterCode == null
+                            ? l10n.scannerSetAnyLabel
+                            : 'Set: ${_knownSetNames[_selectedSetFilterCode!] ?? _selectedSetFilterCode!.toUpperCase()}',
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFFE9C46A),
+                        side: const BorderSide(color: Color(0xFF5D4731)),
+                        backgroundColor: const Color(0xAA1B1511),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    if (_scannerLanguageOptions.length > 1) ...[
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _pickLanguageFilter,
+                        icon: const Icon(Icons.translate_rounded, size: 16),
+                        label: Text(
+                          _selectedLanguageFilterCode == null
+                              ? (Localizations.localeOf(context)
+                                      .languageCode
+                                      .toLowerCase()
+                                      .startsWith('it')
+                                  ? 'Lang: tutte'
+                                  : 'Lang: any')
+                              : 'Lang: ${_selectedLanguageFilterCode!.toUpperCase()}',
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFE9C46A),
+                          side: const BorderSide(color: Color(0xFF5D4731)),
+                          backgroundColor: const Color(0xAA1B1511),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _foilSelected = !_foilSelected;
+                      });
+                    },
+                    icon: Icon(
+                      _foilSelected ? Icons.star : Icons.star_border_rounded,
+                      size: 16,
+                    ),
+                    label: Text(l10n.foilLabel),
+                    style: FilledButton.styleFrom(
+                      foregroundColor: const Color(0xFF1C1510),
+                      backgroundColor: _foilSelected
+                          ? const Color(0xFFE9C46A)
+                          : const Color(0xCC3A2412),
+                      side: BorderSide(
+                        color: _foilSelected
+                            ? const Color(0xFFF5DEA0)
+                            : const Color(0xFF5D4731),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    ),
+                  ],
                 ),
               ),
             ),

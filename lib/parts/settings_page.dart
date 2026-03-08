@@ -17,6 +17,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _priceSource = 'scryfall';
   String _priceCurrency = 'eur';
   bool _showPrices = true;
+  bool _mtgItalianCardsEnabled = false;
+  bool _pokemonItalianCardsEnabled = false;
   String _appLocaleCode = 'en';
   String _appThemeCode = 'magic';
   String _appVersion = '0.4.4';
@@ -32,8 +34,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool get _isItalianUi => Localizations.localeOf(
     context,
   ).languageCode.toLowerCase().startsWith('it');
-  AppTcgGame get _primarySettingsGame =>
-      _primaryGame == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
   TcgGame get _secondaryGame =>
       _primaryGame == TcgGame.mtg ? TcgGame.pokemon : TcgGame.mtg;
   String _ownershipKeyForGame(TcgGame game) => game == TcgGame.pokemon
@@ -129,7 +129,7 @@ class _SettingsPageState extends State<SettingsPage> {
     await _purchaseManager.syncPrimaryGameFromSettings();
     final selectedGame = await AppSettings.loadSelectedTcgGame();
     final primaryGame = await AppSettings.loadPrimaryTcgGameOrNull();
-    final bulkType = await AppSettings.loadBulkTypeForGame(selectedGame);
+    final bulkType = await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
     final priceCurrency = await AppSettings.loadPriceCurrency();
     final showPrices = await AppSettings.loadShowPrices();
     final appLocaleCode = await AppSettings.loadAppLocale();
@@ -137,6 +137,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final ownedTcgs = await AppSettings.loadOwnedTcgs();
     final pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
     final pokemonDatasetProfile = await AppSettings.loadPokemonDatasetProfile();
+    final mtgCardLanguages = await AppSettings.loadCardLanguagesForGame(
+      AppTcgGame.mtg,
+    );
+    final pokemonCardLanguages = await AppSettings.loadCardLanguagesForGame(
+      AppTcgGame.pokemon,
+    );
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -151,6 +157,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _bulkType = bulkType;
       _priceCurrency = priceCurrency;
       _showPrices = showPrices;
+      _mtgItalianCardsEnabled = mtgCardLanguages.contains('it');
+      _pokemonItalianCardsEnabled = pokemonCardLanguages.contains('it');
       _appLocaleCode = appLocaleCode;
       _appThemeCode = appThemeCode;
       _appVersion = appVersion;
@@ -712,6 +720,59 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
+  Future<void> _setItalianCardsEnabled(TcgGame game, bool enabled) async {
+    final target = game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
+    final languages = <String>{'en'};
+    if (enabled) {
+      languages.add('it');
+    }
+    await AppSettings.saveCardLanguagesForGame(target, languages);
+    final bulkType = await AppSettings.loadBulkTypeForGame(target);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      if (game == TcgGame.mtg) {
+        _mtgItalianCardsEnabled = enabled;
+      } else {
+        _pokemonItalianCardsEnabled = enabled;
+      }
+    });
+    final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
+    final normalizedBulk = (bulkType ?? '').trim().toLowerCase();
+    final requiresAllCards = enabled && normalizedBulk != 'all_cards';
+    final shouldReimportNow = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        final body = requiresAllCards
+            ? (_isItalianUi
+                  ? 'Lingue $gameLabel aggiornate. Per la ricerca locale in italiano usa il database "All Cards". Poi reimporta.'
+                  : '$gameLabel languages updated. For Italian local search, use the "All Cards" database. Then reimport.')
+            : (_isItalianUi
+                  ? 'Lingue $gameLabel aggiornate. Per applicare la modifica devi reimportare il database locale.'
+                  : '$gameLabel languages updated. Reimport the local database to apply this change.');
+        return AlertDialog(
+          title: Text(_isItalianUi ? 'Lingue aggiornate' : 'Languages updated'),
+          content: Text(body),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(_reimportLabel()),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldReimportNow == true && mounted) {
+      await _reimportDatabaseForGame(game, skipConfirmation: true);
+    }
+  }
+
   Future<void> _changeBulkType() async {
     final l10n = AppLocalizations.of(context)!;
     final selected = await _showBulkTypePicker(
@@ -783,7 +844,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
 
     try {
-      await AppSettings.saveBulkTypeForGame(_primarySettingsGame, selected);
+      await AppSettings.saveBulkTypeForGame(AppTcgGame.mtg, selected);
       await ScryfallBulkChecker().resetState();
       await ScryfallDatabase.instance.hardReset();
       await _deleteBulkFiles();
@@ -889,6 +950,276 @@ class _SettingsPageState extends State<SettingsPage> {
       context,
       l10n.gameDatabaseResetDone(gameLabel),
     );
+    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+  }
+
+  String _reimportLabel() => _isItalianUi ? 'Reimporta' : 'Reimport';
+
+  String _reimportConfirmTitle(String gameLabel) => _isItalianUi
+      ? 'Reimporta database $gameLabel'
+      : 'Reimport $gameLabel database';
+
+  String _reimportConfirmBody(String gameLabel) => _isItalianUi
+      ? 'Usa i file gia presenti in locale senza scaricare di nuovo.'
+      : 'Use already downloaded local files without downloading again.';
+
+  String _reimportProgressLabel(String gameLabel) => _isItalianUi
+      ? 'Reimport database $gameLabel in corso...'
+      : 'Reimporting $gameLabel database...';
+
+  String _reimportDoneLabel(String gameLabel) => _isItalianUi
+      ? 'Reimport database $gameLabel completato.'
+      : '$gameLabel database reimport completed.';
+
+  Future<void> _showImportLanguageSummaryDialog({
+    required String title,
+    required Map<String, int> languageCounts,
+    List<String> details = const <String>[],
+  }) async {
+    if (!mounted || languageCounts.isEmpty) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 320,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: languageCounts.entries
+                  .map(
+                    (entry) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Text('${entry.key.toUpperCase()}: ${entry.value}'),
+                    ),
+                  )
+                  .toList()
+                ..addAll(
+                  details.map(
+                    (line) => Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        line,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ),
+                ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(AppLocalizations.of(context)!.closeLabel),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _reimportFailedLabel(Object error) {
+    if (_isStorageSpaceError(error)) {
+      return _storageSpaceErrorMessage(italian: _isItalianUi);
+    }
+    final text = error.toString();
+    if (_isItalianUi) {
+      if (text.contains('pokemon_dataset_cache_empty')) {
+        return 'Reimport fallito: nessun file locale trovato per Pokemon.';
+      }
+      if (text.contains('bulk_file_not_found')) {
+        return 'Reimport fallito: file bulk locale non trovato.';
+      }
+      if (text.contains('bulk_local_missing_it')) {
+        return 'Reimport fallito: il file locale non contiene abbastanza carte italiane. Scarica di nuovo "All printings".';
+      }
+      return 'Reimport fallito: $text';
+    }
+    if (text.contains('pokemon_dataset_cache_empty')) {
+      return 'Reimport failed: no local Pokemon cache files found.';
+    }
+    if (text.contains('bulk_file_not_found')) {
+      return 'Reimport failed: local bulk file not found.';
+    }
+    if (text.contains('bulk_local_missing_it')) {
+      return 'Reimport failed: local file has too few Italian cards. Download "All printings" again.';
+    }
+    return 'Reimport failed: $text';
+  }
+
+  Future<void> _reimportDatabaseForGame(
+    TcgGame game, {
+    bool skipConfirmation = false,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    final gameLabel = game == TcgGame.mtg ? 'Magic' : 'Pokemon';
+    if (!skipConfirmation) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(_reimportConfirmTitle(gameLabel)),
+            content: Text(_reimportConfirmBody(gameLabel)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(_reimportLabel()),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirmed != true || !mounted) {
+        return;
+      }
+    } else if (!mounted) {
+      return;
+    }
+
+    var progress = 0.0;
+    var status = _reimportProgressLabel(gameLabel);
+    StateSetter? dialogSetState;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            dialogSetState = setDialogState;
+            return AlertDialog(
+              title: Text(_reimportLabel()),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(status),
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(value: progress.clamp(0.0, 1.0)),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    void updateProgress(double nextProgress, [String? nextStatus]) {
+      progress = nextProgress.clamp(0.0, 1.0);
+      if (nextStatus != null && nextStatus.trim().isNotEmpty) {
+        status = nextStatus.trim();
+      }
+      if (dialogSetState != null) {
+        dialogSetState!(() {});
+      }
+    }
+
+    var importedLanguageCounts = <String, int>{};
+    var localBulkCacheFiles = -1;
+    var cleanedBulkFiles = 0;
+    try {
+      await TcgEnvironmentController.instance.init();
+      final activeGame = TcgEnvironmentController.instance.currentGame;
+      final activeConfig = TcgEnvironmentController.instance.configFor(
+        activeGame,
+      );
+      final targetConfig = TcgEnvironmentController.instance.configFor(game);
+      await ScryfallDatabase.instance.setDatabaseFileName(targetConfig.dbFileName);
+      try {
+        if (game == TcgGame.mtg) {
+          final bulkType =
+              await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg) ??
+              'oracle_cards';
+          final appDir = await getApplicationDocumentsDirectory();
+          final bulkPath = '${appDir.path}/${_bulkTypeFileName(bulkType)}';
+          final bulkFile = File(bulkPath);
+          if (!await bulkFile.exists()) {
+            throw FileSystemException('bulk_file_not_found', bulkPath);
+          }
+          final languages = (await AppSettings.loadCardLanguagesForGame(
+            AppTcgGame.mtg,
+          )).toSet();
+          if (languages.isEmpty) {
+            languages.add('en');
+          }
+          final normalizedBulkType = bulkType.trim().toLowerCase();
+          if (normalizedBulkType == 'all_cards' &&
+              languages.contains('it')) {
+            final preflight = await ScryfallBulkImporter()
+                .inspectLocalBulkLanguageCounts(bulkPath);
+            final italianCount = preflight.languageCounts['it'] ?? 0;
+            if (italianCount < 1000) {
+              throw StateError('bulk_local_missing_it:$italianCount');
+            }
+          }
+          updateProgress(0.02, _reimportProgressLabel(gameLabel));
+          await ScryfallBulkImporter().importAllCardsJson(
+            bulkPath,
+            onProgress: (count, value) {
+              final label = _isItalianUi
+                  ? 'Reimport Magic: $count carte'
+                  : 'Reimport Magic: $count cards';
+              updateProgress(value, label);
+            },
+            bulkType: bulkType,
+            allowedLanguages: languages.toList()..sort(),
+          );
+          cleanedBulkFiles = await _cleanupMtgBulkFilesKeepingType(bulkType);
+          localBulkCacheFiles = await _countMtgBulkCacheFiles();
+          importedLanguageCounts = await ScryfallDatabase.instance
+              .fetchCardCountsByLanguage();
+        } else {
+          await PokemonBulkService.instance.reimportFromLocalCache(
+            onProgress: (value) =>
+                updateProgress(value, _reimportProgressLabel(gameLabel)),
+            onStatus: (value) => updateProgress(progress, value),
+          );
+          importedLanguageCounts = await ScryfallDatabase.instance
+              .fetchCardCountsByLanguage();
+        }
+      } finally {
+        await ScryfallDatabase.instance.setDatabaseFileName(
+          activeConfig.dbFileName,
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(context, _reimportFailedLabel(error));
+      return;
+    }
+
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
+    if (!mounted) {
+      return;
+    }
+    await _showImportLanguageSummaryDialog(
+      title: _isItalianUi
+          ? 'Carte importate per lingua'
+          : 'Imported cards by language',
+      languageCounts: importedLanguageCounts,
+      details: localBulkCacheFiles >= 0
+          ? <String>[
+              'Local bulk cache files: $localBulkCacheFiles (cleaned: $cleanedBulkFiles)',
+            ]
+          : const <String>[],
+    );
+    if (!mounted) {
+      return;
+    }
+    showAppSnackBar(context, _reimportDoneLabel(gameLabel));
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
   }
 
@@ -1069,7 +1400,10 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
-      showAppSnackBar(context, l10n.importFailed(error));
+      final message = _isStorageSpaceError(error)
+          ? _storageSpaceErrorMessage(italian: _isItalianUi)
+          : l10n.importFailed(error);
+      showAppSnackBar(context, message);
     } finally {
       if (mounted) {
         setState(() {
@@ -1163,7 +1497,10 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) {
         return;
       }
-      showAppSnackBar(context, l10n.importFailed(error));
+      final message = _isStorageSpaceError(error)
+          ? _storageSpaceErrorMessage(italian: _isItalianUi)
+          : l10n.importFailed(error);
+      showAppSnackBar(context, message);
     } finally {
       if (mounted) {
         setState(() {
@@ -1516,6 +1853,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: Text(l10n.reset),
                           ),
                           OutlinedButton(
+                            onPressed: () => _reimportDatabaseForGame(TcgGame.mtg),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(_reimportLabel()),
+                          ),
+                          OutlinedButton(
                             onPressed: _changeBulkType,
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
@@ -1559,6 +1903,14 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: Text(l10n.reset),
                           ),
                           OutlinedButton(
+                            onPressed: () =>
+                                _reimportDatabaseForGame(TcgGame.pokemon),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF5D4731)),
+                            ),
+                            child: Text(_reimportLabel()),
+                          ),
+                          OutlinedButton(
                             onPressed: _changePokemonDatasetProfile,
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
@@ -1567,6 +1919,118 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ],
                       ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                _buildSectionCard(
+                  context: context,
+                  icon: Icons.translate_rounded,
+                  title: _isItalianUi
+                      ? 'Lingue carte (database e ricerca)'
+                      : 'Card languages (database and search)',
+                  subtitle: _isItalianUi
+                      ? 'Inglese sempre attivo. Per ricerca locale offline multilingua in Magic serve il database "All Cards".'
+                      : 'English is always active. For multilingual offline local search in Magic, use the "All Cards" database.',
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        final normalizedBulk =
+                            (_bulkType ?? '').trim().toLowerCase();
+                        final mtgOfflineReady =
+                            !_mtgItalianCardsEnabled ||
+                            normalizedBulk == 'all_cards';
+                        return Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                          decoration: BoxDecoration(
+                            color: mtgOfflineReady
+                                ? const Color(0x1A2A4D30)
+                                : const Color(0x33A06A1A),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: mtgOfflineReady
+                                  ? const Color(0xFF4D8B58)
+                                  : const Color(0xFFE9C46A),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                mtgOfflineReady
+                                    ? Icons.verified_rounded
+                                    : Icons.warning_amber_rounded,
+                                size: 18,
+                                color: mtgOfflineReady
+                                    ? const Color(0xFF8DD39A)
+                                    : const Color(0xFFE9C46A),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  mtgOfflineReady
+                                      ? (_isItalianUi
+                                            ? 'Magic offline: configurazione OK per ricerca multilingua locale.'
+                                            : 'Magic offline: configuration OK for multilingual local search.')
+                                      : (_isItalianUi
+                                            ? 'Attenzione: con italiano attivo, la ricerca locale Magic funziona correttamente solo con database "All Cards".'
+                                            : 'Warning: with Italian enabled, Magic local search works correctly only with the "All Cards" database.'),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(
+                                        color: const Color(0xFFDFC9A3),
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    Text(
+                      'Magic',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _mtgItalianCardsEnabled,
+                      title: Text(
+                        _isItalianUi
+                            ? 'Aggiungi carte italiane'
+                            : 'Include Italian cards',
+                      ),
+                      subtitle: Text(
+                        _isItalianUi ? 'Inglese sempre incluso' : 'English always included',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFBFAE95),
+                        ),
+                      ),
+                      onChanged: (value) => _setItalianCardsEnabled(TcgGame.mtg, value),
+                    ),
+                    const Divider(height: 20, color: Color(0xFF3A2F24)),
+                    Text(
+                      'Pokemon',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _pokemonItalianCardsEnabled,
+                      title: Text(
+                        _isItalianUi
+                            ? 'Aggiungi carte italiane'
+                            : 'Include Italian cards',
+                      ),
+                      subtitle: Text(
+                        _isItalianUi ? 'Inglese sempre incluso' : 'English always included',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: const Color(0xFFBFAE95),
+                        ),
+                      ),
+                      onChanged: (value) =>
+                          _setItalianCardsEnabled(TcgGame.pokemon, value),
                     ),
                   ],
                 ),

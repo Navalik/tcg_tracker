@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -460,6 +461,8 @@ class AppDatabase extends _$AppDatabase {
           ''',
         );
       }
+      await _createIndexes();
+      await _createFts();
     },
     beforeOpen: (details) async {},
   );
@@ -513,6 +516,16 @@ class CardPriceSnapshot {
   final int? pricesUpdatedAt;
 }
 
+class _DbAppMigration {
+  const _DbAppMigration({
+    required this.version,
+    required this.run,
+  });
+
+  final int version;
+  final Future<void> Function(AppDatabase db) run;
+}
+
 class ScryfallDatabase {
   ScryfallDatabase._();
 
@@ -523,17 +536,37 @@ class ScryfallDatabase {
   static const _basicLandsCollectionInternalName = '__basic_lands__';
   static const _deckSideboardCollectionPrefix = '__deck_side__:';
   static const _defaultDbFileName = 'scryfall.db';
+  static const _appMetaTable = 'app_meta';
+  static const _appDbVersionKey = 'app_db_version';
+  static const _appDbLastMigrationVersionKey = 'app_db_last_migration_version';
+  static const _appDbLastMigrationAtKey = 'app_db_last_migration_at_ms';
+  static const _appDbMigrationHistoryKey = 'app_db_migration_history_json';
+  static const int _targetAppDbVersion = 1;
+  static const int _migrationHistoryLimit = 40;
+  // Add new steps here:
+  // _DbAppMigration(version: 2, run: _runAppDbMigrationV2),
+  static final List<_DbAppMigration> _appDbMigrations = <_DbAppMigration>[
+    _DbAppMigration(version: 1, run: _runAppDbMigrationV1),
+  ];
 
   AppDatabase? _db;
   String _dbFileName = _defaultDbFileName;
+  bool _schemaCompatibilityEnsured = false;
+  Future<void>? _schemaCompatibilityTask;
+  bool _appMigrationsEnsured = false;
+  Future<void>? _appMigrationsTask;
+  bool _printedNameIndexSelfHealTried = false;
 
   Future<AppDatabase> open() async {
-    if (_db != null) {
-      return _db!;
+    var db = _db;
+    if (db == null) {
+      await _ensureRegenerated();
+      db = AppDatabase(fileName: _dbFileName);
+      _db = db;
     }
-    await _ensureRegenerated();
-    _db = AppDatabase(fileName: _dbFileName);
-    return _db!;
+    await _ensureSchemaCompatibility(db);
+    await _ensureAppMigrations(db);
+    return db;
   }
 
   Future<void> setDatabaseFileName(String fileName) async {
@@ -544,6 +577,11 @@ class ScryfallDatabase {
     }
     await close();
     _dbFileName = resolved;
+    _schemaCompatibilityEnsured = false;
+    _schemaCompatibilityTask = null;
+    _appMigrationsEnsured = false;
+    _appMigrationsTask = null;
+    _printedNameIndexSelfHealTried = false;
   }
 
   Future<void> close() async {
@@ -553,6 +591,396 @@ class ScryfallDatabase {
     }
     await db.close();
     _db = null;
+    _schemaCompatibilityEnsured = false;
+    _schemaCompatibilityTask = null;
+    _appMigrationsEnsured = false;
+    _appMigrationsTask = null;
+    _printedNameIndexSelfHealTried = false;
+  }
+
+  Future<void> _ensureSchemaCompatibility(AppDatabase db) async {
+    if (_schemaCompatibilityEnsured) {
+      return;
+    }
+    final pending = _schemaCompatibilityTask;
+    if (pending != null) {
+      await pending;
+      return;
+    }
+    final task = _ensureSchemaCompatibilityInternal(db);
+    _schemaCompatibilityTask = task;
+    try {
+      await task;
+      _schemaCompatibilityEnsured = true;
+    } finally {
+      _schemaCompatibilityTask = null;
+    }
+  }
+
+  Future<void> _ensureSchemaCompatibilityInternal(AppDatabase db) async {
+    await _ensureTableColumns(db, 'cards', const <String, String>{
+      'set_name': 'TEXT',
+      'set_total': 'INTEGER',
+      'cmc': 'REAL',
+      'oracle_text': 'TEXT',
+      'colors': 'TEXT',
+      'color_identity': 'TEXT',
+      'artist': 'TEXT',
+      'power': 'TEXT',
+      'toughness': 'TEXT',
+      'loyalty': 'TEXT',
+      'price_usd': 'TEXT',
+      'price_usd_foil': 'TEXT',
+      'price_usd_etched': 'TEXT',
+      'price_eur': 'TEXT',
+      'price_eur_foil': 'TEXT',
+      'price_tix': 'TEXT',
+      'prices_updated_at': 'INTEGER',
+    });
+
+    await _ensureTableColumns(db, 'collections', const <String, String>{
+      'type': "TEXT NOT NULL DEFAULT 'custom'",
+      'filter_json': 'TEXT',
+    });
+
+    await _ensureTableColumns(
+      db,
+      'collection_cards',
+      const <String, String>{
+        'quantity': 'INTEGER NOT NULL DEFAULT 1',
+        'foil': 'INTEGER NOT NULL DEFAULT 0',
+        'alt_art': 'INTEGER NOT NULL DEFAULT 0',
+      },
+    );
+
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_name_idx ON cards(name)',
+    );
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_set_idx ON cards(set_code)',
+    );
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_number_idx ON cards(collector_number)',
+    );
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_oracle_idx ON cards(oracle_id)',
+    );
+    await _ensurePrintedNameSearchIndex(db);
+
+    await db.customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS cards_fts
+      USING fts5(
+        name,
+        lang,
+        content='cards',
+        content_rowid='rowid'
+      )
+    ''');
+
+    final cardsCountRow = await db
+        .customSelect('SELECT COUNT(*) AS c FROM cards')
+        .getSingle();
+    final cardsCount = cardsCountRow.read<int>('c');
+    if (cardsCount <= 0) {
+      return;
+    }
+    final hasFtsRows = await db
+            .customSelect('SELECT rowid AS rowid FROM cards_fts LIMIT 1')
+            .getSingleOrNull() !=
+        null;
+    if (!hasFtsRows) {
+      await db.rebuildFts();
+    }
+  }
+
+  Future<void> _ensurePrintedNameSearchIndex(AppDatabase db) async {
+    await db.customStatement('''
+      CREATE TABLE IF NOT EXISTS cards_printed_search (
+        card_id TEXT PRIMARY KEY,
+        lang TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        folded_name TEXT NOT NULL
+      )
+    ''');
+    await db.customStatement('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS cards_printed_fts
+      USING fts5(
+        display_name,
+        card_id UNINDEXED,
+        lang UNINDEXED,
+        tokenize = "unicode61 remove_diacritics 2"
+      )
+    ''');
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_printed_search_lang_folded_idx ON cards_printed_search(lang, folded_name)',
+    );
+    await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS cards_printed_search_folded_idx ON cards_printed_search(folded_name)',
+    );
+    final cardsCount = (await db
+            .customSelect('SELECT COUNT(*) AS c FROM cards')
+            .getSingle())
+        .read<int>('c');
+    final indexCount = (await db
+            .customSelect('SELECT COUNT(*) AS c FROM cards_printed_search')
+            .getSingle())
+        .read<int>('c');
+    final hasPrintedFtsRows = await db
+            .customSelect('SELECT rowid AS rowid FROM cards_printed_fts LIMIT 1')
+            .getSingleOrNull() !=
+        null;
+    if (cardsCount == indexCount && (cardsCount == 0 || hasPrintedFtsRows)) {
+      return;
+    }
+    await _rebuildPrintedNameSearchIndex(db);
+  }
+
+  Future<void> _rebuildPrintedNameSearchIndex(AppDatabase db) async {
+    const displayExpr =
+        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.printed_name')), ''), name)";
+    const foldedExpr =
+        "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER($displayExpr), ',', ''), ' ', ''), '-', ''), CHAR(39), ''), CHAR(8217), ''), CHAR(34), '')";
+    await db.customStatement('DELETE FROM cards_printed_search');
+    await db.customStatement('''
+      INSERT OR REPLACE INTO cards_printed_search(card_id, lang, display_name, folded_name)
+      SELECT
+        id,
+        LOWER(COALESCE(NULLIF(TRIM(lang), ''), 'en')),
+        $displayExpr,
+        $foldedExpr
+      FROM cards
+    ''');
+    await db.customStatement('DELETE FROM cards_printed_fts');
+    await db.customStatement('''
+      INSERT INTO cards_printed_fts(display_name, card_id, lang)
+      SELECT display_name, card_id, lang
+      FROM cards_printed_search
+    ''');
+  }
+
+  Future<void> rebuildPrintedNameSearchIndex() async {
+    final db = await open();
+    await _rebuildPrintedNameSearchIndex(db);
+  }
+
+  Future<void> _ensureTableColumns(
+    AppDatabase db,
+    String tableName,
+    Map<String, String> requiredColumns,
+  ) async {
+    final rows = await db.customSelect('PRAGMA table_info($tableName)').get();
+    final existing = rows
+        .map((row) => (row.readNullable<String>('name') ?? '').trim())
+        .where((name) => name.isNotEmpty)
+        .map((name) => name.toLowerCase())
+        .toSet();
+    for (final entry in requiredColumns.entries) {
+      final columnName = entry.key.trim().toLowerCase();
+      if (existing.contains(columnName)) {
+        continue;
+      }
+      await db.customStatement(
+        'ALTER TABLE $tableName ADD COLUMN ${entry.key} ${entry.value}',
+      );
+    }
+  }
+
+  Future<void> _ensureAppMigrations(AppDatabase db) async {
+    if (_appMigrationsEnsured) {
+      return;
+    }
+    final pending = _appMigrationsTask;
+    if (pending != null) {
+      await pending;
+      return;
+    }
+    final task = _ensureAppMigrationsInternal(db);
+    _appMigrationsTask = task;
+    try {
+      await task;
+      _appMigrationsEnsured = true;
+    } finally {
+      _appMigrationsTask = null;
+    }
+  }
+
+  Future<void> _ensureAppMigrationsInternal(AppDatabase db) async {
+    await db.customStatement('''
+      CREATE TABLE IF NOT EXISTS $_appMetaTable (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+
+    final currentVersion = await _loadAppDbVersion(db);
+    if (currentVersion >= _targetAppDbVersion) {
+      return;
+    }
+
+    final sortedMigrations = [..._appDbMigrations]
+      ..sort((a, b) => a.version.compareTo(b.version));
+    for (final migration in sortedMigrations) {
+      if (migration.version <= currentVersion) {
+        continue;
+      }
+      await db.transaction(() async {
+        await migration.run(db);
+        await _saveAppDbVersion(db, migration.version);
+        await _recordAppliedMigration(db, migration.version);
+      });
+    }
+  }
+
+  Future<int> _loadAppDbVersion(AppDatabase db) async {
+    final row = await db
+        .customSelect(
+          'SELECT value AS value FROM $_appMetaTable WHERE key = ? LIMIT 1',
+          variables: [Variable.withString(_appDbVersionKey)],
+        )
+        .getSingleOrNull();
+    if (row == null) {
+      return 0;
+    }
+    final raw = row.readNullable<String>('value')?.trim() ?? '';
+    final parsed = int.tryParse(raw);
+    if (parsed == null || parsed < 0) {
+      return 0;
+    }
+    return parsed;
+  }
+
+  Future<void> _saveAppDbVersion(AppDatabase db, int version) async {
+    await db.customStatement(
+      '''
+      INSERT INTO $_appMetaTable(key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      ''',
+      [_appDbVersionKey, '$version'],
+    );
+  }
+
+  Future<void> _recordAppliedMigration(AppDatabase db, int version) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    await _saveAppMetaValue(db, _appDbLastMigrationVersionKey, '$version');
+    await _saveAppMetaValue(db, _appDbLastMigrationAtKey, '$nowMs');
+
+    final existing = await _loadAppMetaValue(db, _appDbMigrationHistoryKey);
+    final parsedHistory = <Map<String, dynamic>>[];
+    if (existing != null && existing.trim().isNotEmpty) {
+      try {
+        final raw = jsonDecode(existing);
+        if (raw is List) {
+          for (final entry in raw) {
+            if (entry is Map) {
+              final value = <String, dynamic>{};
+              final appliedAt = entry['appliedAtMs'];
+              final migratedVersion = entry['version'];
+              if (appliedAt is int || appliedAt is double) {
+                value['appliedAtMs'] = (appliedAt as num).toInt();
+              }
+              if (migratedVersion is int || migratedVersion is double) {
+                value['version'] = (migratedVersion as num).toInt();
+              }
+              if (value.isNotEmpty) {
+                parsedHistory.add(value);
+              }
+            }
+          }
+        }
+      } catch (_) {
+        // Best effort: discard malformed history and overwrite with fresh values.
+      }
+    }
+
+    parsedHistory.add({'version': version, 'appliedAtMs': nowMs});
+    final trimmed = parsedHistory.length > _migrationHistoryLimit
+        ? parsedHistory.sublist(parsedHistory.length - _migrationHistoryLimit)
+        : parsedHistory;
+    await _saveAppMetaValue(db, _appDbMigrationHistoryKey, jsonEncode(trimmed));
+  }
+
+  Future<String?> _loadAppMetaValue(AppDatabase db, String key) async {
+    final row = await db
+        .customSelect(
+          'SELECT value AS value FROM $_appMetaTable WHERE key = ? LIMIT 1',
+          variables: [Variable.withString(key)],
+        )
+        .getSingleOrNull();
+    final value = row?.readNullable<String>('value')?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  Future<void> _saveAppMetaValue(
+    AppDatabase db,
+    String key,
+    String value,
+  ) async {
+    await db.customStatement(
+      '''
+      INSERT INTO $_appMetaTable(key, value)
+      VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      ''',
+      [key, value],
+    );
+  }
+
+  Future<Map<String, String>> loadAppDbMigrationDiagnostics() async {
+    final db = await open();
+    final appDbVersion = await _loadAppDbVersion(db);
+    final lastMigrationVersion =
+        await _loadAppMetaValue(db, _appDbLastMigrationVersionKey) ?? '';
+    final lastMigrationAtMs =
+        await _loadAppMetaValue(db, _appDbLastMigrationAtKey) ?? '';
+    final historyJson =
+        await _loadAppMetaValue(db, _appDbMigrationHistoryKey) ?? '[]';
+    final schemaRow = await db
+        .customSelect('PRAGMA user_version')
+        .getSingleOrNull();
+    String sqliteSchemaVersion = '';
+    if (schemaRow != null) {
+      sqliteSchemaVersion =
+          schemaRow.readNullable<int>('user_version')?.toString() ??
+          (schemaRow.data.values.isNotEmpty
+              ? schemaRow.data.values.first.toString()
+              : '');
+    }
+
+    return <String, String>{
+      'app_db_version': '$appDbVersion',
+      'app_db_target_version': '$_targetAppDbVersion',
+      'sqlite_schema_version': sqliteSchemaVersion,
+      'last_migration_version': lastMigrationVersion,
+      'last_migration_at_ms': lastMigrationAtMs,
+      'migration_history_json': historyJson,
+      'db_file': _dbFileName,
+    };
+  }
+
+  static Future<void> _runAppDbMigrationV1(AppDatabase db) async {
+    await db.customStatement(
+      '''
+      UPDATE cards
+      SET lang = lower(trim(lang))
+      WHERE lang IS NOT NULL
+        AND trim(lang) != ''
+        AND lang != lower(trim(lang))
+      ''',
+    );
+    await db.customStatement(
+      '''
+      UPDATE cards
+      SET set_code = lower(trim(set_code))
+      WHERE set_code IS NOT NULL
+        AND trim(set_code) != ''
+        AND set_code != lower(trim(set_code))
+      ''',
+    );
+    await db.rebuildFts();
   }
 
   Future<int?> fetchAllCardsCollectionId() async {
@@ -770,56 +1198,42 @@ class ScryfallDatabase {
     int? allCardsId,
   ) async {
     final counts = <int, int>{};
+    final groupedRows = await db.customSelect('''
+      SELECT
+        collection_id AS collection_id,
+        COALESCE(SUM(quantity), 0) AS qty_sum,
+        COUNT(*) AS row_count,
+        COALESCE(SUM(CASE WHEN quantity = 0 THEN 1 ELSE 0 END), 0) AS zero_count
+      FROM collection_cards
+      GROUP BY collection_id
+    ''').get();
+    final qtyByCollection = <int, int>{};
+    final rowCountByCollection = <int, int>{};
+    final zeroCountByCollection = <int, int>{};
+    for (final grouped in groupedRows) {
+      final id = grouped.read<int>('collection_id');
+      qtyByCollection[id] = grouped.read<int>('qty_sum');
+      rowCountByCollection[id] = grouped.read<int>('row_count');
+      zeroCountByCollection[id] = grouped.read<int>('zero_count');
+    }
     if (allCardsId == null) {
       for (final row in rows) {
         counts[row.id] = 0;
       }
       return counts;
     }
-    final ownedRow = await db
-        .customSelect(
-          'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
-          variables: [Variable.withInt(allCardsId)],
-        )
-        .getSingle();
-    counts[allCardsId] = ownedRow.read<int>('total');
+    counts[allCardsId] = qtyByCollection[allCardsId] ?? 0;
     for (final row in rows) {
       if (row.id == allCardsId) {
         continue;
       }
-      if (collectionTypeFromDb(row.type) == CollectionType.wishlist) {
-        final wishlistRow = await db
-            .customSelect(
-              '''
-              SELECT COUNT(*) AS total
-              FROM collection_cards wishlist
-              JOIN cards ON cards.id = TRIM(wishlist.card_id)
-              WHERE wishlist.collection_id = ? AND wishlist.quantity = 0
-              ''',
-              variables: [Variable.withInt(row.id)],
-            )
-            .getSingle();
-        counts[row.id] = wishlistRow.read<int>('total');
+      final type = collectionTypeFromDb(row.type);
+      if (type == CollectionType.wishlist) {
+        counts[row.id] = zeroCountByCollection[row.id] ?? 0;
         continue;
       }
-      if (collectionTypeFromDb(row.type) == CollectionType.deck) {
-        final deckRow = await db
-            .customSelect(
-              'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
-              variables: [Variable.withInt(row.id)],
-            )
-            .getSingle();
-        counts[row.id] = deckRow.read<int>('total');
-        continue;
-      }
-      if (collectionTypeFromDb(row.type) == CollectionType.basicLands) {
-        final basicLandsRow = await db
-            .customSelect(
-              'SELECT COALESCE(SUM(quantity), 0) AS total FROM collection_cards WHERE collection_id = ?',
-              variables: [Variable.withInt(row.id)],
-            )
-            .getSingle();
-        counts[row.id] = basicLandsRow.read<int>('total');
+      if (type == CollectionType.deck || type == CollectionType.basicLands) {
+        counts[row.id] = qtyByCollection[row.id] ?? 0;
         continue;
       }
       final filter = row.filterJson == null
@@ -828,20 +1242,22 @@ class ScryfallDatabase {
               jsonDecode(row.filterJson!) as Map<String, dynamic>,
             );
       if (filter == null) {
-        if (collectionTypeFromDb(row.type) == CollectionType.custom) {
-          final customRow = await db
-              .customSelect(
-                'SELECT COUNT(*) AS total FROM collection_cards WHERE collection_id = ?',
-                variables: [Variable.withInt(row.id)],
-              )
-              .getSingle();
-          counts[row.id] = customRow.read<int>('total');
+        if (type == CollectionType.custom) {
+          counts[row.id] = rowCountByCollection[row.id] ?? 0;
         } else {
           counts[row.id] = 0;
         }
         continue;
       }
-      counts[row.id] = await _countOwnedCardsForFilter(db, filter, allCardsId);
+      try {
+        counts[row.id] = await _countOwnedCardsForFilter(
+          db,
+          filter,
+          allCardsId,
+        ).timeout(const Duration(seconds: 4));
+      } on TimeoutException {
+        counts[row.id] = 0;
+      }
     }
     return counts;
   }
@@ -1357,6 +1773,19 @@ class ScryfallDatabase {
         Variable.withString('restricted'),
         Variable.withString(r'$.legalities.' + format),
       ]);
+    }
+
+    if (filter.languages.isNotEmpty) {
+      final normalized = filter.languages
+          .map((lang) => lang.trim().toLowerCase())
+          .where((lang) => lang.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+          "LOWER(COALESCE(NULLIF(TRIM(cards.lang), ''), 'en')) IN (${List.filled(normalized.length, '?').join(', ')})",
+        );
+        variables.addAll(normalized.map((lang) => Variable.withString(lang)));
+      }
     }
 
     return _FilterQuery(whereClauses, variables);
@@ -3487,6 +3916,8 @@ class ScryfallDatabase {
 
   Future<void> deleteAllCards(AppDatabase db) async {
     await db.customStatement('DELETE FROM cards');
+    await db.customStatement('DELETE FROM cards_printed_search');
+    await db.customStatement('DELETE FROM cards_printed_fts');
   }
 
   Future<int> repairMissingSetCodesFromCardIds() async {
@@ -3694,23 +4125,39 @@ class ScryfallDatabase {
     int? offset,
     List<String>? languages,
   }) async {
-    final matchQuery = _buildFtsQuery(query);
-    if (matchQuery.isEmpty) {
-      return [];
-    }
     final db = await open();
-    final whereArgs = <Variable>[Variable.withString(matchQuery)];
-    final where = StringBuffer('cards_fts MATCH ?');
-    if (languages != null && languages.isNotEmpty) {
-      final placeholders = List.filled(languages.length, '?').join(', ');
-      where.write(' AND cards.lang IN ($placeholders)');
-      whereArgs.addAll(languages.map(Variable.withString));
+    final foldedQuery = _normalizeSearchTextForNameLookup(query);
+    final ftsQuery = _buildPrintedNameFtsQuery(query);
+    if (foldedQuery.isEmpty || ftsQuery.isEmpty) {
+      return const [];
     }
-    whereArgs.add(Variable.withInt(limit));
-    final sql = StringBuffer('''
+
+    Future<List<CardSearchResult>> runSearchWithLanguages(
+      List<String>? activeLanguages,
+    ) async {
+      final preferredLang =
+          (activeLanguages ?? const <String>[])
+              .map((item) => item.trim().toLowerCase())
+              .firstWhere(
+                (item) => item.isNotEmpty && item != 'en',
+                orElse: () => 'en',
+              );
+      final whereClauses = <String>['cards_printed_fts MATCH ?'];
+      final args = <Variable>[Variable.withString(ftsQuery)];
+      if (activeLanguages != null && activeLanguages.isNotEmpty) {
+        final placeholders = List.filled(activeLanguages.length, '?').join(', ');
+        whereClauses.add('cards_printed_fts.lang IN ($placeholders)');
+        args.addAll(
+          activeLanguages.map(
+            (lang) => Variable.withString(lang.trim().toLowerCase()),
+          ),
+        );
+      }
+      final fullWhere = whereClauses.join(' AND ');
+      final sql = StringBuffer('''
       SELECT
         cards.id AS id,
-        cards.name AS name,
+        search.display_name AS name,
         cards.set_code AS set_code,
         cards.set_name AS set_name,
         cards.set_total AS set_total,
@@ -3725,21 +4172,36 @@ class ScryfallDatabase {
         cards.price_eur_foil AS price_eur_foil,
         cards.image_uris AS image_uris,
         cards.card_faces AS card_faces
-      FROM cards_fts
-      JOIN cards ON cards_fts.rowid = cards.rowid
-      WHERE ${where.toString()}
-      ORDER BY cards.name ASC, cards.set_code ASC, cards.collector_number ASC
+      FROM cards_printed_fts
+      JOIN cards_printed_search search ON search.card_id = cards_printed_fts.card_id
+      JOIN cards ON cards.id = search.card_id
+      WHERE $fullWhere
+      ORDER BY
+        CASE
+          WHEN search.folded_name = ? THEN 0
+          WHEN search.folded_name LIKE ? THEN 1
+          ELSE 4
+        END ASC,
+        CASE
+          WHEN cards_printed_fts.lang = ? THEN 0
+          WHEN search.lang = 'en' THEN 2
+          ELSE 1
+        END ASC,
+        search.display_name ASC,
+        LOWER(cards.set_code) ASC,
+        LOWER(cards.collector_number) ASC
       LIMIT ?
       ''');
-    if (offset != null) {
-      sql.write(' OFFSET ?');
-      whereArgs.add(Variable.withInt(offset));
-    }
-
-    final rows = await db
-        .customSelect(sql.toString(), variables: whereArgs)
-        .get();
-    if (rows.isNotEmpty) {
+      args
+        ..add(Variable.withString(foldedQuery))
+        ..add(Variable.withString('$foldedQuery%'))
+        ..add(Variable.withString(preferredLang))
+        ..add(Variable.withInt(limit));
+      if (offset != null && offset > 0) {
+        sql.write(' OFFSET ?');
+        args.add(Variable.withInt(offset));
+      }
+      final rows = await db.customSelect(sql.toString(), variables: args).get();
       return rows
           .map(
             (row) => CardSearchResult(
@@ -3763,77 +4225,29 @@ class ScryfallDatabase {
               ),
             ),
           )
-          .toList();
+          .toList(growable: false);
     }
 
-    final normalized = query.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return const [];
+    final primary = await runSearchWithLanguages(languages);
+    if (primary.isNotEmpty || languages == null || languages.isEmpty) {
+      return primary;
     }
-    final likeArgs = <Variable>[Variable.withString('%$normalized%')];
-    final likeWhere = StringBuffer('LOWER(cards.name) LIKE ?');
-    if (languages != null && languages.isNotEmpty) {
-      final placeholders = List.filled(languages.length, '?').join(', ');
-      likeWhere.write(' AND LOWER(cards.lang) IN ($placeholders)');
-      likeArgs.addAll(
-        languages.map((lang) => Variable.withString(lang.trim().toLowerCase())),
-      );
+    final fallback = await runSearchWithLanguages(null);
+    if (fallback.isNotEmpty) {
+      return fallback;
     }
-    likeArgs.add(Variable.withInt(limit));
-    final likeSql = StringBuffer('''
-      SELECT
-        cards.id AS id,
-        cards.name AS name,
-        cards.set_code AS set_code,
-        cards.set_name AS set_name,
-        cards.set_total AS set_total,
-        cards.collector_number AS collector_number,
-        cards.rarity AS rarity,
-        cards.type_line AS type_line,
-        cards.colors AS colors,
-        cards.color_identity AS color_identity,
-        cards.price_usd AS price_usd,
-        cards.price_usd_foil AS price_usd_foil,
-        cards.price_eur AS price_eur,
-        cards.price_eur_foil AS price_eur_foil,
-        cards.image_uris AS image_uris,
-        cards.card_faces AS card_faces
-      FROM cards
-      WHERE ${likeWhere.toString()}
-      ORDER BY cards.name ASC, cards.set_code ASC, cards.collector_number ASC
-      LIMIT ?
-      ''');
-    if (offset != null) {
-      likeSql.write(' OFFSET ?');
-      likeArgs.add(Variable.withInt(offset));
+    final shouldTrySelfHeal = (offset == null || offset <= 0) &&
+        !_printedNameIndexSelfHealTried;
+    if (!shouldTrySelfHeal) {
+      return fallback;
     }
-    final likeRows = await db
-        .customSelect(likeSql.toString(), variables: likeArgs)
-        .get();
-    return likeRows
-        .map(
-          (row) => CardSearchResult(
-            id: row.read<String>('id'),
-            name: row.read<String>('name'),
-            setCode: row.read<String>('set_code'),
-            setName: row.readNullable<String>('set_name') ?? '',
-            setTotal: row.readNullable<int>('set_total'),
-            collectorNumber: row.read<String>('collector_number'),
-            rarity: row.readNullable<String>('rarity') ?? '',
-            typeLine: row.readNullable<String>('type_line') ?? '',
-            colors: row.readNullable<String>('colors') ?? '',
-            colorIdentity: row.readNullable<String>('color_identity') ?? '',
-            priceUsd: _readOptionalPrice(row, 'price_usd'),
-            priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
-            priceEur: _readOptionalPrice(row, 'price_eur'),
-            priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
-            imageUri: _extractImageUrl(
-              row.readNullable<String>('image_uris'),
-              row.readNullable<String>('card_faces'),
-            ),
-          ),
-        )
-        .toList();
+    _printedNameIndexSelfHealTried = true;
+    await _rebuildPrintedNameSearchIndex(db);
+    final healedPrimary = await runSearchWithLanguages(languages);
+    if (healedPrimary.isNotEmpty) {
+      return healedPrimary;
+    }
+    return runSearchWithLanguages(null);
   }
 
   Future<List<String>> fetchAvailableLanguages() async {
@@ -3847,6 +4261,28 @@ class ScryfallDatabase {
         .map((row) => row.read<String>('lang'))
         .where((value) => value.isNotEmpty)
         .toList();
+  }
+
+  Future<Map<String, int>> fetchCardCountsByLanguage() async {
+    final db = await open();
+    final rows = await db.customSelect('''
+      SELECT
+        LOWER(COALESCE(NULLIF(TRIM(lang), ''), 'en')) AS lang_code,
+        COUNT(*) AS total
+      FROM cards
+      GROUP BY LOWER(COALESCE(NULLIF(TRIM(lang), ''), 'en'))
+      ORDER BY total DESC, lang_code ASC
+    ''').get();
+    final result = <String, int>{};
+    for (final row in rows) {
+      final code = row.read<String>('lang_code').trim().toLowerCase();
+      final total = row.read<int>('total');
+      if (code.isEmpty || total <= 0) {
+        continue;
+      }
+      result[code] = total;
+    }
+    return result;
   }
 
   Future<List<CardSearchResult>> fetchCardsForFilters({
@@ -4207,24 +4643,6 @@ class ScryfallDatabase {
   }
 }
 
-String _normalizeSearchQuery(String input) {
-  final trimmed = input.trim().toLowerCase();
-  if (trimmed.isEmpty) {
-    return '';
-  }
-  final stripped = trimmed.replaceAll(RegExp(r"[,:;'\-]"), ' ');
-  return stripped.replaceAll(RegExp(r'\s+'), ' ').trim();
-}
-
-String _buildFtsQuery(String input) {
-  final normalized = _normalizeSearchQuery(input);
-  if (normalized.isEmpty) {
-    return '';
-  }
-  final parts = normalized.split(' ').where((part) => part.isNotEmpty);
-  return parts.map((part) => '$part*').join(' ');
-}
-
 String? _encodeJsonField(dynamic value) {
   if (value == null) {
     return null;
@@ -4236,23 +4654,32 @@ String? _encodeJsonField(dynamic value) {
 }
 
 String? _encodeCardLegalitiesField(Map<String, dynamic> card) {
+  final payload = <String, dynamic>{};
+
+  final printedName = (card['printed_name'] as String?)?.trim();
+  if (printedName != null && printedName.isNotEmpty) {
+    payload['printed_name'] = printedName;
+  }
+
   final legalitiesRaw = card['legalities'];
-  if (legalitiesRaw is! Map) {
-    return null;
-  }
-  final legalities = <String, String>{};
-  for (final entry in legalitiesRaw.entries) {
-    final key = entry.key.toString().trim().toLowerCase();
-    final value = entry.value?.toString().trim().toLowerCase() ?? '';
-    if (key.isEmpty || value.isEmpty) {
-      continue;
+  if (legalitiesRaw is Map) {
+    final legalities = <String, String>{};
+    for (final entry in legalitiesRaw.entries) {
+      final key = entry.key.toString().trim().toLowerCase();
+      final value = entry.value?.toString().trim().toLowerCase() ?? '';
+      if (key.isEmpty || value.isEmpty) {
+        continue;
+      }
+      legalities[key] = value;
     }
-    legalities[key] = value;
+    if (legalities.isNotEmpty) {
+      payload['legalities'] = legalities;
+    }
   }
-  if (legalities.isEmpty) {
+  if (payload.isEmpty) {
     return null;
   }
-  return jsonEncode(<String, dynamic>{'legalities': legalities});
+  return jsonEncode(payload);
 }
 
 String? _readOptionalPrice(QueryRow row, String column) {
@@ -4324,6 +4751,77 @@ List<String> _normalizeColorList(List<String> colors) {
   return normalized;
 }
 
+String _normalizeSearchTextForNameLookup(String input) {
+  final lowered = _foldLatinToAsciiLower(input.trim());
+  if (lowered.isEmpty) {
+    return '';
+  }
+  return lowered.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+}
+
+String _buildPrintedNameFtsQuery(String input) {
+  final lowered = _foldLatinToAsciiLower(input.trim());
+  if (lowered.isEmpty) {
+    return '';
+  }
+  final normalized = lowered
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (normalized.isEmpty) {
+    return '';
+  }
+  final tokens = normalized
+      .split(' ')
+      .where((token) => token.isNotEmpty)
+      .toList(growable: false);
+  if (tokens.isEmpty) {
+    return '';
+  }
+  return tokens.map((token) => '$token*').join(' ');
+}
+
+String _foldLatinToAsciiLower(String value) {
+  if (value.isEmpty) {
+    return '';
+  }
+  const replacements = <String, String>{
+    '\u00E0': 'a',
+    '\u00E1': 'a',
+    '\u00E2': 'a',
+    '\u00E3': 'a',
+    '\u00E4': 'a',
+    '\u00E5': 'a',
+    '\u00E8': 'e',
+    '\u00E9': 'e',
+    '\u00EA': 'e',
+    '\u00EB': 'e',
+    '\u00EC': 'i',
+    '\u00ED': 'i',
+    '\u00EE': 'i',
+    '\u00EF': 'i',
+    '\u00F2': 'o',
+    '\u00F3': 'o',
+    '\u00F4': 'o',
+    '\u00F5': 'o',
+    '\u00F6': 'o',
+    '\u00F9': 'u',
+    '\u00FA': 'u',
+    '\u00FB': 'u',
+    '\u00FC': 'u',
+    '\u00E7': 'c',
+    '\u00F1': 'n',
+    '\u00FD': 'y',
+    '\u00FF': 'y',
+  };
+  final lower = value.toLowerCase();
+  final buffer = StringBuffer();
+  for (final rune in lower.runes) {
+    final char = String.fromCharCode(rune);
+    buffer.write(replacements[char] ?? char);
+  }
+  return buffer.toString();
+}
 List<String> _readPokemonColorCodes(dynamic raw) {
   if (raw is List) {
     return _normalizeColorList(raw.whereType<String>().toList());

@@ -244,6 +244,7 @@ class CollectionFilter {
     this.manaMin,
     this.manaMax,
     this.format,
+    this.languages = const {},
     this.sets = const {},
     this.rarities = const {},
     this.colors = const {},
@@ -255,6 +256,7 @@ class CollectionFilter {
   final int? manaMin;
   final int? manaMax;
   final String? format;
+  final Set<String> languages;
   final Set<String> sets;
   final Set<String> rarities;
   final Set<String> colors;
@@ -266,6 +268,7 @@ class CollectionFilter {
     'manaMin': manaMin,
     'manaMax': manaMax,
     'format': format,
+    'languages': languages.toList(),
     'sets': sets.toList(),
     'rarities': rarities.toList(),
     'colors': colors.toList(),
@@ -286,6 +289,7 @@ class CollectionFilter {
       manaMin: json['manaMin'] is int ? json['manaMin'] as int : null,
       manaMax: json['manaMax'] is int ? json['manaMax'] as int : null,
       format: json['format'] as String?,
+      languages: Set<String>.from(json['languages'] as List? ?? const []),
       sets: Set<String>.from(json['sets'] as List? ?? const []),
       rarities: Set<String>.from(json['rarities'] as List? ?? const []),
       colors: Set<String>.from(json['colors'] as List? ?? const []),
