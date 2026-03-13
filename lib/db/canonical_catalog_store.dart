@@ -1371,6 +1371,42 @@ class CanonicalCatalogStore {
         'illustrator': pokemon.illustrator,
         'types': pokemon.types,
         'subtypes': pokemon.subtypes,
+        'weaknesses': pokemon.weaknesses
+            .map(
+              (value) => <String, Object?>{
+                'type': value.type,
+                'value': value.value,
+              },
+            )
+            .toList(growable: false),
+        'resistances': pokemon.resistances
+            .map(
+              (value) => <String, Object?>{
+                'type': value.type,
+                'value': value.value,
+              },
+            )
+            .toList(growable: false),
+        'attacks': pokemon.attacks
+            .map(
+              (value) => <String, Object?>{
+                'name': value.name,
+                'text': value.text,
+                'damage': value.damage,
+                'energy_cost': value.energyCost,
+                'converted_energy_cost': value.convertedEnergyCost,
+              },
+            )
+            .toList(growable: false),
+        'abilities': pokemon.abilities
+            .map(
+              (value) => <String, Object?>{
+                'name': value.name,
+                'type': value.type,
+                'text': value.text,
+              },
+            )
+            .toList(growable: false),
       };
     }
     return metadata;

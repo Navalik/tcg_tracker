@@ -426,6 +426,7 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
   late final Animation<double> _opacity;
   bool _showAuthGate = false;
   String _versionLabel = '';
+  Timer? _transitionTimer;
 
   @override
   void initState() {
@@ -436,7 +437,10 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
     )..forward();
     _opacity = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
     unawaited(_loadVersionLabel());
-    unawaited(_scheduleTransition());
+    _transitionTimer = Timer(
+      const Duration(milliseconds: 2600),
+      () => unawaited(_scheduleTransition()),
+    );
   }
 
   Future<void> _loadVersionLabel() async {
@@ -454,7 +458,6 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
   }
 
   Future<void> _scheduleTransition() async {
-    await Future<void>.delayed(const Duration(milliseconds: 2600));
     if (!mounted) {
       return;
     }
@@ -539,6 +542,7 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
 
   @override
   void dispose() {
+    _transitionTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }

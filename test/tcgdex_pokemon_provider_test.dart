@@ -158,6 +158,260 @@ void main() {
       expect(filteredCount, equals(1));
     },
   );
+
+  test(
+    'Pokemon import remains identity-stable across repeated installs',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+
+      await service.importProfile(
+        profile: 'starter',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+      final firstCards = store.countTableRows('catalog_cards');
+      final firstPrintings = store.countTableRows('card_printings');
+      final firstMappings = store.countTableRows('provider_mappings');
+
+      await service.importProfile(
+        profile: 'starter',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+
+      expect(store.countTableRows('catalog_cards'), equals(firstCards));
+      expect(store.countTableRows('card_printings'), equals(firstPrintings));
+      expect(store.countTableRows('provider_mappings'), equals(firstMappings));
+    },
+  );
+
+  test(
+    'Pokemon localized search respects requested language priority',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+      await service.importProfile(
+        profile: 'starter',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+
+      final italianFirst = store.searchPokemonCards(
+        filter: const CollectionFilter(),
+        searchQuery: 'alakazam',
+        preferredLanguages: const <String>['it', 'en'],
+        limit: 20,
+      );
+      final englishFirst = store.searchPokemonCards(
+        filter: const CollectionFilter(),
+        searchQuery: 'alakazam',
+        preferredLanguages: const <String>['en', 'it'],
+        limit: 20,
+      );
+
+      expect(italianFirst, isNotEmpty);
+      expect(englishFirst, isNotEmpty);
+      expect(italianFirst.first.name, equals('Alakazam IT'));
+      expect(englishFirst.first.name, equals('Alakazam'));
+    },
+  );
+
+  test(
+    'Pokemon promo and special cards support collector and subtype regressions',
+    () {
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+      store.replacePokemonCatalog(_promoRegressionBatch());
+
+      final promoByCollector = store.searchPokemonCards(
+        filter: const CollectionFilter(collectorNumber: 'sv-p001'),
+        preferredLanguages: const <String>['en'],
+        limit: 20,
+      );
+      expect(promoByCollector, hasLength(1));
+      expect(promoByCollector.first.name, equals('Pikachu Promo'));
+
+      final filteredCount = store.countPokemonCards(
+        filter: const CollectionFilter(
+          pokemonSubtypes: <String>{'Promo'},
+          artist: 'test artist',
+          manaMin: 2,
+          manaMax: 2,
+        ),
+        preferredLanguages: const <String>['en'],
+      );
+      expect(filteredCount, equals(1));
+    },
+  );
+}
+
+CanonicalCatalogImportBatch _promoRegressionBatch() {
+  const cardId = 'pokemon:card:test:svp001';
+  const setId = 'pokemon:set:svp';
+  const printingId = 'pokemon:printing:test:svp001';
+  return CanonicalCatalogImportBatch(
+    cards: const <CatalogCard>[
+      CatalogCard(
+        cardId: cardId,
+        gameId: TcgGameId.pokemon,
+        canonicalName: 'Pikachu Promo',
+        defaultLocalizedData: LocalizedCardData(
+          cardId: cardId,
+          language: TcgCardLanguage.en,
+          name: 'Pikachu Promo',
+          subtypeLine: 'Pokemon (Promo)',
+        ),
+        localizedData: <LocalizedCardData>[
+          LocalizedCardData(
+            cardId: cardId,
+            language: TcgCardLanguage.en,
+            name: 'Pikachu Promo',
+            subtypeLine: 'Pokemon (Promo)',
+          ),
+          LocalizedCardData(
+            cardId: cardId,
+            language: TcgCardLanguage.it,
+            name: 'Pikachu Promo IT',
+            subtypeLine: 'Pokemon (Promo)',
+          ),
+        ],
+        metadata: <String, Object?>{
+          'pokemon': <String, Object?>{
+            'attacks': <Map<String, Object?>>[
+              <String, Object?>{
+                'name': 'Promo Spark',
+                'converted_energy_cost': 2,
+              },
+            ],
+          },
+        },
+        pokemon: PokemonCardMetadata(
+          category: 'Pokemon',
+          hp: 70,
+          types: <String>['Lightning'],
+          subtypes: <String>['Promo'],
+          stage: 'Basic',
+          attacks: <PokemonAttack>[
+            PokemonAttack(name: 'Promo Spark', convertedEnergyCost: 2),
+          ],
+          illustrator: 'Test Artist',
+        ),
+      ),
+    ],
+    sets: const <CatalogSet>[
+      CatalogSet(
+        setId: setId,
+        gameId: TcgGameId.pokemon,
+        code: 'svp',
+        canonicalName: 'Scarlet & Violet Promo',
+        defaultLocalizedData: LocalizedSetData(
+          setId: setId,
+          language: TcgCardLanguage.en,
+          name: 'Scarlet & Violet Promo',
+        ),
+        localizedData: <LocalizedSetData>[
+          LocalizedSetData(
+            setId: setId,
+            language: TcgCardLanguage.en,
+            name: 'Scarlet & Violet Promo',
+          ),
+        ],
+        metadata: <String, Object?>{'official_total': 99},
+      ),
+    ],
+    printings: const <CardPrintingRef>[
+      CardPrintingRef(
+        printingId: printingId,
+        cardId: cardId,
+        setId: setId,
+        gameId: TcgGameId.pokemon,
+        collectorNumber: 'SV-P001',
+        rarity: 'Promo',
+        imageUris: <String, String>{
+          'normal': 'https://example.invalid/promo.png',
+        },
+        providerMappings: <ProviderMapping>[
+          ProviderMapping(
+            providerId: CatalogProviderId.tcgdex,
+            objectType: 'printing',
+            providerObjectId: 'svp001',
+          ),
+          ProviderMapping(
+            providerId: CatalogProviderId.pokemonTcgApi,
+            objectType: 'legacy_printing',
+            providerObjectId: 'svp001',
+          ),
+        ],
+      ),
+    ],
+    cardLocalizations: const <LocalizedCardData>[
+      LocalizedCardData(
+        cardId: cardId,
+        language: TcgCardLanguage.en,
+        name: 'Pikachu Promo',
+        subtypeLine: 'Pokemon (Promo)',
+      ),
+      LocalizedCardData(
+        cardId: cardId,
+        language: TcgCardLanguage.it,
+        name: 'Pikachu Promo IT',
+        subtypeLine: 'Pokemon (Promo)',
+      ),
+    ],
+    setLocalizations: const <LocalizedSetData>[
+      LocalizedSetData(
+        setId: setId,
+        language: TcgCardLanguage.en,
+        name: 'Scarlet & Violet Promo',
+      ),
+    ],
+    providerMappings: const <ProviderMappingRecord>[
+      ProviderMappingRecord(
+        mapping: ProviderMapping(
+          providerId: CatalogProviderId.tcgdex,
+          objectType: 'printing',
+          providerObjectId: 'svp001',
+        ),
+        cardId: cardId,
+        printingId: printingId,
+        setId: setId,
+      ),
+      ProviderMappingRecord(
+        mapping: ProviderMapping(
+          providerId: CatalogProviderId.pokemonTcgApi,
+          objectType: 'legacy_printing',
+          providerObjectId: 'svp001',
+        ),
+        cardId: cardId,
+        printingId: printingId,
+        setId: setId,
+      ),
+    ],
+    priceSnapshots: const <PriceSnapshot>[],
+  );
 }
 
 http.Client _fakeTcgdexClient() {
