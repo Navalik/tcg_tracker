@@ -9,8 +9,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/app_database.dart';
+import '../db/canonical_catalog_store.dart';
 import 'app_settings.dart';
 import 'pokemon_dataset_manifest.dart';
+import 'pokemon_canonical_import_service.dart';
 
 class PokemonBulkService {
   PokemonBulkService._();
@@ -41,9 +43,11 @@ class PokemonBulkService {
     final installedProfile = prefs.getString(_prefsKeyInstalledProfile);
     final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
     final count = await ScryfallDatabase.instance.countCards();
+    final canonicalInstalled = await _hasCanonicalPokemonCatalog();
     return installedVersion == datasetVersion &&
         installedProfile == selectedProfile &&
-        count > 0;
+        count > 0 &&
+        canonicalInstalled;
   }
 
   Future<PokemonDatasetUpdateStatus> checkForUpdate() async {
@@ -117,21 +121,38 @@ class PokemonBulkService {
     if (await datasetDir.exists()) {
       await datasetDir.delete(recursive: true);
     }
+    final canonicalDb = File(
+      p.join(appDir.path, CanonicalCatalogStore.defaultFileName),
+    );
+    if (await canonicalDb.exists()) {
+      await canonicalDb.delete();
+    }
   }
 
   Future<void> installDataset({
     required void Function(double progress) onProgress,
     void Function(String status)? onStatus,
   }) async {
+    final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
+    onStatus?.call('Importing Pokemon catalog (TCGdex)');
+    onProgress(0.01);
+    await _installCanonicalCatalog(
+      profile: selectedProfile,
+      onProgress: (progress) {
+        final scaled = 0.01 + (progress.clamp(0.0, 1.0) * 0.37);
+        onProgress(scaled);
+      },
+    );
+
     final database = await ScryfallDatabase.instance.open();
-    onProgress(0.02);
+    onProgress(0.40);
     var inserted = 0;
     String? manifestFingerprint;
     String source = '';
-    final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
     final datasetDir = await _ensureDatasetDirectory();
     await _clearDatasetJsonCacheDirectory(datasetDir);
-    onProgress(0.03);
+    onStatus?.call('Building legacy compatibility dataset');
+    onProgress(0.42);
     Object? manifestError;
     Object? apiError;
     final client = http.Client();
@@ -139,12 +160,12 @@ class PokemonBulkService {
       if (selectedProfile == 'full') {
         try {
           onStatus?.call('Downloading sets index (GitHub)');
-          onProgress(0.06);
+          onProgress(0.46);
           inserted = await _installFromFullManifest(
             database: database,
             client: client,
             onProgress: onProgress,
-            progressStart: 0.08,
+            progressStart: 0.48,
             progressEnd: 0.90,
           );
           onStatus?.call('Downloaded from GitHub dataset');
@@ -163,7 +184,7 @@ class PokemonBulkService {
               database: database,
               client: client,
               onProgress: onProgress,
-              progressStart: 0.12,
+              progressStart: 0.52,
               progressEnd: 0.90,
             );
             source = 'api_v2_full_fallback';
@@ -180,7 +201,7 @@ class PokemonBulkService {
             client: client,
             onProgress: onProgress,
             profile: selectedProfile,
-            progressStart: 0.05,
+            progressStart: 0.44,
             progressEnd: 0.90,
           );
           onStatus?.call('Downloaded from GitHub dataset');
@@ -200,7 +221,7 @@ class PokemonBulkService {
               database: database,
               client: client,
               onProgress: onProgress,
-              progressStart: 0.12,
+              progressStart: 0.52,
               progressEnd: 0.90,
             );
             source = 'api_v2_fallback';
@@ -234,7 +255,7 @@ class PokemonBulkService {
     onProgress(0.99);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyInstalledVersion, datasetVersion);
-    await prefs.setString(_prefsKeyInstalledSource, source);
+    await prefs.setString(_prefsKeyInstalledSource, 'tcgdex+$source');
     await prefs.setInt(
       _prefsKeyInstalledAt,
       DateTime.now().toUtc().millisecondsSinceEpoch,
@@ -246,6 +267,32 @@ class PokemonBulkService {
     }
     onStatus?.call('Completed');
     onProgress(1);
+  }
+
+  Future<bool> _hasCanonicalPokemonCatalog() async {
+    final store = await CanonicalCatalogStore.openDefault();
+    try {
+      return store.countTableRows('card_printings') > 0 &&
+          store.countTableRows('catalog_cards') > 0;
+    } finally {
+      store.dispose();
+    }
+  }
+
+  Future<void> _installCanonicalCatalog({
+    required String profile,
+    required void Function(double progress) onProgress,
+  }) async {
+    final store = await CanonicalCatalogStore.openDefault();
+    try {
+      final service = PokemonCanonicalImportService(store: store);
+      await service.importProfile(
+        profile: profile,
+        onProgress: onProgress,
+      );
+    } finally {
+      store.dispose();
+    }
   }
 
   Future<void> reimportFromLocalCache({
