@@ -1,0 +1,227 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'package:tcg_tracker/db/canonical_catalog_store.dart';
+import 'package:tcg_tracker/domain/domain_models.dart';
+import 'package:tcg_tracker/providers/tcgdex_pokemon_provider.dart';
+import 'package:tcg_tracker/services/pokemon_canonical_import_service.dart';
+import 'package:tcg_tracker/services/tcgdex_api_client.dart';
+
+void main() {
+  test('TCGdex provider maps Pokemon printing with italian localization', () async {
+    final provider = TcgdexPokemonProvider(
+      apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+    );
+
+    final bundle = await provider.fetchPrintingByProviderId('base1-1');
+
+    expect(bundle, isNotNull);
+    expect(bundle!.card.cardId, 'pokemon:card:tcgdex:base1-1');
+    expect(bundle.printing.printingId, 'pokemon:printing:tcgdex:base1-1');
+    expect(bundle.set.setId, 'pokemon:set:base1');
+    expect(bundle.card.pokemon?.illustrator, 'Ken Sugimori');
+    expect(bundle.card.pokemon?.attacks.first.name, 'Confuse Ray');
+    expect(bundle.card.localizedData.map((item) => item.language), containsAll(<TcgCardLanguage>[
+      TcgCardLanguage.en,
+      TcgCardLanguage.it,
+    ]));
+    expect(bundle.printing.providerMappings.map((item) => item.providerId), containsAll(<CatalogProviderId>[
+      CatalogProviderId.tcgdex,
+      CatalogProviderId.pokemonTcgApi,
+    ]));
+  });
+
+  test('Pokemon canonical import stores cards and compatibility mappings', () async {
+    final provider = TcgdexPokemonProvider(
+      apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+    );
+    final store = CanonicalCatalogStore.openInMemory();
+    addTearDown(store.dispose);
+
+    final service = PokemonCanonicalImportService(provider: provider, store: store);
+    final report = await service.importProfile(profile: 'starter', languages: const <TcgCardLanguage>[
+      TcgCardLanguage.en,
+      TcgCardLanguage.it,
+    ]);
+
+    expect(report.cardsImported, greaterThan(0));
+    expect(report.setsImported, equals(3));
+    expect(store.countTableRows('catalog_cards'), greaterThan(0));
+    expect(store.countTableRows('catalog_sets'), equals(3));
+    expect(store.countTableRows('provider_mappings'), greaterThan(0));
+    expect(store.countTableRows('pokemon_printing_metadata'), greaterThan(0));
+  });
+}
+
+http.Client _fakeTcgdexClient() {
+  final setResponse = <String, dynamic>{
+    'id': 'base1',
+    'name': 'Base Set',
+    'releaseDate': '1999-01-09',
+    'serie': <String, dynamic>{'id': 'base', 'name': 'Base'},
+    'cardCount': <String, dynamic>{'official': 102, 'total': 102},
+    'cards': <Map<String, Object?>>[
+      <String, Object?>{'id': 'base1-1', 'localId': '1', 'name': 'Alakazam'},
+    ],
+  };
+  final setResponseIt = <String, dynamic>{
+    'id': 'base1',
+    'name': 'Set Base',
+    'releaseDate': '1999-01-09',
+    'serie': <String, dynamic>{'id': 'base', 'name': 'Originale'},
+    'cardCount': <String, dynamic>{'official': 102, 'total': 102},
+    'cards': <Map<String, Object?>>[
+      <String, Object?>{'id': 'base1-1', 'localId': '1', 'name': 'Alakazam'},
+    ],
+  };
+  final cardEn = <String, dynamic>{
+    'category': 'Pokemon',
+    'id': 'base1-1',
+    'illustrator': 'Ken Sugimori',
+    'image': 'https://assets.tcgdex.net/en/base/base1/1',
+    'localId': '1',
+    'name': 'Alakazam',
+    'rarity': 'Rare',
+    'set': <String, dynamic>{
+      'id': 'base1',
+      'name': 'Base Set',
+      'releaseDate': '1999-01-09',
+      'serie': <String, dynamic>{'id': 'base', 'name': 'Base'},
+      'cardCount': <String, dynamic>{'official': 102, 'total': 102},
+    },
+    'hp': 80,
+    'types': <String>['Psychic'],
+    'evolveFrom': 'Kadabra',
+    'stage': 'Stage2',
+    'abilities': <Map<String, Object?>>[
+      <String, Object?>{
+        'type': 'Pokemon Power',
+        'name': 'Damage Swap',
+        'effect': 'Move 1 damage counter.',
+      },
+    ],
+    'attacks': <Map<String, Object?>>[
+      <String, Object?>{
+        'cost': <String>['Psychic', 'Psychic', 'Psychic'],
+        'name': 'Confuse Ray',
+        'effect': 'Flip a coin.',
+        'damage': '30',
+      },
+    ],
+    'weaknesses': <Map<String, Object?>>[
+      <String, Object?>{'type': 'Psychic', 'value': 'x2'},
+    ],
+    'retreat': 3,
+    'updated': '2026-01-07T12:21:43.000Z',
+    'pricing': <String, Object?>{
+      'cardmarket': <String, Object?>{
+        'updated': '2026-03-13T01:42:16.000Z',
+        'unit': 'EUR',
+        'avg': 57.76,
+      },
+      'tcgplayer': <String, Object?>{
+        'updated': '2026-03-12T20:05:38.000Z',
+        'unit': 'USD',
+        'holofoil': <String, Object?>{'marketPrice': 60.4},
+      },
+    },
+    'legal': <String, Object?>{'standard': false, 'expanded': false},
+  };
+  final cardIt = <String, dynamic>{
+    ...cardEn,
+    'category': 'Pokémon',
+    'set': <String, dynamic>{
+      'id': 'base1',
+      'name': 'Set Base',
+      'releaseDate': '1999-01-09',
+      'serie': <String, dynamic>{'id': 'base', 'name': 'Originale'},
+      'cardCount': <String, dynamic>{'official': 102, 'total': 102},
+    },
+    'types': <String>['Psico'],
+    'stage': 'Livello 2',
+    'abilities': <Map<String, Object?>>[
+      <String, Object?>{
+        'type': 'Pokemon Power',
+        'name': 'Scambio danni',
+        'effect': 'Sposta un segnalino danno.',
+      },
+    ],
+    'attacks': <Map<String, Object?>>[
+      <String, Object?>{
+        'cost': <String>['Psico', 'Psico', 'Psico'],
+        'name': 'Storidiraggio',
+        'effect': 'Lancia una moneta.',
+        'damage': '30',
+      },
+    ],
+    'description': 'Il suo cervello è più potente di un supercomputer.',
+  };
+
+  return MockClient((request) async {
+    final uri = request.url.toString();
+    if (uri.endsWith('/en/sets/base1')) {
+      return http.Response(jsonEncode(setResponse), 200);
+    }
+    if (uri.endsWith('/it/sets/base1')) {
+      return http.Response(jsonEncode(setResponseIt), 200);
+    }
+    if (uri.endsWith('/en/cards/base1-1')) {
+      return http.Response(jsonEncode(cardEn), 200);
+    }
+    if (uri.endsWith('/it/cards/base1-1')) {
+      return http.Response(jsonEncode(cardIt), 200);
+    }
+    if (uri.contains('/en/cards?name=')) {
+      return http.Response(
+        jsonEncode(<Map<String, Object?>>[
+          <String, Object?>{
+            'id': 'base1-1',
+            'localId': '1',
+            'name': 'Alakazam',
+            'image': 'https://assets.tcgdex.net/en/base/base1/1',
+          },
+        ]),
+        200,
+      );
+    }
+    if (uri.contains('/en/sets?pagination:itemsPerPage=')) {
+      return http.Response(jsonEncode(<Object?>[setResponse]), 200);
+    }
+    if (uri.contains('/en/sets/swsh1')) {
+      return http.Response(jsonEncode(<String, Object?>{
+        ...setResponse,
+        'id': 'swsh1',
+        'name': 'Sword & Shield',
+        'cards': <Map<String, Object?>>[],
+      }), 200);
+    }
+    if (uri.contains('/en/sets/sv1')) {
+      return http.Response(jsonEncode(<String, Object?>{
+        ...setResponse,
+        'id': 'sv1',
+        'name': 'Scarlet & Violet',
+        'cards': <Map<String, Object?>>[],
+      }), 200);
+    }
+    if (uri.contains('/it/sets/swsh1')) {
+      return http.Response(jsonEncode(<String, Object?>{
+        ...setResponseIt,
+        'id': 'swsh1',
+        'name': 'Spada e Scudo',
+        'cards': <Map<String, Object?>>[],
+      }), 200);
+    }
+    if (uri.contains('/it/sets/sv1')) {
+      return http.Response(jsonEncode(<String, Object?>{
+        ...setResponseIt,
+        'id': 'sv1',
+        'name': 'Scarlatto e Violetto',
+        'cards': <Map<String, Object?>>[],
+      }), 200);
+    }
+    throw StateError('Unhandled test request: $uri');
+  });
+}
