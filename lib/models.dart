@@ -243,36 +243,57 @@ class CollectionFilter {
     this.artist,
     this.manaMin,
     this.manaMax,
+    this.hpMin,
+    this.hpMax,
     this.format,
+    this.collectorNumber,
     this.languages = const {},
     this.sets = const {},
     this.rarities = const {},
     this.colors = const {},
     this.types = const {},
+    this.pokemonCategories = const {},
+    this.pokemonSubtypes = const {},
+    this.pokemonRegulationMarks = const {},
+    this.pokemonStages = const {},
   });
 
   final String? name;
   final String? artist;
   final int? manaMin;
   final int? manaMax;
+  final int? hpMin;
+  final int? hpMax;
   final String? format;
+  final String? collectorNumber;
   final Set<String> languages;
   final Set<String> sets;
   final Set<String> rarities;
   final Set<String> colors;
   final Set<String> types;
+  final Set<String> pokemonCategories;
+  final Set<String> pokemonSubtypes;
+  final Set<String> pokemonRegulationMarks;
+  final Set<String> pokemonStages;
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'artist': artist,
     'manaMin': manaMin,
     'manaMax': manaMax,
+    'hpMin': hpMin,
+    'hpMax': hpMax,
     'format': format,
+    'collectorNumber': collectorNumber,
     'languages': languages.toList(),
     'sets': sets.toList(),
     'rarities': rarities.toList(),
     'colors': colors.toList(),
     'types': types.toList(),
+    'pokemonCategories': pokemonCategories.toList(),
+    'pokemonSubtypes': pokemonSubtypes.toList(),
+    'pokemonRegulationMarks': pokemonRegulationMarks.toList(),
+    'pokemonStages': pokemonStages.toList(),
   };
 
   factory CollectionFilter.fromJson(Map<String, dynamic> json) {
@@ -288,12 +309,27 @@ class CollectionFilter {
       artist: json['artist'] as String?,
       manaMin: json['manaMin'] is int ? json['manaMin'] as int : null,
       manaMax: json['manaMax'] is int ? json['manaMax'] as int : null,
+      hpMin: json['hpMin'] is int ? json['hpMin'] as int : null,
+      hpMax: json['hpMax'] is int ? json['hpMax'] as int : null,
       format: json['format'] as String?,
+      collectorNumber: json['collectorNumber'] as String?,
       languages: Set<String>.from(json['languages'] as List? ?? const []),
       sets: Set<String>.from(json['sets'] as List? ?? const []),
       rarities: Set<String>.from(json['rarities'] as List? ?? const []),
       colors: Set<String>.from(json['colors'] as List? ?? const []),
       types: types,
+      pokemonCategories: Set<String>.from(
+        json['pokemonCategories'] as List? ?? const [],
+      ),
+      pokemonSubtypes: Set<String>.from(
+        json['pokemonSubtypes'] as List? ?? const [],
+      ),
+      pokemonRegulationMarks: Set<String>.from(
+        json['pokemonRegulationMarks'] as List? ?? const [],
+      ),
+      pokemonStages: Set<String>.from(
+        json['pokemonStages'] as List? ?? const [],
+      ),
     );
   }
 }
@@ -332,6 +368,7 @@ String deckFormatLabel(String value) {
       if (normalized.isEmpty) {
         return value;
       }
-      return normalized[0].toUpperCase() + normalized.substring(1).toLowerCase();
+      return normalized[0].toUpperCase() +
+          normalized.substring(1).toLowerCase();
   }
 }

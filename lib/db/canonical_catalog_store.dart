@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 import '../domain/domain_models.dart';
+import '../models.dart';
 
 class CanonicalCatalogImportBatch {
   const CanonicalCatalogImportBatch({
@@ -818,6 +819,221 @@ class CanonicalCatalogStore {
     return (result.first['c'] as int?) ?? 0;
   }
 
+  List<SetInfo> fetchPokemonSets({
+    List<String> preferredLanguages = const <String>['en'],
+    int limit = 500,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final rows = _database.select(
+      '''
+      SELECT
+        cs.code AS code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS name
+      FROM catalog_sets cs
+      WHERE cs.game_id = ?
+      ORDER BY LOWER(COALESCE($preferredSetNameSql, cs.canonical_name)), LOWER(cs.code)
+      LIMIT ?
+      ''',
+      <Object?>[
+        ...setNameParams,
+        TcgGameId.pokemon.value,
+        ...setNameParams,
+        limit,
+      ],
+    );
+    return rows
+        .map(
+          (row) => SetInfo(
+            code: (row['code'] as String? ?? '').trim().toLowerCase(),
+            name: (row['name'] as String? ?? '').trim(),
+          ),
+        )
+        .where((entry) => entry.code.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Map<String, String> fetchPokemonSetNamesForCodes(
+    List<String> setCodes, {
+    List<String> preferredLanguages = const <String>['en'],
+  }) {
+    final normalizedCodes = setCodes
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedCodes.isEmpty) {
+      return const <String, String>{};
+    }
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final rows = _database.select(
+      '''
+      SELECT
+        cs.code AS code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS name
+      FROM catalog_sets cs
+      WHERE cs.game_id = ?
+        AND LOWER(cs.code) IN (${_inClause(normalizedCodes.length)})
+      ''',
+      <Object?>[...setNameParams, TcgGameId.pokemon.value, ...normalizedCodes],
+    );
+    return <String, String>{
+      for (final row in rows)
+        ((row['code'] as String? ?? '').trim().toLowerCase()):
+            ((row['name'] as String? ?? '').trim()),
+    };
+  }
+
+  List<String> fetchPokemonDistinctSubtypes({int limit = 80}) {
+    final rows = _database.select(
+      '''
+      SELECT DISTINCT TRIM(value) AS subtype
+      FROM pokemon_printing_metadata pm, json_each(pm.subtypes_json)
+      WHERE TRIM(COALESCE(value, '')) <> ''
+      ORDER BY LOWER(TRIM(value))
+      LIMIT ?
+      ''',
+      <Object?>[limit],
+    );
+    return rows
+        .map((row) => (row['subtype'] as String? ?? '').trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<CardSearchResult> searchPokemonCards({
+    required CollectionFilter filter,
+    String? searchQuery,
+    List<String> preferredLanguages = const <String>['en'],
+    int limit = 200,
+    int? offset,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendPokemonFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+
+    final cardNameParams = <Object?>[];
+    final preferredCardNameSql = _localizedCardNameSql(
+      normalizedLanguages,
+      cardNameParams,
+    );
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final subtypeParams = <Object?>[];
+    final preferredSubtypeSql = _localizedCardSubtypeSql(
+      normalizedLanguages,
+      subtypeParams,
+    );
+
+    final rows = _database.select(
+      '''
+      SELECT
+        COALESCE(legacy.provider_object_id, cp.id) AS legacy_id,
+        COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
+        cs.code AS set_code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
+        cp.collector_number AS collector_number,
+        cp.rarity AS rarity,
+        COALESCE(
+          $preferredSubtypeSql,
+          TRIM(
+            COALESCE(pm.category, '') ||
+            CASE
+              WHEN pm.subtypes_json <> '[]'
+                THEN ' ' || REPLACE(REPLACE(REPLACE(pm.subtypes_json, '[', '('), ']', ')'), '"', '')
+              ELSE ''
+            END
+          )
+        ) AS type_line,
+        pm.types_json AS types_json,
+        COALESCE(
+          json_extract(cs.metadata_json, '\$.official_total'),
+          json_extract(cs.metadata_json, '\$.total')
+        ) AS set_total,
+        COALESCE(
+          json_extract(cp.image_uris_json, '\$.high_res'),
+          json_extract(cp.image_uris_json, '\$.default')
+        ) AS image_uri
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN pokemon_printing_metadata pm ON pm.printing_id = cp.id
+      LEFT JOIN provider_mappings legacy
+        ON legacy.printing_id = cp.id
+       AND legacy.provider_id = ?
+       AND legacy.object_type = 'legacy_printing'
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
+      LIMIT ? OFFSET ?
+      ''',
+      <Object?>[
+        ...cardNameParams,
+        ...setNameParams,
+        ...subtypeParams,
+        CatalogProviderId.pokemonTcgApi.value,
+        TcgGameId.pokemon.value,
+        ...params,
+        limit,
+        offset ?? 0,
+      ],
+    );
+
+    return rows
+        .map(_pokemonSearchRowToResult)
+        .where((entry) => entry.id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  int countPokemonCards({
+    required CollectionFilter filter,
+    String? searchQuery,
+    List<String> preferredLanguages = const <String>['en'],
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendPokemonFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    final rows = _database.select(
+      '''
+      SELECT COUNT(*) AS c
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN pokemon_printing_metadata pm ON pm.printing_id = cp.id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ''',
+      <Object?>[TcgGameId.pokemon.value, ...params],
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
   void _initialize() {
     _database.execute('''
       CREATE TABLE IF NOT EXISTS catalog_cards (
@@ -931,6 +1147,30 @@ class CanonicalCatalogStore {
         captured_at_ms INTEGER NOT NULL
       )
       ''');
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_catalog_sets_game_code ON catalog_sets(game_id, code)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_card_printings_game_set ON card_printings(game_id, set_id, collector_number)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_card_printings_game_rarity ON card_printings(game_id, rarity)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_catalog_card_localizations_language_name ON catalog_card_localizations(language_code, name COLLATE NOCASE)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_catalog_set_localizations_language_name ON catalog_set_localizations(language_code, name COLLATE NOCASE)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_provider_mappings_lookup ON provider_mappings(game_id, provider_id, object_type, provider_object_id)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pokemon_metadata_core ON pokemon_printing_metadata(category, stage, regulation_mark, hp)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_pokemon_metadata_illustrator ON pokemon_printing_metadata(illustrator COLLATE NOCASE)',
+    );
   }
 
   Map<String, Object?> _cardMetadata(CatalogCard card) {
@@ -950,5 +1190,383 @@ class CanonicalCatalogStore {
       };
     }
     return metadata;
+  }
+
+  void _appendPokemonFilterQuery({
+    required CollectionFilter filter,
+    required String? searchQuery,
+    required List<String> preferredLanguages,
+    required List<String> whereClauses,
+    required List<Object?> params,
+  }) {
+    final combinedQuery = <String>[
+      if ((searchQuery ?? '').trim().isNotEmpty) searchQuery!.trim(),
+      if ((filter.name ?? '').trim().isNotEmpty) filter.name!.trim(),
+    ].join(' ').trim();
+
+    for (final token in _tokenizeSearch(combinedQuery)) {
+      final localizedExistsSql = _localizedCardNameExistsSql(
+        preferredLanguages.length,
+      );
+      whereClauses.add('''
+        (
+          LOWER(cc.canonical_name) LIKE ?
+          OR $localizedExistsSql
+          OR LOWER(cp.collector_number) LIKE ?
+        )
+        ''');
+      params.add('%$token%');
+      params.addAll(preferredLanguages);
+      params.add('%$token%');
+      params.add('%$token%');
+    }
+
+    final collectorNumber = filter.collectorNumber?.trim().toLowerCase();
+    if (collectorNumber != null && collectorNumber.isNotEmpty) {
+      whereClauses.add('LOWER(cp.collector_number) LIKE ?');
+      params.add('%$collectorNumber%');
+    }
+
+    final illustrator = filter.artist?.trim().toLowerCase();
+    if (illustrator != null && illustrator.isNotEmpty) {
+      whereClauses.add('LOWER(COALESCE(pm.illustrator, \'\')) LIKE ?');
+      params.add('%$illustrator%');
+    }
+
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(cs.code)',
+      values: filter.sets.map((value) => value.trim().toLowerCase()),
+    );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(COALESCE(cp.rarity, \'\'))',
+      values: filter.rarities.map((value) => value.trim().toLowerCase()),
+    );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(COALESCE(pm.category, \'\'))',
+      values: filter.pokemonCategories.map(
+        (value) => value.trim().toLowerCase(),
+      ),
+    );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(COALESCE(pm.regulation_mark, \'\'))',
+      values: filter.pokemonRegulationMarks.map(
+        (value) => value.trim().toLowerCase(),
+      ),
+    );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(COALESCE(pm.stage, \'\'))',
+      values: filter.pokemonStages.map((value) => value.trim().toLowerCase()),
+    );
+
+    _appendJsonContainsAny(
+      whereClauses: whereClauses,
+      params: params,
+      column: 'pm.types_json',
+      values: filter.types,
+    );
+    _appendJsonContainsAny(
+      whereClauses: whereClauses,
+      params: params,
+      column: 'pm.subtypes_json',
+      values: filter.pokemonSubtypes,
+    );
+    _appendJsonContainsAny(
+      whereClauses: whereClauses,
+      params: params,
+      column: 'pm.types_json',
+      values: filter.colors.expand(_pokemonEnergyCodeToNames),
+    );
+
+    if (filter.hpMin != null) {
+      whereClauses.add('COALESCE(pm.hp, 0) >= ?');
+      params.add(filter.hpMin);
+    }
+    if (filter.hpMax != null) {
+      whereClauses.add('COALESCE(pm.hp, 0) <= ?');
+      params.add(filter.hpMax);
+    }
+    if (filter.manaMin != null) {
+      whereClauses.add('''
+        EXISTS (
+          SELECT 1
+          FROM json_each(json_extract(cc.metadata_json, '\$.pokemon.attacks')) attack
+          WHERE CAST(json_extract(attack.value, '\$.converted_energy_cost') AS INTEGER) >= ?
+        )
+        ''');
+      params.add(filter.manaMin);
+    }
+    if (filter.manaMax != null) {
+      whereClauses.add('''
+        EXISTS (
+          SELECT 1
+          FROM json_each(json_extract(cc.metadata_json, '\$.pokemon.attacks')) attack
+          WHERE CAST(json_extract(attack.value, '\$.converted_energy_cost') AS INTEGER) <= ?
+        )
+        ''');
+      params.add(filter.manaMax);
+    }
+  }
+
+  String _localizedCardNameSql(List<String> languages, List<Object?> params) {
+    final inClause = _inClause(languages.length);
+    final orderCases = <String>[];
+    for (var index = 0; index < languages.length; index += 1) {
+      orderCases.add('WHEN ? THEN $index');
+      params.add(languages[index]);
+    }
+    params.addAll(languages);
+    return '''
+      (
+        SELECT ccl.name
+        FROM catalog_card_localizations ccl
+        WHERE ccl.card_id = cc.id
+          AND ccl.language_code IN ($inClause)
+        ORDER BY CASE ccl.language_code ${orderCases.join(' ')} ELSE 999 END
+        LIMIT 1
+      )
+    ''';
+  }
+
+  String _localizedSetNameSql(List<String> languages, List<Object?> params) {
+    final inClause = _inClause(languages.length);
+    final orderCases = <String>[];
+    for (var index = 0; index < languages.length; index += 1) {
+      orderCases.add('WHEN ? THEN $index');
+      params.add(languages[index]);
+    }
+    params.addAll(languages);
+    return '''
+      (
+        SELECT csl.name
+        FROM catalog_set_localizations csl
+        WHERE csl.set_id = cs.id
+          AND csl.language_code IN ($inClause)
+        ORDER BY CASE csl.language_code ${orderCases.join(' ')} ELSE 999 END
+        LIMIT 1
+      )
+    ''';
+  }
+
+  String _localizedCardSubtypeSql(
+    List<String> languages,
+    List<Object?> params,
+  ) {
+    final inClause = _inClause(languages.length);
+    final orderCases = <String>[];
+    for (var index = 0; index < languages.length; index += 1) {
+      orderCases.add('WHEN ? THEN $index');
+      params.add(languages[index]);
+    }
+    params.addAll(languages);
+    return '''
+      (
+        SELECT ccl.subtype_line
+        FROM catalog_card_localizations ccl
+        WHERE ccl.card_id = cc.id
+          AND ccl.language_code IN ($inClause)
+          AND TRIM(COALESCE(ccl.subtype_line, '')) <> ''
+        ORDER BY CASE ccl.language_code ${orderCases.join(' ')} ELSE 999 END
+        LIMIT 1
+      )
+    ''';
+  }
+
+  String _localizedCardNameExistsSql(int languageCount) {
+    return '''
+      EXISTS (
+        SELECT 1
+        FROM catalog_card_localizations ccl
+        WHERE ccl.card_id = cc.id
+          AND ccl.language_code IN (${_inClause(languageCount)})
+          AND LOWER(ccl.name) LIKE ?
+      )
+    ''';
+  }
+
+  void _appendInClause({
+    required List<String> whereClauses,
+    required List<Object?> params,
+    required String sqlExpression,
+    required Iterable<String> values,
+  }) {
+    final normalized = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return;
+    }
+    whereClauses.add('$sqlExpression IN (${_inClause(normalized.length)})');
+    params.addAll(normalized);
+  }
+
+  void _appendJsonContainsAny({
+    required List<String> whereClauses,
+    required List<Object?> params,
+    required String column,
+    required Iterable<String> values,
+  }) {
+    final normalized = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return;
+    }
+    final clauses = <String>[];
+    for (final value in normalized) {
+      clauses.add('$column LIKE ?');
+      params.add('%"${value.replaceAll('"', '\\"')}"%');
+    }
+    whereClauses.add('(${clauses.join(' OR ')})');
+  }
+
+  String _inClause(int count) => List<String>.filled(count, '?').join(', ');
+
+  List<String> _normalizedLanguageOrder(List<String> preferredLanguages) {
+    final normalized = preferredLanguages
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return const <String>['en'];
+    }
+    if (normalized.contains('en')) {
+      return normalized;
+    }
+    return <String>[...normalized, 'en'];
+  }
+
+  List<String> _tokenizeSearch(String raw) {
+    final normalized = raw
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (normalized.isEmpty) {
+      return const <String>[];
+    }
+    return normalized.split(' ');
+  }
+
+  CardSearchResult _pokemonSearchRowToResult(Row row) {
+    final typeNames = _parseJsonStringList(
+      (row['types_json'] as String?) ?? '[]',
+    );
+    final colorCodes = _pokemonTypeNamesToColorCodes(typeNames).join(',');
+    return CardSearchResult(
+      id: (row['legacy_id'] as String? ?? '').trim(),
+      name: (row['display_name'] as String? ?? '').trim(),
+      setCode: (row['set_code'] as String? ?? '').trim().toLowerCase(),
+      setName: (row['set_name'] as String? ?? '').trim(),
+      collectorNumber: (row['collector_number'] as String? ?? '').trim(),
+      setTotal: (row['set_total'] as num?)?.toInt(),
+      rarity: (row['rarity'] as String? ?? '').trim(),
+      typeLine: (row['type_line'] as String? ?? '').trim(),
+      colors: colorCodes,
+      colorIdentity: colorCodes,
+      imageUri: (row['image_uri'] as String?)?.trim(),
+    );
+  }
+
+  List<String> _parseJsonStringList(String raw) {
+    if (raw.trim().isEmpty) {
+      return const <String>[];
+    }
+    final parsed = jsonDecode(raw);
+    if (parsed is! List) {
+      return const <String>[];
+    }
+    return parsed
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Iterable<String> _pokemonEnergyCodeToNames(String code) {
+    switch (code.trim().toUpperCase()) {
+      case 'G':
+        return const <String>['Grass'];
+      case 'R':
+        return const <String>['Fire'];
+      case 'U':
+        return const <String>['Water'];
+      case 'L':
+        return const <String>['Lightning'];
+      case 'B':
+        return const <String>['Psychic', 'Darkness'];
+      case 'F':
+        return const <String>['Fighting'];
+      case 'D':
+        return const <String>['Dragon'];
+      case 'W':
+        return const <String>['Fairy'];
+      case 'C':
+        return const <String>['Colorless'];
+      case 'M':
+        return const <String>['Metal'];
+      default:
+        return const <String>[];
+    }
+  }
+
+  List<String> _pokemonTypeNamesToColorCodes(List<String> types) {
+    final result = <String>{};
+    for (final raw in types) {
+      switch (raw.trim().toLowerCase()) {
+        case 'grass':
+          result.add('G');
+          break;
+        case 'fire':
+          result.add('R');
+          break;
+        case 'water':
+          result.add('U');
+          break;
+        case 'lightning':
+        case 'electric':
+          result.add('L');
+          break;
+        case 'psychic':
+        case 'darkness':
+        case 'dark':
+          result.add('B');
+          break;
+        case 'fighting':
+          result.add('F');
+          break;
+        case 'dragon':
+          result.add('D');
+          break;
+        case 'fairy':
+          result.add('W');
+          break;
+        case 'metal':
+        case 'steel':
+          result.add('M');
+          break;
+        case 'colorless':
+          result.add('C');
+          break;
+      }
+    }
+    if (result.isEmpty) {
+      result.add('N');
+    }
+    return result.toList(growable: false);
   }
 }

@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 
 import 'package:tcg_tracker/db/canonical_catalog_store.dart';
 import 'package:tcg_tracker/domain/domain_models.dart';
+import 'package:tcg_tracker/models.dart';
 import 'package:tcg_tracker/providers/tcgdex_pokemon_provider.dart';
 import 'package:tcg_tracker/services/pokemon_canonical_import_service.dart';
 import 'package:tcg_tracker/services/tcgdex_api_client.dart';
@@ -111,6 +112,52 @@ void main() {
       contains(TcgCardLanguage.it),
     );
   });
+
+  test(
+    'Pokemon canonical store supports localized search and advanced filters',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+      await service.importProfile(
+        profile: 'starter',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+
+      final localizedResults = store.searchPokemonCards(
+        filter: const CollectionFilter(),
+        searchQuery: 'alakazam it',
+        preferredLanguages: const <String>['it'],
+        limit: 20,
+      );
+      expect(localizedResults, isNotEmpty);
+      expect(localizedResults.first.name, 'Alakazam IT');
+      expect(localizedResults.first.setName, 'Set Base');
+
+      final filteredCount = store.countPokemonCards(
+        filter: const CollectionFilter(
+          collectorNumber: '1',
+          hpMin: 70,
+          hpMax: 90,
+          pokemonCategories: <String>{'Pokemon'},
+          types: <String>{'Psychic'},
+          pokemonStages: <String>{'Stage2'},
+        ),
+        preferredLanguages: const <String>['en', 'it'],
+      );
+      expect(filteredCount, equals(1));
+    },
+  );
 }
 
 http.Client _fakeTcgdexClient() {
@@ -190,6 +237,7 @@ http.Client _fakeTcgdexClient() {
   final cardIt = <String, dynamic>{
     ...cardEn,
     'category': 'Pokémon',
+    'name': 'Alakazam IT',
     'set': <String, dynamic>{
       'id': 'base1',
       'name': 'Set Base',

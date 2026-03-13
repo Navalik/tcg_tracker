@@ -79,6 +79,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   final Set<String> _selectedSetCodes = {};
   final Set<String> _selectedColors = {};
   final Set<String> _selectedTypes = {};
+  final Set<String> _selectedPokemonCategories = {};
+  final Set<String> _selectedPokemonRegulationMarks = {};
+  final Set<String> _selectedPokemonStages = {};
+  String _collectorNumberQuery = '';
+  String _pokemonSubtypeQuery = '';
+  int? _hpMin;
+  int? _hpMax;
   int? _manaValueMin;
   int? _manaValueMax;
   bool _showResults = true;
@@ -292,9 +299,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _countLoading = true;
     });
     final filter = _effectiveAdvancedFilter();
-    final total = await ScryfallDatabase.instance.countCardsForFilterWithSearch(
+    final total = await appRepositories.search.countCardsForFilterWithSearch(
       filter,
+      gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
       searchQuery: _query.isEmpty ? null : _query,
+      languages: _effectiveLanguages(),
     );
     if (!mounted) {
       return;
@@ -755,12 +764,27 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return CollectionFilter(
       name: null,
       artist: artist.isEmpty ? null : artist,
-      manaMin: _isPokemonSearch ? null : _manaValueMin,
-      manaMax: _isPokemonSearch ? null : _manaValueMax,
+      manaMin: _manaValueMin,
+      manaMax: _manaValueMax,
+      hpMin: _hpMin,
+      hpMax: _hpMax,
+      collectorNumber: _collectorNumberQuery.trim().isEmpty
+          ? null
+          : _collectorNumberQuery.trim(),
       sets: _selectedSetCodes,
       rarities: _selectedRarities,
       colors: _selectedColors,
       types: _selectedTypes,
+      pokemonCategories: _selectedPokemonCategories,
+      pokemonSubtypes: _pokemonSubtypeQuery.trim().isEmpty
+          ? const <String>{}
+          : _pokemonSubtypeQuery
+                .split(',')
+                .map((value) => value.trim())
+                .where((value) => value.isNotEmpty)
+                .toSet(),
+      pokemonRegulationMarks: _selectedPokemonRegulationMarks,
+      pokemonStages: _selectedPokemonStages,
     );
   }
 
@@ -775,11 +799,24 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       artist: base.artist ?? required.artist,
       manaMin: base.manaMin ?? required.manaMin,
       manaMax: base.manaMax ?? required.manaMax,
+      hpMin: base.hpMin ?? required.hpMin,
+      hpMax: base.hpMax ?? required.hpMax,
       format: base.format,
+      collectorNumber: base.collectorNumber ?? required.collectorNumber,
       sets: {...required.sets, ...base.sets},
       rarities: {...required.rarities, ...base.rarities},
       colors: {...required.colors, ...base.colors},
       types: {...required.types, ...base.types},
+      pokemonCategories: {
+        ...required.pokemonCategories,
+        ...base.pokemonCategories,
+      },
+      pokemonSubtypes: {...required.pokemonSubtypes, ...base.pokemonSubtypes},
+      pokemonRegulationMarks: {
+        ...required.pokemonRegulationMarks,
+        ...base.pokemonRegulationMarks,
+      },
+      pokemonStages: {...required.pokemonStages, ...base.pokemonStages},
     );
   }
 
@@ -792,10 +829,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         (required.artist?.trim().isNotEmpty ?? false) ||
         required.manaMin != null ||
         required.manaMax != null ||
+        required.hpMin != null ||
+        required.hpMax != null ||
+        (required.collectorNumber?.trim().isNotEmpty ?? false) ||
         required.sets.isNotEmpty ||
         required.rarities.isNotEmpty ||
         required.colors.isNotEmpty ||
-        required.types.isNotEmpty;
+        required.types.isNotEmpty ||
+        required.pokemonCategories.isNotEmpty ||
+        required.pokemonSubtypes.isNotEmpty ||
+        required.pokemonRegulationMarks.isNotEmpty ||
+        required.pokemonStages.isNotEmpty;
   }
 
   Future<Map<String, String>> _getAvailableSetCodes() async {
@@ -998,8 +1042,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedSetCodes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
+        _selectedPokemonCategories.isNotEmpty ||
+        _selectedPokemonRegulationMarks.isNotEmpty ||
+        _selectedPokemonStages.isNotEmpty ||
+        _collectorNumberQuery.trim().isNotEmpty ||
+        _pokemonSubtypeQuery.trim().isNotEmpty ||
         _artistQuery.trim().isNotEmpty ||
-        (!_isPokemonSearch && (_manaValueMin != null || _manaValueMax != null));
+        _manaValueMin != null ||
+        _manaValueMax != null ||
+        _hpMin != null ||
+        _hpMax != null;
   }
 
   bool _hasNarrowingFilters() {
@@ -1008,6 +1060,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedSetCodes.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
+        _selectedPokemonCategories.isNotEmpty ||
+        _selectedPokemonRegulationMarks.isNotEmpty ||
+        _selectedPokemonStages.isNotEmpty ||
+        _collectorNumberQuery.trim().isNotEmpty ||
+        _pokemonSubtypeQuery.trim().isNotEmpty ||
         _artistQuery.trim().isNotEmpty;
   }
 
@@ -1056,6 +1113,31 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         return l10n.colorColorless;
       default:
         return code.toUpperCase();
+    }
+  }
+
+  String _typeLabel(String value) {
+    if (!_isPokemonSearch) {
+      return value;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    switch (value) {
+      case 'Pokemon':
+        return 'Pokemon';
+      case 'Trainer':
+        return l10n.pokemonTypeTrainer;
+      case 'Energy':
+        return l10n.pokemonTypeEnergy;
+      case 'Item':
+        return l10n.pokemonTypeItem;
+      case 'Supporter':
+        return l10n.pokemonTypeSupporter;
+      case 'Stadium':
+        return l10n.pokemonTypeStadium;
+      case 'Tool':
+        return l10n.pokemonTypeTool;
+      default:
+        return value;
     }
   }
 
@@ -1133,9 +1215,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           .where((code) => !availableSetCodes.containsKey(code))
           .toList();
       if (missing.isNotEmpty) {
-        final names = await appRepositories.sets.fetchSetNamesForCodes(
-          missing,
-        );
+        final names = await appRepositories.sets.fetchSetNamesForCodes(missing);
         for (final entry in names.entries) {
           availableSetCodes[entry.key
               .trim()
@@ -1154,8 +1234,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final tempSetCodes = _selectedSetCodes.toSet();
     final tempColors = _selectedColors.toSet();
     final tempTypes = _selectedTypes.toSet();
+    final tempPokemonCategories = _selectedPokemonCategories.toSet();
+    final tempPokemonRegulationMarks = _selectedPokemonRegulationMarks.toSet();
+    final tempPokemonStages = _selectedPokemonStages.toSet();
     final nameController = TextEditingController(text: _query);
+    final collectorController = TextEditingController(
+      text: _collectorNumberQuery,
+    );
     final artistController = TextEditingController(text: _artistQuery);
+    final subtypeController = TextEditingController(text: _pokemonSubtypeQuery);
     List<String> artistSuggestions = [];
     bool loadingArtists = false;
     Timer? artistDebounce;
@@ -1164,6 +1251,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     );
     final maxController = TextEditingController(
       text: _manaValueMax?.toString() ?? '',
+    );
+    final hpMinController = TextEditingController(
+      text: _hpMin?.toString() ?? '',
+    );
+    final hpMaxController = TextEditingController(
+      text: _hpMax?.toString() ?? '',
     );
     var setQuery = '';
     var typeQuery = '';
@@ -1255,6 +1348,24 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             final filteredTypes = sortedTypes
                 .where((value) => value.toLowerCase().contains(typeQuery))
                 .toList();
+            const pokemonCategories = <String>['Pokemon', 'Trainer', 'Energy'];
+            const pokemonStages = <String>[
+              'Basic',
+              'Stage1',
+              'Stage2',
+              'VMAX',
+              'VSTAR',
+            ];
+            const pokemonRegulationMarks = <String>[
+              'A',
+              'B',
+              'C',
+              'D',
+              'E',
+              'F',
+              'G',
+              'H',
+            ];
 
             return Container(
               margin: const EdgeInsets.all(16),
@@ -1301,6 +1412,21 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         prefixIcon: const Icon(Icons.search),
                       ),
                     ),
+                    if (_isPokemonSearch) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.detailCollector,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: collectorController,
+                        decoration: InputDecoration(
+                          hintText: l10n.detailCollector,
+                          prefixIcon: const Icon(Icons.tag),
+                        ),
+                      ),
+                    ],
                     if (sortedRarities.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
@@ -1357,7 +1483,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     if (sortedColors.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        l10n.colorLabel,
+                        _isPokemonSearch
+                            ? l10n.pokemonEnergyTypeLabel
+                            : l10n.colorLabel,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
@@ -1372,10 +1500,28 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         (value) => _colorLabel(value),
                       ),
                     ],
+                    if (_isPokemonSearch) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.pokemonCardCategoryLabel,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        pokemonCategories,
+                        (value) => tempPokemonCategories.contains(value),
+                        (value) {
+                          if (!tempPokemonCategories.add(value)) {
+                            tempPokemonCategories.remove(value);
+                          }
+                        },
+                        (value) => _typeLabel(value),
+                      ),
+                    ],
                     if (sortedTypes.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
-                        l10n.typeLabel,
+                        _isPokemonSearch ? 'Type' : l10n.typeLabel,
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       const SizedBox(height: 8),
@@ -1404,7 +1550,80 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                         ),
                       ],
                     ],
-                    if (!_isPokemonSearch) ...[
+                    if (_isPokemonSearch) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        'Subtype',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: subtypeController,
+                        decoration: const InputDecoration(
+                          hintText: 'Basic, Item, Supporter...',
+                          prefixIcon: Icon(Icons.category_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('HP', style: Theme.of(context).textTheme.titleSmall),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: hpMinController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: l10n.minLabel,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: hpMaxController,
+                              keyboardType: TextInputType.number,
+                              decoration: InputDecoration(
+                                hintText: l10n.maxLabel,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Stage',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        pokemonStages,
+                        (value) => tempPokemonStages.contains(value),
+                        (value) {
+                          if (!tempPokemonStages.add(value)) {
+                            tempPokemonStages.remove(value);
+                          }
+                        },
+                        (value) => value,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Regulation mark',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        pokemonRegulationMarks,
+                        (value) => tempPokemonRegulationMarks.contains(value),
+                        (value) {
+                          if (!tempPokemonRegulationMarks.add(value)) {
+                            tempPokemonRegulationMarks.remove(value);
+                          }
+                        },
+                        (value) => value,
+                      ),
+                      const SizedBox(height: 16),
+                    ] else ...[
                       const SizedBox(height: 16),
                       Text(
                         l10n.manaValue,
@@ -1463,8 +1682,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             setSheetState(() {
                               loadingArtists = true;
                             });
-                            final results = await ScryfallDatabase.instance
-                                .fetchAvailableArtists(query: query);
+                            final results = _isPokemonSearch
+                                ? const <String>[]
+                                : await ScryfallDatabase.instance
+                                      .fetchAvailableArtists(query: query);
                             setSheetState(() {
                               artistSuggestions = results;
                               loadingArtists = false;
@@ -1582,10 +1803,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     int? minValue = int.tryParse(minController.text.trim());
     int? maxValue = int.tryParse(maxController.text.trim());
+    int? hpMinValue = int.tryParse(hpMinController.text.trim());
+    int? hpMaxValue = int.tryParse(hpMaxController.text.trim());
     if (minValue != null && maxValue != null && minValue > maxValue) {
       final swap = minValue;
       minValue = maxValue;
       maxValue = swap;
+    }
+    if (hpMinValue != null && hpMaxValue != null && hpMinValue > hpMaxValue) {
+      final swap = hpMinValue;
+      hpMinValue = hpMaxValue;
+      hpMaxValue = swap;
     }
     setState(() {
       _selectedRarities
@@ -1600,9 +1828,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _selectedTypes
         ..clear()
         ..addAll(tempTypes);
+      _selectedPokemonCategories
+        ..clear()
+        ..addAll(tempPokemonCategories);
+      _selectedPokemonRegulationMarks
+        ..clear()
+        ..addAll(tempPokemonRegulationMarks);
+      _selectedPokemonStages
+        ..clear()
+        ..addAll(tempPokemonStages);
       _artistQuery = artistController.text.trim();
+      _collectorNumberQuery = collectorController.text.trim();
+      _pokemonSubtypeQuery = subtypeController.text.trim();
       _manaValueMin = minValue;
       _manaValueMax = maxValue;
+      _hpMin = hpMinValue;
+      _hpMax = hpMaxValue;
     });
     final nameValue = nameController.text.trim();
     if (_controller.text.trim() != nameValue) {
@@ -1643,14 +1884,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       const pageSize = 200;
       var offset = 0;
       while (true) {
-        final page = await ScryfallDatabase.instance
-            .fetchCardsForAdvancedFilters(
-              filter,
-              searchQuery: _query.isEmpty ? null : _query,
-              languages: _effectiveLanguages(),
-              limit: pageSize,
-              offset: offset,
-            );
+        final page = await appRepositories.search.fetchCardsForAdvancedFilters(
+          filter,
+          gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
+          searchQuery: _query.isEmpty ? null : _query,
+          languages: _effectiveLanguages(),
+          limit: pageSize,
+          offset: offset,
+        );
         if (page.isEmpty) {
           break;
         }

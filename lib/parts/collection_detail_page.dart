@@ -763,12 +763,20 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       artist: currentFilter?.artist,
       manaMin: currentFilter?.manaMin,
       manaMax: currentFilter?.manaMax,
+      hpMin: currentFilter?.hpMin,
+      hpMax: currentFilter?.hpMax,
       format: currentFilter?.format,
+      collectorNumber: currentFilter?.collectorNumber,
       languages: <String>{normalizedNext},
       sets: nextSets,
       rarities: currentFilter?.rarities ?? const <String>{},
       colors: currentFilter?.colors ?? const <String>{},
       types: currentFilter?.types ?? const <String>{},
+      pokemonCategories: currentFilter?.pokemonCategories ?? const <String>{},
+      pokemonSubtypes: currentFilter?.pokemonSubtypes ?? const <String>{},
+      pokemonRegulationMarks:
+          currentFilter?.pokemonRegulationMarks ?? const <String>{},
+      pokemonStages: currentFilter?.pokemonStages ?? const <String>{},
     );
     await ScryfallDatabase.instance.updateCollectionFilter(
       widget.collectionId,
@@ -2391,11 +2399,24 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       artist: base.artist ?? required.artist,
       manaMin: base.manaMin ?? required.manaMin,
       manaMax: base.manaMax ?? required.manaMax,
+      hpMin: base.hpMin ?? required.hpMin,
+      hpMax: base.hpMax ?? required.hpMax,
       format: base.format ?? required.format,
+      collectorNumber: base.collectorNumber ?? required.collectorNumber,
       sets: {...required.sets, ...base.sets},
       rarities: {...required.rarities, ...base.rarities},
       colors: {...required.colors, ...base.colors},
       types: {...required.types, ...base.types},
+      pokemonCategories: {
+        ...required.pokemonCategories,
+        ...base.pokemonCategories,
+      },
+      pokemonSubtypes: {...required.pokemonSubtypes, ...base.pokemonSubtypes},
+      pokemonRegulationMarks: {
+        ...required.pokemonRegulationMarks,
+        ...base.pokemonRegulationMarks,
+      },
+      pokemonStages: {...required.pokemonStages, ...base.pokemonStages},
     );
   }
 
@@ -2405,9 +2426,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }) async {
     final cardIds = <String>{};
     var offset = 0;
+    final gameId = _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg;
     while (true) {
-      final batch = await ScryfallDatabase.instance.fetchFilteredCardPreviews(
+      final batch = await appRepositories.search.fetchCardsForAdvancedFilters(
         filter,
+        gameId: gameId,
         limit: pageSize,
         offset: offset,
       );

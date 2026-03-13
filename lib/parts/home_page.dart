@@ -104,27 +104,27 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await runStep('purchase_init', () => _purchaseManager.init());
       final priceCurrency =
           await runStep<String>(
-        'load_price_currency',
-        () => AppSettings.loadPriceCurrency(),
-      ) ??
+            'load_price_currency',
+            () => AppSettings.loadPriceCurrency(),
+          ) ??
           'eur';
       final showPrices =
           await runStep<bool>(
-        'load_show_prices',
-        () => AppSettings.loadShowPrices(),
-      ) ??
+            'load_show_prices',
+            () => AppSettings.loadShowPrices(),
+          ) ??
           true;
       final firstOpenFlag =
           await runStep<int>(
-        'load_first_open_flag',
-        () => AppSettings.loadAppFirstOpenFlag(),
-      ) ??
+            'load_first_open_flag',
+            () => AppSettings.loadAppFirstOpenFlag(),
+          ) ??
           0;
       final cardLanguageOnboardingDone =
           await runStep<bool>(
-        'load_card_language_onboarding_done',
-        () => AppSettings.loadCardLanguageOnboardingDone(),
-      ) ??
+            'load_card_language_onboarding_done',
+            () => AppSettings.loadCardLanguageOnboardingDone(),
+          ) ??
           false;
       final shouldRunCardLanguageOnboarding = !cardLanguageOnboardingDone;
       if (mounted) {
@@ -156,7 +156,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       }
       if (isFirstOpen) {
-        await runStep('save_first_open_flag', () => AppSettings.saveAppFirstOpenFlag(0));
+        await runStep(
+          'save_first_open_flag',
+          () => AppSettings.saveAppFirstOpenFlag(0),
+        );
       }
       await runStep('env_init', () => TcgEnvironmentController.instance.init());
       if (!mounted) {
@@ -229,12 +232,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final game = _activeSettingsGame;
-    final lastCheckedVersion = await AppSettings
-        .loadCollectionCoherenceCheckVersionForGame(game);
+    final lastCheckedVersion =
+        await AppSettings.loadCollectionCoherenceCheckVersionForGame(game);
     if (lastCheckedVersion == currentVersion) {
       return;
     }
-    await ScryfallDatabase.instance.repairAllCardsCoherenceFromCustomCollections();
+    await ScryfallDatabase.instance
+        .repairAllCardsCoherenceFromCustomCollections();
     await AppSettings.saveCollectionCoherenceCheckVersionForGame(
       game,
       currentVersion,
@@ -310,7 +314,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             context,
           ).languageCode.toLowerCase().startsWith('it');
           return AlertDialog(
-            title: Text(italian ? 'Pokemon: solo inglese' : 'Pokemon: English only'),
+            title: Text(
+              italian ? 'Pokemon: solo inglese' : 'Pokemon: English only',
+            ),
             content: Text(
               italian
                   ? 'Con la sorgente dati attuale le carte Pokemon sono disponibili solo in inglese. Il supporto italiano arrivera in una futura release.'
@@ -327,7 +333,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
       return;
     }
-    final current = (await AppSettings.loadCardLanguagesForGame(selectedGame)).toSet();
+    final current = (await AppSettings.loadCardLanguagesForGame(
+      selectedGame,
+    )).toSet();
     current.add('en');
     if (!mounted) {
       return;
@@ -348,9 +356,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
-              title: Text(
-                italian ? 'Lingue carte' : 'Card languages',
-              ),
+              title: Text(italian ? 'Lingue carte' : 'Card languages'),
               content: SizedBox(
                 width: 360,
                 child: SingleChildScrollView(
@@ -421,10 +427,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ),
               actions: [
                 FilledButton(
-                  onPressed: () => Navigator.of(context).pop(<String>{...mutable}),
-                  child: Text(
-                    italian ? 'Avanti' : 'Next',
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context).pop(<String>{...mutable}),
+                  child: Text(italian ? 'Avanti' : 'Next'),
                 ),
               ],
             );
@@ -481,16 +486,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) => AlertDialog(
-            title: Text(
-              l10n.primaryGamePickerTitle,
-            ),
+            title: Text(l10n.primaryGamePickerTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  l10n.primaryGamePickerBody,
-                ),
+                Text(l10n.primaryGamePickerBody),
                 const SizedBox(height: 12),
                 RadioGroup<TcgGame>(
                   groupValue: current,
@@ -507,16 +508,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       RadioListTile<TcgGame>(
                         value: TcgGame.mtg,
                         title: const Text('Magic'),
-                        subtitle: Text(
-                          l10n.primaryFreeLabel,
-                        ),
+                        subtitle: Text(l10n.primaryFreeLabel),
                       ),
                       RadioListTile<TcgGame>(
                         value: TcgGame.pokemon,
                         title: const Text('Pokemon'),
-                        subtitle: Text(
-                          l10n.primaryFreeLabel,
-                        ),
+                        subtitle: Text(l10n.primaryFreeLabel),
                       ),
                     ],
                   ),
@@ -850,12 +847,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          l10n.gameInProTitle(gameLabel),
-        ),
-        content: Text(
-          l10n.gameOneTimeUnlockBody(gameLabel),
-        ),
+        title: Text(l10n.gameInProTitle(gameLabel)),
+        content: Text(l10n.gameOneTimeUnlockBody(gameLabel)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -953,10 +946,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return value.trim().toLowerCase();
   }
 
-  bool _isCollectionNameTaken(
-    String name, {
-    int? excludeCollectionId,
-  }) {
+  bool _isCollectionNameTaken(String name, {int? excludeCollectionId}) {
     final normalized = _normalizedCollectionName(name);
     if (normalized.isEmpty) {
       return false;
@@ -1291,14 +1281,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final recentAllCards = allCardsCollection == null
           ? const <CardSearchResult>[]
           : await ScryfallDatabase.instance
-              .fetchRecentOwnedCardPreviews(
-                allCardsCollection.id,
-                limit: 10,
-              )
-              .timeout(
-                const Duration(seconds: 6),
-                onTimeout: () => const <CardSearchResult>[],
-              );
+                .fetchRecentOwnedCardPreviews(allCardsCollection.id, limit: 10)
+                .timeout(
+                  const Duration(seconds: 6),
+                  onTimeout: () => const <CardSearchResult>[],
+                );
       if (!mounted) {
         return;
       }
@@ -1351,7 +1338,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               !_isDeckSideboardCollection(collection),
         )
         .toList();
-    final disabledCollectionIds = _disabledCollectionIdsForFree(userCollections);
+    final disabledCollectionIds = _disabledCollectionIdsForFree(
+      userCollections,
+    );
     final deckCollections = userCollections
         .where((item) => item.type == CollectionType.deck)
         .toList();
@@ -1547,17 +1536,23 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             label: AppLocalizations.of(context)!.createYourSetCollectionTitle,
             items: setCollections,
             createIcon: Icons.auto_awesome_mosaic,
-            createTitle: AppLocalizations.of(context)!.createYourSetCollectionTitle,
+            createTitle: AppLocalizations.of(
+              context,
+            )!.createYourSetCollectionTitle,
             description: _sectionHelpText(_HomeCollectionsMenu.set),
             canCreate: canCreateSet,
             onCreate: () => _addSetCollection(context),
           );
         case _HomeCollectionsMenu.custom:
           return buildSingleCategory(
-            label: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            label: AppLocalizations.of(
+              context,
+            )!.createYourCustomCollectionTitle,
             items: customCollections,
             createIcon: Icons.tune,
-            createTitle: AppLocalizations.of(context)!.createYourCustomCollectionTitle,
+            createTitle: AppLocalizations.of(
+              context,
+            )!.createYourCustomCollectionTitle,
             description: _sectionHelpText(_HomeCollectionsMenu.custom),
             canCreate: canCreateCustom,
             onCreate: () => _addCustomCollection(context),
@@ -1567,7 +1562,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             label: AppLocalizations.of(context)!.smartCollectionDefaultName,
             items: smartCollections,
             createIcon: Icons.auto_fix_high_rounded,
-            createTitle: AppLocalizations.of(context)!.createSmartCollectionTitle,
+            createTitle: AppLocalizations.of(
+              context,
+            )!.createSmartCollectionTitle,
             description: _sectionHelpText(_HomeCollectionsMenu.smart),
             canCreate: canCreateSmart,
             onCreate: () => _addSmartCollection(context),
@@ -1814,7 +1811,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final symbol = currency == 'usd' ? r'$' : '\u20AC';
     final primary = currency == 'usd' ? card.priceUsd : card.priceEur;
     final fallback = currency == 'usd' ? card.priceUsdFoil : card.priceEurFoil;
-    final value = _normalizePriceValue(primary) ?? _normalizePriceValue(fallback);
+    final value =
+        _normalizePriceValue(primary) ?? _normalizePriceValue(fallback);
     if (value == null) {
       return 'N/A';
     }
@@ -1823,7 +1821,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   Future<void> _showRecentCardDetails(CardSearchResult card) async {
     FocusScope.of(context).unfocus();
-    final allCardsId = await ScryfallDatabase.instance.ensureAllCardsCollectionId();
+    final allCardsId = await ScryfallDatabase.instance
+        .ensureAllCardsCollectionId();
     final entry = await ScryfallDatabase.instance.fetchCardEntryById(
       card.id,
       collectionId: allCardsId,
@@ -1918,7 +1917,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     children: [
                       Row(
                         children: [
-                          if (manaCost.isNotEmpty) _buildRecentManaCostPips(manaCost),
+                          if (manaCost.isNotEmpty)
+                            _buildRecentManaCostPips(manaCost),
                           const Spacer(),
                           IconButton(
                             onPressed: () => Navigator.of(context).pop(),
@@ -1950,7 +1950,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                     ),
                                   ),
                               child: showCheck
-                                  ? const Icon(Icons.check, key: ValueKey('check'))
+                                  ? const Icon(
+                                      Icons.check,
+                                      key: ValueKey('check'),
+                                    )
                                   : const Icon(Icons.add, key: ValueKey('add')),
                             ),
                           ),
@@ -2072,38 +2075,46 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: tokens.map((token) {
-        final color = _recentManaPipColor(token);
-        final isColoredSingle = const {'W', 'U', 'B', 'R', 'G'}.contains(token);
-        final label = isColoredSingle ? '' : token;
-        return Container(
-          width: 23,
-          height: 23,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3A2F24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: label.isEmpty
-              ? null
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF1A1714),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+      children: tokens
+          .map((token) {
+            final color = _recentManaPipColor(token);
+            final isColoredSingle = const {
+              'W',
+              'U',
+              'B',
+              'R',
+              'G',
+            }.contains(token);
+            final label = isColoredSingle ? '' : token;
+            return Container(
+              width: 23,
+              height: 23,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF3A2F24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
                   ),
-                ),
-        );
-      }).toList(growable: false),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: label.isEmpty
+                  ? null
+                  : Text(
+                      label,
+                      style: const TextStyle(
+                        color: Color(0xFF1A1714),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            );
+          })
+          .toList(growable: false),
     );
   }
 
@@ -2256,11 +2267,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Widget _buildCollectionsMenu() {
     final l10n = AppLocalizations.of(context)!;
     final items = <(_HomeCollectionsMenu, IconData, String)>[
-      (
-        _HomeCollectionsMenu.set,
-        Icons.auto_awesome_mosaic,
-        l10n.setLabel,
-      ),
+      (_HomeCollectionsMenu.set, Icons.auto_awesome_mosaic, l10n.setLabel),
       (
         _HomeCollectionsMenu.custom,
         Icons.collections_bookmark_outlined,
@@ -2800,9 +2807,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             FilledButton(
               onPressed: () {
                 final value = controller.text.trim();
-                Navigator.of(
-                  context,
-                ).pop(value.isEmpty ? defaultName : value);
+                Navigator.of(context).pop(value.isEmpty ? defaultName : value);
               },
               child: Text(l10n.create),
             ),
@@ -3086,20 +3091,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     final filter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(
-        builder: (_) => _CollectionFilterBuilderPage(
-          name: name,
-          submitLabel: l10n.create,
-        ),
+        builder: (_) =>
+            _CollectionFilterBuilderPage(name: name, submitLabel: l10n.create),
       ),
     );
     if (!context.mounted || filter == null) {
       return;
     }
     if (!_hasAtLeastOneSmartFilter(filter)) {
-      showAppSnackBar(
-        context,
-        l10n.smartCollectionNeedFilterToCreate,
-      );
+      showAppSnackBar(context, l10n.smartCollectionNeedFilterToCreate);
       return;
     }
 
@@ -3280,7 +3280,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    final defaultName = _nextProgressiveCollectionName(l10n.deckCollectionTitle);
+    final defaultName = _nextProgressiveCollectionName(
+      l10n.deckCollectionTitle,
+    );
     final controller = TextEditingController(text: defaultName);
     final allowDeckImport = _isMtgActiveGame;
     String? selectedFormat;
@@ -4241,7 +4243,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final activeLanguages = await AppSettings.loadCardLanguagesForGame(
       _activeSettingsGame,
     );
-    final effectiveScanLanguages = (seed.scannerLanguageCode != null &&
+    final effectiveScanLanguages =
+        (seed.scannerLanguageCode != null &&
             seed.scannerLanguageCode!.trim().isNotEmpty)
         ? <String>[seed.scannerLanguageCode!.trim().toLowerCase()]
         : activeLanguages;
@@ -4494,8 +4497,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           if (payloadSet != null && payloadSet.isNotEmpty) {
             selectedSetCode = payloadSet;
           }
-          final payloadLanguage =
-              (payload['selectedLanguageCode'] as String?)?.trim();
+          final payloadLanguage = (payload['selectedLanguageCode'] as String?)
+              ?.trim();
           if (payloadLanguage != null && payloadLanguage.isNotEmpty) {
             selectedLanguageCode = payloadLanguage;
           }
@@ -5498,11 +5501,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             children: [
               const Icon(Icons.tune, size: 18),
               const SizedBox(width: 8),
-              Text(
-                _isItalianUi()
-                    ? 'Modifica filtro'
-                    : 'Edit filter',
-              ),
+              Text(_isItalianUi() ? 'Modifica filtro' : 'Edit filter'),
             ],
           ),
         ),
@@ -5626,7 +5625,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _normalizedCollectionName(collection.name)) {
       return;
     }
-    if (_isCollectionNameTaken(resolvedName, excludeCollectionId: collection.id)) {
+    if (_isCollectionNameTaken(
+      resolvedName,
+      excludeCollectionId: collection.id,
+    )) {
       if (!mounted) {
         return;
       }
@@ -5675,10 +5677,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (!_hasAtLeastOneSmartFilter(updatedFilter)) {
-      showAppSnackBar(
-        context,
-        l10n.smartCollectionNeedAtLeastOneFilter,
-      );
+      showAppSnackBar(context, l10n.smartCollectionNeedAtLeastOneFilter);
       return;
     }
     await ScryfallDatabase.instance.updateCollectionFilter(
@@ -5706,8 +5705,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<String?> _pickSetCollectionLanguage(BuildContext context) async {
     final available = (await AppSettings.loadCardLanguagesForGame(
       _activeSettingsGame,
-    )).toSet()
-      ..add('en');
+    )).toSet()..add('en');
     if (available.length <= 1) {
       return 'en';
     }
@@ -5873,7 +5871,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final file = File(tempPath);
         final sink = file.openWrite();
 
-        final totalBytes = _bulkExpectedSizeBytes ?? response.contentLength ?? 0;
+        final totalBytes =
+            _bulkExpectedSizeBytes ?? response.contentLength ?? 0;
         if (mounted) {
           setState(() {
             _bulkDownloadTotal = totalBytes;
@@ -6218,12 +6217,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final allowed = AppSettings.languageCodes
         .map((item) => item.toLowerCase())
         .toSet();
-    final normalized = languages
-        .map((item) => item.trim().toLowerCase())
-        .where((item) => allowed.contains(item))
-        .toSet()
-        .toList()
-      ..sort();
+    final normalized =
+        languages
+            .map((item) => item.trim().toLowerCase())
+            .where((item) => allowed.contains(item))
+            .toSet()
+            .toList()
+          ..sort();
     if (normalized.isEmpty) {
       return 'lang:en';
     }
@@ -6239,10 +6239,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final pokemonLocked =
         !_isMtgActiveGame && !_isGameUnlocked(TcgGame.pokemon);
     final isBlockingSync = _bulkDownloading || _bulkImporting;
-    final pinnedAllCardsCard = _activeCollectionsMenu == _HomeCollectionsMenu.home
+    final pinnedAllCardsCard =
+        _activeCollectionsMenu == _HomeCollectionsMenu.home
         ? _buildPinnedAllCardsCard(context)
         : null;
-    final pinnedLatestAddsHeader = _activeCollectionsMenu == _HomeCollectionsMenu.home
+    final pinnedLatestAddsHeader =
+        _activeCollectionsMenu == _HomeCollectionsMenu.home
         ? _buildPinnedLatestAddsHeader(context)
         : null;
     final pinnedHomeWidgets = <Widget>[
@@ -6277,7 +6279,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         children: [
                           _HomeIconButton(
                             selected:
-                                _activeCollectionsMenu == _HomeCollectionsMenu.home,
+                                _activeCollectionsMenu ==
+                                _HomeCollectionsMenu.home,
                             onTap: () {
                               if (_activeCollectionsMenu ==
                                   _HomeCollectionsMenu.home) {
@@ -6536,7 +6539,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                   20,
                                   120,
                                 ),
-                                children: [..._buildCollectionSections(context)],
+                                children: [
+                                  ..._buildCollectionSections(context),
+                                ],
                               )),
                 ),
               ],
@@ -6587,9 +6592,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               );
                             },
                             icon: const Icon(Icons.workspace_premium_outlined),
-                            label: Text(
-                              l10n.openSettingsLabel,
-                            ),
+                            label: Text(l10n.openSettingsLabel),
                           ),
                         ],
                       ),
@@ -6737,10 +6740,7 @@ class _MenuPillButton extends StatelessWidget {
 }
 
 class _HomeIconButton extends StatelessWidget {
-  const _HomeIconButton({
-    required this.selected,
-    required this.onTap,
-  });
+  const _HomeIconButton({required this.selected, required this.onTap});
 
   final bool selected;
   final VoidCallback onTap;
@@ -6784,10 +6784,7 @@ class _HomeIconButton extends StatelessWidget {
 }
 
 class _PlanBadgeButton extends StatelessWidget {
-  const _PlanBadgeButton({
-    required this.isPro,
-    this.onTap,
-  });
+  const _PlanBadgeButton({required this.isPro, this.onTap});
 
   final bool isPro;
   final VoidCallback? onTap;
@@ -6811,17 +6808,13 @@ class _PlanBadgeButton extends StatelessWidget {
                 : const Color(0x221D1712),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isPro
-                  ? const Color(0xFFE9C46A)
-                  : const Color(0xFF5D4731),
+              color: isPro ? const Color(0xFFE9C46A) : const Color(0xFF5D4731),
             ),
           ),
           child: Text(
             isPro ? 'PRO' : 'FREE',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: isPro
-                  ? const Color(0xFFEFD28B)
-                  : const Color(0xFFBFAE95),
+              color: isPro ? const Color(0xFFEFD28B) : const Color(0xFFBFAE95),
               fontWeight: FontWeight.w900,
               fontSize: 13.5,
               letterSpacing: 0.7,
@@ -6907,7 +6900,9 @@ class _CollectionCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
-                border: enabled ? null : Border.all(color: const Color(0x665D4731)),
+                border: enabled
+                    ? null
+                    : Border.all(color: const Color(0x665D4731)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.35),
@@ -6931,9 +6926,8 @@ class _CollectionCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Text(
                           countLabel ?? l10n.cardCount(count),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFFBFAE95),
-                              ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: const Color(0xFFBFAE95)),
                         ),
                       ],
                     ),
@@ -6953,21 +6947,26 @@ class _CollectionCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: const Color(0xFF5A2020),
                               borderRadius: BorderRadius.circular(999),
-                              border: Border.all(color: const Color(0xFFE16464)),
+                              border: Border.all(
+                                color: const Color(0xFFE16464),
+                              ),
                             ),
                             child: Text(
                               disabledTag!,
-                              style:
-                                  Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        color: const Color(0xFFFFD2D2),
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 11.5,
-                                        letterSpacing: 0.8,
-                                      ),
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: const Color(0xFFFFD2D2),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 11.5,
+                                    letterSpacing: 0.8,
+                                  ),
                             ),
                           ),
                         const SizedBox(width: 8),
-                        const Icon(Icons.lock_outline, color: Color(0xFFBFAE95)),
+                        const Icon(
+                          Icons.lock_outline,
+                          color: Color(0xFFBFAE95),
+                        ),
                       ],
                     ),
                 ],
@@ -7152,9 +7151,7 @@ class _RecentAddedCardTile extends StatelessWidget {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    color: const Color(0xFFF3E8D0),
-                                  ),
+                                  ?.copyWith(color: const Color(0xFFF3E8D0)),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -7319,8 +7316,8 @@ class _HomeAddSheet extends StatelessWidget {
                       ),
                       onTap: canCreateSet
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addSetCollection)
+                              context,
+                            ).pop(_HomeAddAction.addSetCollection)
                           : null,
                     ),
                   ),
@@ -7336,8 +7333,8 @@ class _HomeAddSheet extends StatelessWidget {
                       subtitle: Text(l10n.customCollectionSubtitle),
                       onTap: canCreateCustom
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addCustomCollection)
+                              context,
+                            ).pop(_HomeAddAction.addCustomCollection)
                           : null,
                     ),
                   ),
@@ -7357,8 +7354,8 @@ class _HomeAddSheet extends StatelessWidget {
                       ),
                       onTap: canCreateSmart
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addSmartCollection)
+                              context,
+                            ).pop(_HomeAddAction.addSmartCollection)
                           : null,
                     ),
                   ),
@@ -7371,7 +7368,9 @@ class _HomeAddSheet extends StatelessWidget {
                           ? Text(l10n.deckCollectionSubtitle)
                           : Text(l10n.upgradeToPro),
                       onTap: canCreateDeck
-                          ? () => Navigator.of(context).pop(_HomeAddAction.addDeck)
+                          ? () => Navigator.of(
+                              context,
+                            ).pop(_HomeAddAction.addDeck)
                           : null,
                     ),
                   ),
@@ -7397,8 +7396,9 @@ class _HomeAddSheet extends StatelessWidget {
                               ],
                             ),
                       onTap: canCreateWishlist
-                          ? () =>
-                                Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                          ? () => Navigator.of(
+                              context,
+                            ).pop(_HomeAddAction.addWishlist)
                           : null,
                     ),
                   ),
@@ -7411,8 +7411,8 @@ class _HomeAddSheet extends StatelessWidget {
                       subtitle: Text(l10n.setCollectionSubtitle),
                       onTap: canCreateSet
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addSetCollection)
+                              context,
+                            ).pop(_HomeAddAction.addSetCollection)
                           : null,
                     ),
                   ),
@@ -7425,8 +7425,8 @@ class _HomeAddSheet extends StatelessWidget {
                       subtitle: Text(l10n.customCollectionSubtitle),
                       onTap: canCreateCustom
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addCustomCollection)
+                              context,
+                            ).pop(_HomeAddAction.addCustomCollection)
                           : null,
                     ),
                   ),
@@ -7435,7 +7435,11 @@ class _HomeAddSheet extends StatelessWidget {
                     opacity: canCreateSmart ? 1.0 : 0.55,
                     child: ListTile(
                       leading: const Icon(Icons.auto_fix_high_rounded),
-                      title: Text(_isItalianUi(context) ? 'Smart collection' : 'Smart collection'),
+                      title: Text(
+                        _isItalianUi(context)
+                            ? 'Smart collection'
+                            : 'Smart collection',
+                      ),
                       subtitle: Text(
                         _isItalianUi(context)
                             ? 'Salva un filtro dinamico e mostra solo le carte possedute.'
@@ -7443,8 +7447,8 @@ class _HomeAddSheet extends StatelessWidget {
                       ),
                       onTap: canCreateSmart
                           ? () => Navigator.of(
-                                context,
-                              ).pop(_HomeAddAction.addSmartCollection)
+                              context,
+                            ).pop(_HomeAddAction.addSmartCollection)
                           : null,
                     ),
                   ),
@@ -7456,7 +7460,9 @@ class _HomeAddSheet extends StatelessWidget {
                       title: Text(l10n.deckCollectionTitle),
                       subtitle: Text(l10n.deckCollectionSubtitle),
                       onTap: canCreateDeck
-                          ? () => Navigator.of(context).pop(_HomeAddAction.addDeck)
+                          ? () => Navigator.of(
+                              context,
+                            ).pop(_HomeAddAction.addDeck)
                           : null,
                     ),
                   ),
@@ -7483,8 +7489,9 @@ class _HomeAddSheet extends StatelessWidget {
                               ],
                             ),
                       onTap: canCreateWishlist
-                          ? () =>
-                                Navigator.of(context).pop(_HomeAddAction.addWishlist)
+                          ? () => Navigator.of(
+                              context,
+                            ).pop(_HomeAddAction.addWishlist)
                           : null,
                     ),
                   ),
@@ -7498,10 +7505,9 @@ class _HomeAddSheet extends StatelessWidget {
   }
 
   bool _isItalianUi(BuildContext context) {
-    return Localizations.localeOf(context)
-        .languageCode
-        .toLowerCase()
-        .startsWith('it');
+    return Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('it');
   }
 }
 
@@ -7528,13 +7534,17 @@ class _CollectionFilterBuilderPageState
 
   List<String> get _knownTypes => _isPokemonActive
       ? const [
-          'Pokemon',
-          'Trainer',
-          'Energy',
-          'Item',
-          'Supporter',
-          'Stadium',
-          'Tool',
+          'Grass',
+          'Fire',
+          'Water',
+          'Lightning',
+          'Psychic',
+          'Fighting',
+          'Darkness',
+          'Metal',
+          'Dragon',
+          'Fairy',
+          'Colorless',
         ]
       : const [
           'Artifact',
@@ -7556,15 +7566,49 @@ class _CollectionFilterBuilderPageState
       ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
       : const ['W', 'U', 'B', 'R', 'G', 'C'];
 
+  List<String> get _knownPokemonCategories => const [
+    'Pokemon',
+    'Trainer',
+    'Energy',
+  ];
+
+  List<String> get _knownPokemonStages => const [
+    'Basic',
+    'Stage1',
+    'Stage2',
+    'VMAX',
+    'VSTAR',
+  ];
+
+  List<String> get _knownPokemonRegulationMarks => const [
+    'A',
+    'B',
+    'C',
+    'D',
+    'E',
+    'F',
+    'G',
+    'H',
+  ];
+
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _collectorNumberController =
+      TextEditingController();
   final TextEditingController _artistController = TextEditingController();
   final TextEditingController _manaMinController = TextEditingController();
   final TextEditingController _manaMaxController = TextEditingController();
+  final TextEditingController _hpMinController = TextEditingController();
+  final TextEditingController _hpMaxController = TextEditingController();
+  final TextEditingController _pokemonSubtypeController =
+      TextEditingController();
 
   final Set<String> _selectedSets = {};
   final Set<String> _selectedRarities = {};
   final Set<String> _selectedColors = {};
   final Set<String> _selectedTypes = {};
+  final Set<String> _selectedPokemonCategories = {};
+  final Set<String> _selectedPokemonRegulationMarks = {};
+  final Set<String> _selectedPokemonStages = {};
 
   List<SetInfo> _availableSets = [];
   bool _loadingSets = true;
@@ -7585,12 +7629,19 @@ class _CollectionFilterBuilderPageState
     final initial = widget.initialFilter;
     if (initial != null) {
       _nameController.text = initial.name?.trim() ?? '';
+      _collectorNumberController.text = initial.collectorNumber?.trim() ?? '';
       _artistController.text = initial.artist?.trim() ?? '';
       if (initial.manaMin != null) {
         _manaMinController.text = initial.manaMin!.toString();
       }
       if (initial.manaMax != null) {
         _manaMaxController.text = initial.manaMax!.toString();
+      }
+      if (initial.hpMin != null) {
+        _hpMinController.text = initial.hpMin!.toString();
+      }
+      if (initial.hpMax != null) {
+        _hpMaxController.text = initial.hpMax!.toString();
       }
       _selectedSets.addAll(
         initial.sets.map((value) => value.trim().toLowerCase()),
@@ -7602,8 +7653,26 @@ class _CollectionFilterBuilderPageState
         initial.colors.map((value) => value.trim().toUpperCase()),
       );
       _selectedTypes.addAll(
-        initial.types.map((value) => value.trim()).where((value) => value.isNotEmpty),
+        initial.types
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
       );
+      _selectedPokemonCategories.addAll(
+        initial.pokemonCategories
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
+      );
+      _selectedPokemonRegulationMarks.addAll(
+        initial.pokemonRegulationMarks
+            .map((value) => value.trim().toUpperCase())
+            .where((value) => value.isNotEmpty),
+      );
+      _selectedPokemonStages.addAll(
+        initial.pokemonStages
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty),
+      );
+      _pokemonSubtypeController.text = initial.pokemonSubtypes.join(', ');
     }
     _loadSets();
     _schedulePreviewUpdate();
@@ -7614,9 +7683,13 @@ class _CollectionFilterBuilderPageState
     _previewDebounce?.cancel();
     _artistDebounce?.cancel();
     _nameController.dispose();
+    _collectorNumberController.dispose();
     _artistController.dispose();
     _manaMinController.dispose();
     _manaMaxController.dispose();
+    _hpMinController.dispose();
+    _hpMaxController.dispose();
+    _pokemonSubtypeController.dispose();
     super.dispose();
   }
 
@@ -7653,9 +7726,9 @@ class _CollectionFilterBuilderPageState
       setState(() {
         _loadingArtists = true;
       });
-      final results = await ScryfallDatabase.instance.fetchAvailableArtists(
-        query: query,
-      );
+      final results = _isPokemonActive
+          ? const <String>[]
+          : await ScryfallDatabase.instance.fetchAvailableArtists(query: query);
       if (!mounted) {
         return;
       }
@@ -7682,10 +7755,23 @@ class _CollectionFilterBuilderPageState
       artist: artist.isEmpty ? null : artist,
       manaMin: minValue,
       manaMax: maxValue,
+      hpMin: int.tryParse(_hpMinController.text.trim()),
+      hpMax: int.tryParse(_hpMaxController.text.trim()),
+      collectorNumber: _collectorNumberController.text.trim().isEmpty
+          ? null
+          : _collectorNumberController.text.trim(),
       sets: _selectedSets,
       rarities: _selectedRarities,
       colors: _selectedColors,
       types: _selectedTypes,
+      pokemonCategories: _selectedPokemonCategories,
+      pokemonSubtypes: _pokemonSubtypeController.text
+          .split(',')
+          .map((value) => value.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet(),
+      pokemonRegulationMarks: _selectedPokemonRegulationMarks,
+      pokemonStages: _selectedPokemonStages,
     );
   }
 
@@ -7694,10 +7780,17 @@ class _CollectionFilterBuilderPageState
         (filter.artist?.trim().isNotEmpty ?? false) ||
         filter.manaMin != null ||
         filter.manaMax != null ||
+        filter.hpMin != null ||
+        filter.hpMax != null ||
+        (filter.collectorNumber?.trim().isNotEmpty ?? false) ||
         filter.sets.isNotEmpty ||
         filter.rarities.isNotEmpty ||
         filter.colors.isNotEmpty ||
-        filter.types.isNotEmpty;
+        filter.types.isNotEmpty ||
+        filter.pokemonCategories.isNotEmpty ||
+        filter.pokemonSubtypes.isNotEmpty ||
+        filter.pokemonRegulationMarks.isNotEmpty ||
+        filter.pokemonStages.isNotEmpty;
   }
 
   Future<void> _refreshPreview() async {
@@ -7713,8 +7806,8 @@ class _CollectionFilterBuilderPageState
     setState(() {
       _previewLoading = true;
     });
-    final total = await ScryfallDatabase.instance.countCardsForFilter(filter);
-    final cards = await ScryfallDatabase.instance.fetchFilteredCardPreviews(
+    final total = await appRepositories.search.countCardsForFilter(filter);
+    final cards = await appRepositories.search.fetchCardsForAdvancedFilters(
       filter,
       limit: 30,
     );
@@ -7811,6 +7904,11 @@ class _CollectionFilterBuilderPageState
     final l10n = AppLocalizations.of(context)!;
     final filter = _buildFilter();
     final hasCriteria = _hasCriteria(filter);
+    final filterDefinitions = filterDefinitionsForGame(
+      _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg,
+    );
+    bool hasDefinition(String key) =>
+        filterDefinitions.any((definition) => definition.key == key);
     final filteredSets = _setQuery.isEmpty
         ? <SetInfo>[]
         : _availableSets
@@ -7880,6 +7978,22 @@ class _CollectionFilterBuilderPageState
             ),
             onChanged: (_) => _schedulePreviewUpdate(),
           ),
+          if (_isPokemonActive && hasDefinition('collector_number')) ...[
+            const SizedBox(height: 16),
+            Text(
+              l10n.detailCollector,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _collectorNumberController,
+              decoration: InputDecoration(
+                hintText: l10n.detailCollector,
+                prefixIcon: const Icon(Icons.tag),
+              ),
+              onChanged: (_) => _schedulePreviewUpdate(),
+            ),
+          ],
           const SizedBox(height: 16),
           Text(l10n.setLabel, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
@@ -7947,9 +8061,7 @@ class _CollectionFilterBuilderPageState
           ),
           const SizedBox(height: 16),
           Text(
-            _isPokemonActive
-                ? l10n.pokemonEnergyTypeLabel
-                : l10n.colorLabel,
+            _isPokemonActive ? l10n.pokemonEnergyTypeLabel : l10n.colorLabel,
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
@@ -7965,10 +8077,27 @@ class _CollectionFilterBuilderPageState
             (value) => _colorLabel(value),
           ),
           const SizedBox(height: 16),
+          if (_isPokemonActive && hasDefinition('pokemon.category')) ...[
+            Text(
+              l10n.pokemonCardCategoryLabel,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            buildChipRow<String>(
+              _knownPokemonCategories,
+              (value) => _selectedPokemonCategories.contains(value),
+              (value) {
+                if (!_selectedPokemonCategories.add(value)) {
+                  _selectedPokemonCategories.remove(value);
+                }
+                _schedulePreviewUpdate();
+              },
+              (value) => _typeLabel(value),
+            ),
+            const SizedBox(height: 16),
+          ],
           Text(
-            _isPokemonActive
-                ? l10n.pokemonCardCategoryLabel
-                : l10n.typeLabel,
+            _isPokemonActive ? 'Type' : l10n.typeLabel,
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
@@ -7983,6 +8112,19 @@ class _CollectionFilterBuilderPageState
             },
             (value) => _typeLabel(value),
           ),
+          if (_isPokemonActive && hasDefinition('pokemon.subtypes')) ...[
+            const SizedBox(height: 16),
+            Text('Subtype', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _pokemonSubtypeController,
+              decoration: const InputDecoration(
+                hintText: 'Basic, Item, Supporter...',
+                prefixIcon: Icon(Icons.category_outlined),
+              ),
+              onChanged: (_) => _schedulePreviewUpdate(),
+            ),
+          ],
           const SizedBox(height: 16),
           Text(
             _isPokemonActive
@@ -8014,6 +8156,32 @@ class _CollectionFilterBuilderPageState
               ),
             ],
           ),
+          if (_isPokemonActive && hasDefinition('hp')) ...[
+            const SizedBox(height: 16),
+            Text('HP', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _hpMinController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(hintText: l10n.minLabel),
+                    onChanged: (_) => _schedulePreviewUpdate(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _hpMaxController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(hintText: l10n.maxLabel),
+                    onChanged: (_) => _schedulePreviewUpdate(),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           Text(
             l10n.detailArtist,
@@ -8028,6 +8196,41 @@ class _CollectionFilterBuilderPageState
             ),
             onChanged: _onArtistChanged,
           ),
+          if (_isPokemonActive && hasDefinition('pokemon.regulation_mark')) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Regulation mark',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            buildChipRow<String>(
+              _knownPokemonRegulationMarks,
+              (value) => _selectedPokemonRegulationMarks.contains(value),
+              (value) {
+                if (!_selectedPokemonRegulationMarks.add(value)) {
+                  _selectedPokemonRegulationMarks.remove(value);
+                }
+                _schedulePreviewUpdate();
+              },
+              (value) => value,
+            ),
+          ],
+          if (_isPokemonActive && hasDefinition('pokemon.stage')) ...[
+            const SizedBox(height: 16),
+            Text('Stage', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            buildChipRow<String>(
+              _knownPokemonStages,
+              (value) => _selectedPokemonStages.contains(value),
+              (value) {
+                if (!_selectedPokemonStages.add(value)) {
+                  _selectedPokemonStages.remove(value);
+                }
+                _schedulePreviewUpdate();
+              },
+              (value) => value,
+            ),
+          ],
           if (_artistController.text.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
             if (_loadingArtists)
@@ -8068,9 +8271,7 @@ class _CollectionFilterBuilderPageState
               const Spacer(),
               FilledButton(
                 onPressed: () => Navigator.of(context).pop(_buildFilter()),
-                child: Text(
-                  widget.submitLabel ?? l10n.create,
-                ),
+                child: Text(widget.submitLabel ?? l10n.create),
               ),
             ],
           ),
@@ -8636,7 +8837,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
   }
 
   Future<List<String>> _loadScannerLanguageOptions() async {
-    final game = TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
+    final game =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;
     final configured = (await AppSettings.loadCardLanguagesForGame(game))
@@ -8692,10 +8894,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 ListTile(
                   leading: const Icon(Icons.public),
                   title: Text(
-                    Localizations.localeOf(context)
-                            .languageCode
-                            .toLowerCase()
-                            .startsWith('it')
+                    Localizations.localeOf(
+                          context,
+                        ).languageCode.toLowerCase().startsWith('it')
                         ? 'Qualsiasi lingua'
                         : 'Any language',
                   ),
@@ -8719,8 +8920,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
       return;
     }
     setState(() {
-      _selectedLanguageFilterCode =
-          selected.isEmpty ? null : selected.trim().toLowerCase();
+      _selectedLanguageFilterCode = selected.isEmpty
+          ? null
+          : selected.trim().toLowerCase();
     });
   }
 
@@ -8750,7 +8952,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
     final l10n = AppLocalizations.of(context)!;
     final showPokemonNote =
         TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
-    final localeCode = Localizations.localeOf(context).languageCode.toLowerCase();
+    final localeCode = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase();
     final pokemonTutorialNote = localeCode.startsWith('it')
         ? 'Nota Pokemon: l\'OCR puo avere difficolta a identificare la carta corretta, perche molti nomi non sono univoci. Lo scanner verra migliorato nelle prossime release.'
         : 'Pokemon note: OCR can struggle to identify the exact card because many card names are not unique. Scanner accuracy will improve in upcoming releases.';
@@ -8834,14 +9038,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
         var query = '';
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final filtered = entries.where((entry) {
-              if (query.isEmpty) {
-                return true;
-              }
-              final q = query.toLowerCase();
-              return entry.key.toLowerCase().contains(q) ||
-                  entry.value.toLowerCase().contains(q);
-            }).toList(growable: false);
+            final filtered = entries
+                .where((entry) {
+                  if (query.isEmpty) {
+                    return true;
+                  }
+                  final q = query.toLowerCase();
+                  return entry.key.toLowerCase().contains(q) ||
+                      entry.value.toLowerCase().contains(q);
+                })
+                .toList(growable: false);
             return Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
@@ -8901,7 +9107,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
       return;
     }
     setState(() {
-      _selectedSetFilterCode = selected.isEmpty ? null : selected.trim().toLowerCase();
+      _selectedSetFilterCode = selected.isEmpty
+          ? null
+          : selected.trim().toLowerCase();
     });
   }
 
@@ -9466,10 +9674,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
             IconButton(
               tooltip: MaterialLocalizations.of(context).backButtonTooltip,
               onPressed: () => Navigator.of(context).maybePop(),
-              icon: const Icon(
-                Icons.arrow_back,
-                color: Color(0xFFE9C46A),
-              ),
+              icon: const Icon(Icons.arrow_back, color: Color(0xFFE9C46A)),
             ),
             IconButton(
               tooltip: l10n.scannerTutorialTitle,
@@ -9593,12 +9798,11 @@ class _CardScannerPageState extends State<_CardScannerPage>
                         icon: const Icon(Icons.translate_rounded, size: 16),
                         label: Text(
                           _selectedLanguageFilterCode == null
-                              ? (Localizations.localeOf(context)
-                                      .languageCode
-                                      .toLowerCase()
-                                      .startsWith('it')
-                                  ? 'Lang: tutte'
-                                  : 'Lang: any')
+                              ? (Localizations.localeOf(context).languageCode
+                                        .toLowerCase()
+                                        .startsWith('it')
+                                    ? 'Lang: tutte'
+                                    : 'Lang: any')
                               : 'Lang: ${_selectedLanguageFilterCode!.toUpperCase()}',
                         ),
                         style: OutlinedButton.styleFrom(
@@ -9617,34 +9821,34 @@ class _CardScannerPageState extends State<_CardScannerPage>
                     ],
                     const SizedBox(width: 8),
                     FilledButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _foilSelected = !_foilSelected;
-                      });
-                    },
-                    icon: Icon(
-                      _foilSelected ? Icons.star : Icons.star_border_rounded,
-                      size: 16,
-                    ),
-                    label: Text(l10n.foilLabel),
-                    style: FilledButton.styleFrom(
-                      foregroundColor: const Color(0xFF1C1510),
-                      backgroundColor: _foilSelected
-                          ? const Color(0xFFE9C46A)
-                          : const Color(0xCC3A2412),
-                      side: BorderSide(
-                        color: _foilSelected
-                            ? const Color(0xFFF5DEA0)
-                            : const Color(0xFF5D4731),
+                      onPressed: () {
+                        setState(() {
+                          _foilSelected = !_foilSelected;
+                        });
+                      },
+                      icon: Icon(
+                        _foilSelected ? Icons.star : Icons.star_border_rounded,
+                        size: 16,
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                      label: Text(l10n.foilLabel),
+                      style: FilledButton.styleFrom(
+                        foregroundColor: const Color(0xFF1C1510),
+                        backgroundColor: _foilSelected
+                            ? const Color(0xFFE9C46A)
+                            : const Color(0xCC3A2412),
+                        side: BorderSide(
+                          color: _foilSelected
+                              ? const Color(0xFFF5DEA0)
+                              : const Color(0xFF5D4731),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999),
+                        ),
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
                     ),
                   ],
                 ),
@@ -9667,7 +9871,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
                           label: AppLocalizations.of(context)!.nameLabel,
                           value: _lockedName.isEmpty
                               ? (_namePreview.isEmpty
-                                    ? AppLocalizations.of(context)!.waitingStatus
+                                    ? AppLocalizations.of(
+                                        context,
+                                      )!.waitingStatus
                                     : _namePreview)
                               : _lockedName,
                           locked: _lockedName.isNotEmpty,
@@ -9678,7 +9884,8 @@ class _CardScannerPageState extends State<_CardScannerPage>
                         width: 44,
                         height: 44,
                         child: FilledButton(
-                          onPressed: (_namePreview.trim().isEmpty &&
+                          onPressed:
+                              (_namePreview.trim().isEmpty &&
                                   _lockedName.trim().isEmpty)
                               ? null
                               : _confirmRecognizedName,

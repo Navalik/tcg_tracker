@@ -27,8 +27,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'l10n/app_localizations.dart';
 
 import 'db/app_database.dart';
+import 'domain/domain_models.dart';
 import 'models.dart';
 import 'repositories/app_repositories.dart';
+import 'repositories/filter_definitions.dart';
 import 'services/app_settings.dart';
 import 'services/analytics_service.dart';
 import 'services/local_backup_service.dart';
@@ -170,20 +172,17 @@ Future<void> main() async {
       _firebaseReady = false;
     }
   }
-  runZonedGuarded(
-    () => runApp(const TCGTracker()),
-    (error, stackTrace) {
-      final reason = 'run_zoned_guarded';
-      unawaited(
-        _recordAppError(
-          error,
-          stackTrace,
-          fatal: !_isNonFatalUiResourceError(error, reason: reason),
-          reason: reason,
-        ),
-      );
-    },
-  );
+  runZonedGuarded(() => runApp(const TCGTracker()), (error, stackTrace) {
+    final reason = 'run_zoned_guarded';
+    unawaited(
+      _recordAppError(
+        error,
+        stackTrace,
+        fatal: !_isNonFatalUiResourceError(error, reason: reason),
+        reason: reason,
+      ),
+    );
+  });
 }
 
 Future<void> _configureCrashReporting() async {
@@ -261,7 +260,9 @@ Future<bool> _submitManualIssueReport(
       'user_issue_report source=$source category=$normalizedCategory message=$normalized',
     );
     if (safeDiagnostics.isNotEmpty) {
-      FirebaseCrashlytics.instance.log('user_issue_diagnostics $safeDiagnostics');
+      FirebaseCrashlytics.instance.log(
+        'user_issue_diagnostics $safeDiagnostics',
+      );
     }
     await FirebaseCrashlytics.instance.recordError(
       StateError('User issue report'),
@@ -470,7 +471,9 @@ class _StartupSplashGateState extends State<_StartupSplashGate>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
-              title: Text(selected == 'it' ? 'Scegli lingua' : 'Choose language'),
+              title: Text(
+                selected == 'it' ? 'Scegli lingua' : 'Choose language',
+              ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -554,9 +557,7 @@ class _UniversalSplashScreen extends StatelessWidget {
                 Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const _SplashCardMark(),
-                    ],
+                    children: [const _SplashCardMark()],
                   ),
                 ),
                 if (versionLabel.trim().isNotEmpty)
@@ -581,7 +582,6 @@ class _UniversalSplashScreen extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _SplashCardMark extends StatelessWidget {

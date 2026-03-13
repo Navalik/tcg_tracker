@@ -55,14 +55,8 @@ class GameRegistry {
             supportsSideboard: true,
             supportsPricing: true,
             supportsScanner: true,
-            supportedUiLanguages: {
-              TcgCardLanguage.en,
-              TcgCardLanguage.it,
-            },
-            supportedCardLanguages: {
-              TcgCardLanguage.en,
-              TcgCardLanguage.it,
-            },
+            supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
+            supportedCardLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
             filterKeys: {
               'query',
               'artist',
@@ -101,19 +95,14 @@ class GameRegistry {
             supportsCatalogInstall: true,
             supportsCatalogReimport: true,
             supportsUpdateCheck: true,
-            supportsLocalizedSearch: false,
+            supportsLocalizedSearch: true,
             supportsAdvancedFilters: true,
             supportsDecks: true,
             supportsSideboard: false,
             supportsPricing: false,
             supportsScanner: true,
-            supportedUiLanguages: {
-              TcgCardLanguage.en,
-              TcgCardLanguage.it,
-            },
-            supportedCardLanguages: {
-              TcgCardLanguage.en,
-            },
+            supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
+            supportedCardLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
             filterKeys: {
               'query',
               'sets',
@@ -123,6 +112,11 @@ class GameRegistry {
               'languages',
               'pokemon.category',
               'pokemon.subtypes',
+              'pokemon.regulation_mark',
+              'pokemon.stage',
+              'hp',
+              'artist',
+              'colors',
             },
             metadataKeys: {
               'category',
@@ -170,10 +164,7 @@ class GameRegistry {
     supportsSideboard: false,
     supportsPricing: false,
     supportsScanner: false,
-    supportedUiLanguages: {
-      TcgCardLanguage.en,
-      TcgCardLanguage.it,
-    },
+    supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
     supportedCardLanguages: {TcgCardLanguage.en},
     filterKeys: {},
     metadataKeys: {},
@@ -225,7 +216,8 @@ class GameRegistry {
       definitionForId(gameId)?.appSettingsGame ?? AppTcgGame.mtg;
 
   String displayNameForRuntimeGame(TcgGame game) =>
-      definitionForRuntimeGame(game)?.displayName ?? defaultDefinition().displayName;
+      definitionForRuntimeGame(game)?.displayName ??
+      defaultDefinition().displayName;
 
   bool requiresPurchaseForRuntimeGame(TcgGame game) =>
       definitionForRuntimeGame(game)?.requiresPurchase ??
