@@ -37,6 +37,7 @@ import 'services/local_backup_service.dart';
 import 'services/price_repository.dart';
 import 'services/inventory_service.dart';
 import 'services/pokemon_bulk_service.dart';
+import 'services/pokemon_scanner_resolver.dart';
 import 'services/purchase_manager.dart';
 import 'services/scryfall_api_client.dart';
 import 'services/tcg_environment.dart';

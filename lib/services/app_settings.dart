@@ -24,6 +24,7 @@ class AppSettings {
       'free_scan_last_seen_epoch_ms';
   static const _prefsKeyFreeScanClockTampered = 'free_scan_clock_tampered';
   static const _prefsKeyHideScannerTutorial = 'hide_scanner_tutorial';
+  static const _prefsKeyScannerLanguagePrefix = 'scanner_language';
   static const _prefsKeyLastSeenReleaseNotesId = 'last_seen_release_notes_id';
   static const _prefsKeySelectedTcg = 'selected_tcg';
   static const _prefsKeyPrimaryTcg = 'primary_tcg';
@@ -35,7 +36,8 @@ class AppSettings {
       'card_language_onboarding_done';
   static const _prefsKeyCollectionCoherenceCheckVersionPrefix =
       'collection_coherence_check_version';
-  static const _prefsKeyPrimaryGamePromptVersion = 'primary_game_prompt_version';
+  static const _prefsKeyPrimaryGamePromptVersion =
+      'primary_game_prompt_version';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
       'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
   static String _prefsKeyCollectionCoherenceCheckVersionForGame(
@@ -44,11 +46,10 @@ class AppSettings {
       '${_prefsKeyCollectionCoherenceCheckVersionPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
   static String _prefsKeyCardLanguagesForGame(AppTcgGame game) =>
       '${_prefsKeyCardLanguagesPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+  static String _prefsKeyScannerLanguageForGame(AppTcgGame game) =>
+      '${_prefsKeyScannerLanguagePrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
 
-  static const List<String> languageCodes = [
-    'en',
-    'it',
-  ];
+  static const List<String> languageCodes = ['en', 'it'];
 
   static const List<String> defaultLanguages = ['en'];
   static const List<String> supportedAppLocales = ['en', 'it'];
@@ -97,6 +98,32 @@ class AppSettings {
     final prefs = await SharedPreferences.getInstance();
     final normalized = _normalizeCardLanguages(languages);
     await prefs.setStringList(_prefsKeyCardLanguagesForGame(game), normalized);
+  }
+
+  static Future<String?> loadScannerLanguageForGame(AppTcgGame game) async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs
+        .getString(_prefsKeyScannerLanguageForGame(game))
+        ?.trim()
+        .toLowerCase();
+    if (stored == null || stored.isEmpty) {
+      return null;
+    }
+    return languageCodes.contains(stored) ? stored : null;
+  }
+
+  static Future<void> saveScannerLanguageForGame(
+    AppTcgGame game,
+    String? languageCode,
+  ) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = languageCode?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) {
+      await prefs.remove(_prefsKeyScannerLanguageForGame(game));
+      return;
+    }
+    final safeValue = languageCodes.contains(normalized) ? normalized : 'en';
+    await prefs.setString(_prefsKeyScannerLanguageForGame(game), safeValue);
   }
 
   static Future<Set<String>> loadSearchLanguages() async {
@@ -236,9 +263,7 @@ class AppSettings {
   static Future<void> saveVisualTheme(String themeCode) async {
     final prefs = await SharedPreferences.getInstance();
     final value = themeCode.trim().toLowerCase();
-    final normalized = (value == 'magic' || value == 'vault')
-        ? value
-        : 'magic';
+    final normalized = (value == 'magic' || value == 'vault') ? value : 'magic';
     await prefs.setString(_prefsKeyVisualTheme, normalized);
   }
 

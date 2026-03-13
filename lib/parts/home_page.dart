@@ -4240,6 +4240,67 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (cardName == null || cardName.isEmpty) {
       return _ResolvedScanSelection(seed: seed);
     }
+    if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+      final resolution = await PokemonScannerResolver.resolve(
+        seed: ScannerOcrSeed(
+          query: seed.query,
+          cardName: seed.cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        ),
+        searchRepository: appRepositories.search,
+      );
+      debugPrint(
+        'Pokemon scan resolve: '
+        'candidates=${resolution.metrics.candidateCount} '
+        'name=${resolution.metrics.exactNameMatches} '
+        'set=${resolution.metrics.exactSetMatches} '
+        'collector=${resolution.metrics.exactCollectorMatches} '
+        'fallbacks=${resolution.metrics.fallbackSteps.join(" > ")}',
+      );
+      if (!mounted || resolution.candidates.isEmpty) {
+        return _ResolvedScanSelection(seed: seed);
+      }
+      final picked = await _pickCardPrintingForName(
+        context,
+        cardName,
+        languages: seed.scannerLanguageCode == null
+            ? const <String>['en']
+            : <String>[seed.scannerLanguageCode!.trim().toLowerCase(), 'en'],
+        preferredSetCode: seed.setCode,
+        preferredCollectorNumber: seed.collectorNumber,
+        candidatesOverride: resolution.candidates,
+      );
+      if (picked == null) {
+        return _ResolvedScanSelection(
+          seed: _OcrSearchSeed(
+            query: cardName,
+            cardName: cardName,
+            setCode: seed.setCode,
+            collectorNumber: seed.collectorNumber,
+            scannerLanguageCode: seed.scannerLanguageCode,
+            isFoil: seed.isFoil,
+          ),
+        );
+      }
+      return _ResolvedScanSelection(
+        seed: _OcrSearchSeed(
+          query: picked.name,
+          cardName: picked.name,
+          setCode: picked.setCode.trim().isEmpty
+              ? null
+              : picked.setCode.trim().toLowerCase(),
+          collectorNumber: picked.collectorNumber.trim().isEmpty
+              ? null
+              : picked.collectorNumber.trim().toLowerCase(),
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        ),
+        pickedCard: picked,
+      );
+    }
     final activeLanguages = await AppSettings.loadCardLanguagesForGame(
       _activeSettingsGame,
     );
@@ -4470,6 +4531,23 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String rawText, {
     required Set<String> knownSetCodes,
   }) {
+    if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+      final parsed = PokemonScannerResolver.parseSeed(
+        rawText,
+        knownSetCodes: knownSetCodes,
+      );
+      if (parsed == null) {
+        return null;
+      }
+      return _OcrSearchSeed(
+        query: parsed.query,
+        cardName: parsed.cardName,
+        setCode: parsed.setCode,
+        collectorNumber: parsed.collectorNumber,
+        scannerLanguageCode: parsed.scannerLanguageCode,
+        isFoil: parsed.isFoil,
+      );
+    }
     var text = rawText.trim();
     String? forcedName;
     String? forcedSet;
@@ -4633,6 +4711,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<_OcrSearchSeed> _refineOcrSeed(_OcrSearchSeed seed) async {
+    if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
+      return seed;
+    }
     final query = seed.query.trim();
     final setCode = seed.setCode?.trim().toLowerCase();
     final fallbackName = seed.cardName?.trim();
@@ -8344,17 +8425,20 @@ Future<CardSearchResult?> _pickCardPrintingForName(
   String? preferredSetCode,
   String? preferredCollectorNumber,
   Set<String> localPrintingKeys = const {},
+  List<CardSearchResult>? candidatesOverride,
 }) async {
   final normalizedTarget = _normalizeCardNameForMatch(cardName);
   if (normalizedTarget.isEmpty) {
     return null;
   }
-  var results = await appRepositories.search.fetchCardsForAdvancedFilters(
-    CollectionFilter(name: cardName),
-    languages: languages,
-    limit: 250,
-  );
-  if (results.isEmpty) {
+  var results =
+      candidatesOverride ??
+      await appRepositories.search.fetchCardsForAdvancedFilters(
+        CollectionFilter(name: cardName),
+        languages: languages,
+        limit: 250,
+      );
+  if (results.isEmpty && candidatesOverride == null) {
     results = await appRepositories.search.searchCardsByName(
       cardName,
       limit: 120,
@@ -8852,6 +8936,11 @@ class _CardScannerPageState extends State<_CardScannerPage>
 
   Future<void> _loadScannerLanguageConfig() async {
     final options = await _loadScannerLanguageOptions();
+    final game =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    final saved = await AppSettings.loadScannerLanguageForGame(game);
     if (!mounted) {
       return;
     }
@@ -8861,9 +8950,13 @@ class _CardScannerPageState extends State<_CardScannerPage>
         _selectedLanguageFilterCode = 'en';
         return;
       }
-      final selected = _selectedLanguageFilterCode?.trim().toLowerCase();
+      final selected = (saved ?? _selectedLanguageFilterCode)
+          ?.trim()
+          .toLowerCase();
       if (selected == null || selected.isEmpty || !options.contains(selected)) {
         _selectedLanguageFilterCode = null;
+      } else {
+        _selectedLanguageFilterCode = selected;
       }
     });
   }
@@ -8919,10 +9012,19 @@ class _CardScannerPageState extends State<_CardScannerPage>
     if (!mounted || selected == null) {
       return;
     }
+    final nextSelected = selected.isEmpty
+        ? null
+        : selected.trim().toLowerCase();
+    final game =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
+    await AppSettings.saveScannerLanguageForGame(game, nextSelected);
+    if (!mounted) {
+      return;
+    }
     setState(() {
-      _selectedLanguageFilterCode = selected.isEmpty
-          ? null
-          : selected.trim().toLowerCase();
+      _selectedLanguageFilterCode = nextSelected;
     });
   }
 

@@ -2749,6 +2749,62 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (cardName == null || cardName.isEmpty) {
       return seed;
     }
+    if (_isPokemonActive) {
+      final resolution = await PokemonScannerResolver.resolve(
+        seed: ScannerOcrSeed(
+          query: seed.query,
+          cardName: seed.cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        ),
+        searchRepository: appRepositories.search,
+      );
+      debugPrint(
+        'Pokemon scan resolve (collection): '
+        'candidates=${resolution.metrics.candidateCount} '
+        'name=${resolution.metrics.exactNameMatches} '
+        'set=${resolution.metrics.exactSetMatches} '
+        'collector=${resolution.metrics.exactCollectorMatches} '
+        'fallbacks=${resolution.metrics.fallbackSteps.join(" > ")}',
+      );
+      if (!mounted || !context.mounted || resolution.candidates.isEmpty) {
+        return seed;
+      }
+      final picked = await _pickCardPrintingForName(
+        context,
+        cardName,
+        languages: seed.scannerLanguageCode == null
+            ? const <String>['en']
+            : <String>[seed.scannerLanguageCode!.trim().toLowerCase(), 'en'],
+        preferredSetCode: seed.setCode,
+        preferredCollectorNumber: seed.collectorNumber,
+        candidatesOverride: resolution.candidates,
+      );
+      if (picked == null) {
+        return _OcrSearchSeed(
+          query: cardName,
+          cardName: cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        );
+      }
+      return _OcrSearchSeed(
+        query: picked.name,
+        cardName: picked.name,
+        setCode: picked.setCode.trim().isEmpty
+            ? null
+            : picked.setCode.trim().toLowerCase(),
+        collectorNumber: picked.collectorNumber.trim().isEmpty
+            ? null
+            : picked.collectorNumber.trim().toLowerCase(),
+        scannerLanguageCode: seed.scannerLanguageCode,
+        isFoil: seed.isFoil,
+      );
+    }
     final activeGame =
         TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
         ? AppTcgGame.pokemon
@@ -2804,6 +2860,23 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     String rawText, {
     required Set<String> knownSetCodes,
   }) {
+    if (_isPokemonActive) {
+      final parsed = PokemonScannerResolver.parseSeed(
+        rawText,
+        knownSetCodes: knownSetCodes,
+      );
+      if (parsed == null) {
+        return null;
+      }
+      return _OcrSearchSeed(
+        query: parsed.query,
+        cardName: parsed.cardName,
+        setCode: parsed.setCode,
+        collectorNumber: parsed.collectorNumber,
+        scannerLanguageCode: parsed.scannerLanguageCode,
+        isFoil: parsed.isFoil,
+      );
+    }
     final text = rawText.trim();
     if (text.isEmpty) {
       return null;
@@ -2897,6 +2970,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<_OcrSearchSeed> _refineOcrSeedForScan(_OcrSearchSeed seed) async {
+    if (_isPokemonActive) {
+      return seed;
+    }
     final query = seed.query.trim();
     final setCode = seed.setCode?.trim().toLowerCase();
     final fallbackName = seed.cardName?.trim();
