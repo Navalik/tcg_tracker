@@ -546,13 +546,18 @@ class CanonicalCatalogStore {
   CanonicalCatalogStore._(this._database, {required this.databasePath});
 
   static const String defaultFileName = 'catalog_canonical.db';
+  static String? debugDefaultPathOverride;
 
   final Database _database;
   final String databasePath;
 
   static Future<CanonicalCatalogStore> openDefault() async {
-    final directory = await getApplicationDocumentsDirectory();
-    final path = p.join(directory.path, defaultFileName);
+    final path = debugDefaultPathOverride == null
+        ? p.join(
+            (await getApplicationDocumentsDirectory()).path,
+            defaultFileName,
+          )
+        : debugDefaultPathOverride!;
     return openAtPath(path);
   }
 
@@ -578,27 +583,44 @@ class CanonicalCatalogStore {
     _database.dispose();
   }
 
-  void replacePokemonCatalog(CanonicalCatalogImportBatch batch) {
+  void replaceCatalogForGame(
+    TcgGameId gameId,
+    CanonicalCatalogImportBatch batch,
+  ) {
     _database.execute('BEGIN IMMEDIATE');
     try {
       _database.execute(
-        "DELETE FROM price_snapshots WHERE printing_id LIKE 'pokemon:%'",
+        'DELETE FROM price_snapshots WHERE printing_id LIKE ?',
+        <Object?>['${gameId.value}:%'],
       );
       _database.execute(
-        "DELETE FROM provider_mappings WHERE game_id = 'pokemon'",
+        'DELETE FROM provider_mappings WHERE game_id = ?',
+        <Object?>[gameId.value],
+      );
+      if (gameId == TcgGameId.pokemon) {
+        _database.execute(
+          "DELETE FROM pokemon_printing_metadata WHERE printing_id LIKE 'pokemon:%'",
+        );
+      }
+      _database.execute(
+        'DELETE FROM catalog_card_localizations WHERE card_id LIKE ?',
+        <Object?>['${gameId.value}:%'],
       );
       _database.execute(
-        "DELETE FROM pokemon_printing_metadata WHERE printing_id LIKE 'pokemon:%'",
+        'DELETE FROM catalog_set_localizations WHERE set_id LIKE ?',
+        <Object?>['${gameId.value}:%'],
       );
       _database.execute(
-        "DELETE FROM catalog_card_localizations WHERE card_id LIKE 'pokemon:%'",
+        'DELETE FROM card_printings WHERE game_id = ?',
+        <Object?>[gameId.value],
       );
       _database.execute(
-        "DELETE FROM catalog_set_localizations WHERE set_id LIKE 'pokemon:%'",
+        'DELETE FROM catalog_cards WHERE game_id = ?',
+        <Object?>[gameId.value],
       );
-      _database.execute("DELETE FROM card_printings WHERE game_id = 'pokemon'");
-      _database.execute("DELETE FROM catalog_cards WHERE game_id = 'pokemon'");
-      _database.execute("DELETE FROM catalog_sets WHERE game_id = 'pokemon'");
+      _database.execute('DELETE FROM catalog_sets WHERE game_id = ?', <Object?>[
+        gameId.value,
+      ]);
 
       final nowMs = DateTime.now().toUtc().millisecondsSinceEpoch;
       final insertSet = _database.prepare('''
@@ -645,11 +667,13 @@ class CanonicalCatalogStore {
           id, game_id, card_id, set_id, collector_number, rarity, release_date, image_uris_json, finish_keys_json, metadata_json, created_at_ms, updated_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''');
-      final insertPokemonMetadata = _database.prepare('''
-        INSERT INTO pokemon_printing_metadata (
-          printing_id, category, hp, stage, evolves_from, regulation_mark, retreat_cost, illustrator, types_json, subtypes_json, weaknesses_json, resistances_json, attacks_json, abilities_json, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''');
+      final insertPokemonMetadata = gameId == TcgGameId.pokemon
+          ? _database.prepare('''
+              INSERT INTO pokemon_printing_metadata (
+                printing_id, category, hp, stage, evolves_from, regulation_mark, retreat_cost, illustrator, types_json, subtypes_json, weaknesses_json, resistances_json, attacks_json, abilities_json, updated_at_ms
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ''')
+          : null;
       for (final printing in batch.printings) {
         insertPrinting.execute([
           printing.printingId,
@@ -668,7 +692,7 @@ class CanonicalCatalogStore {
         final pokemon = batch.cards
             .firstWhere((card) => card.cardId == printing.cardId)
             .pokemon;
-        if (pokemon != null) {
+        if (pokemon != null && insertPokemonMetadata != null) {
           insertPokemonMetadata.execute([
             printing.printingId,
             pokemon.category,
@@ -729,7 +753,7 @@ class CanonicalCatalogStore {
         }
       }
       insertPrinting.dispose();
-      insertPokemonMetadata.dispose();
+      insertPokemonMetadata?.dispose();
 
       final insertCardLocalization = _database.prepare('''
         INSERT INTO catalog_card_localizations (
@@ -773,7 +797,7 @@ class CanonicalCatalogStore {
         ''');
       for (final record in batch.providerMappings) {
         insertProviderMapping.execute([
-          TcgGameId.pokemon.value,
+          gameId.value,
           record.mapping.providerId.value,
           record.mapping.objectType,
           record.mapping.providerObjectId,
@@ -814,12 +838,17 @@ class CanonicalCatalogStore {
     }
   }
 
+  void replacePokemonCatalog(CanonicalCatalogImportBatch batch) {
+    replaceCatalogForGame(TcgGameId.pokemon, batch);
+  }
+
   int countTableRows(String tableName) {
     final result = _database.select('SELECT COUNT(*) AS c FROM $tableName');
     return (result.first['c'] as int?) ?? 0;
   }
 
-  List<SetInfo> fetchPokemonSets({
+  List<SetInfo> fetchSetsForGame({
+    required TcgGameId gameId,
     List<String> preferredLanguages = const <String>['en'],
     int limit = 500,
   }) {
@@ -839,12 +868,7 @@ class CanonicalCatalogStore {
       ORDER BY LOWER(COALESCE($preferredSetNameSql, cs.canonical_name)), LOWER(cs.code)
       LIMIT ?
       ''',
-      <Object?>[
-        ...setNameParams,
-        TcgGameId.pokemon.value,
-        ...setNameParams,
-        limit,
-      ],
+      <Object?>[...setNameParams, gameId.value, ...setNameParams, limit],
     );
     return rows
         .map(
@@ -857,7 +881,8 @@ class CanonicalCatalogStore {
         .toList(growable: false);
   }
 
-  Map<String, String> fetchPokemonSetNamesForCodes(
+  Map<String, String> fetchSetNamesForCodesForGame(
+    TcgGameId gameId,
     List<String> setCodes, {
     List<String> preferredLanguages = const <String>['en'],
   }) {
@@ -884,13 +909,172 @@ class CanonicalCatalogStore {
       WHERE cs.game_id = ?
         AND LOWER(cs.code) IN (${_inClause(normalizedCodes.length)})
       ''',
-      <Object?>[...setNameParams, TcgGameId.pokemon.value, ...normalizedCodes],
+      <Object?>[...setNameParams, gameId.value, ...normalizedCodes],
     );
     return <String, String>{
       for (final row in rows)
         ((row['code'] as String? ?? '').trim().toLowerCase()):
             ((row['name'] as String? ?? '').trim()),
     };
+  }
+
+  List<SetInfo> fetchPokemonSets({
+    List<String> preferredLanguages = const <String>['en'],
+    int limit = 500,
+  }) => fetchSetsForGame(
+    gameId: TcgGameId.pokemon,
+    preferredLanguages: preferredLanguages,
+    limit: limit,
+  );
+
+  Map<String, String> fetchPokemonSetNamesForCodes(
+    List<String> setCodes, {
+    List<String> preferredLanguages = const <String>['en'],
+  }) => fetchSetNamesForCodesForGame(
+    TcgGameId.pokemon,
+    setCodes,
+    preferredLanguages: preferredLanguages,
+  );
+
+  List<CardSearchResult> searchCardsForGame({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    String? searchQuery,
+    List<String> preferredLanguages = const <String>['en'],
+    int limit = 200,
+    int? offset,
+  }) {
+    if (gameId == TcgGameId.pokemon) {
+      return searchPokemonCards(
+        filter: filter,
+        searchQuery: searchQuery,
+        preferredLanguages: preferredLanguages,
+        limit: limit,
+        offset: offset,
+      );
+    }
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendGenericFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+
+    final cardNameParams = <Object?>[];
+    final preferredCardNameSql = _localizedCardNameSql(
+      normalizedLanguages,
+      cardNameParams,
+    );
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final subtypeParams = <Object?>[];
+    final preferredSubtypeSql = _localizedCardSubtypeSql(
+      normalizedLanguages,
+      subtypeParams,
+    );
+    final rows = _database.select(
+      '''
+      SELECT
+        COALESCE(legacy.provider_object_id, cp.id) AS legacy_id,
+        COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
+        cs.code AS set_code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
+        cp.collector_number AS collector_number,
+        cp.rarity AS rarity,
+        COALESCE(
+          $preferredSubtypeSql,
+          json_extract(cp.metadata_json, '\$.type_line'),
+          json_extract(cc.metadata_json, '\$.type_line'),
+          ''
+        ) AS type_line,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.colors_json'),
+          json_extract(cc.metadata_json, '\$.colors_json'),
+          '[]'
+        ) AS colors_json,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.color_identity_json'),
+          json_extract(cc.metadata_json, '\$.color_identity_json'),
+          '[]'
+        ) AS color_identity_json,
+        COALESCE(
+          json_extract(cs.metadata_json, '\$.official_total'),
+          json_extract(cs.metadata_json, '\$.total')
+        ) AS set_total,
+        COALESCE(
+          json_extract(cp.image_uris_json, '\$.high_res'),
+          json_extract(cp.image_uris_json, '\$.normal'),
+          json_extract(cp.image_uris_json, '\$.default')
+        ) AS image_uri
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN provider_mappings legacy
+        ON legacy.printing_id = cp.id
+       AND legacy.object_type = 'legacy_printing'
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
+      LIMIT ? OFFSET ?
+      ''',
+      <Object?>[
+        ...cardNameParams,
+        ...setNameParams,
+        ...subtypeParams,
+        gameId.value,
+        ...params,
+        limit,
+        offset ?? 0,
+      ],
+    );
+    return rows
+        .map(_genericSearchRowToResult)
+        .where((entry) => entry.id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  int countCardsForGame({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    String? searchQuery,
+    List<String> preferredLanguages = const <String>['en'],
+  }) {
+    if (gameId == TcgGameId.pokemon) {
+      return countPokemonCards(
+        filter: filter,
+        searchQuery: searchQuery,
+        preferredLanguages: preferredLanguages,
+      );
+    }
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendGenericFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    final rows = _database.select(
+      '''
+      SELECT COUNT(*) AS c
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ''',
+      <Object?>[gameId.value, ...params],
+    );
+    return (rows.first['c'] as int?) ?? 0;
   }
 
   List<String> fetchPokemonDistinctSubtypes({int limit = 80}) {
@@ -1317,6 +1501,81 @@ class CanonicalCatalogStore {
     }
   }
 
+  void _appendGenericFilterQuery({
+    required CollectionFilter filter,
+    required String? searchQuery,
+    required List<String> preferredLanguages,
+    required List<String> whereClauses,
+    required List<Object?> params,
+  }) {
+    final combinedQuery = <String>[
+      if ((searchQuery ?? '').trim().isNotEmpty) searchQuery!.trim(),
+      if ((filter.name ?? '').trim().isNotEmpty) filter.name!.trim(),
+    ].join(' ').trim();
+
+    for (final token in _tokenizeSearch(combinedQuery)) {
+      final localizedExistsSql = _localizedCardNameExistsSql(
+        preferredLanguages.length,
+      );
+      whereClauses.add('''
+        (
+          LOWER(cc.canonical_name) LIKE ?
+          OR $localizedExistsSql
+          OR LOWER(cp.collector_number) LIKE ?
+          OR LOWER(COALESCE(json_extract(cp.metadata_json, '\$.type_line'), json_extract(cc.metadata_json, '\$.type_line'), '')) LIKE ?
+        )
+        ''');
+      params.add('%$token%');
+      params.addAll(preferredLanguages);
+      params.add('%$token%');
+      params.add('%$token%');
+      params.add('%$token%');
+    }
+
+    final collectorNumber = filter.collectorNumber?.trim().toLowerCase();
+    if (collectorNumber != null && collectorNumber.isNotEmpty) {
+      whereClauses.add('LOWER(cp.collector_number) LIKE ?');
+      params.add('%$collectorNumber%');
+    }
+
+    final artist = filter.artist?.trim().toLowerCase();
+    if (artist != null && artist.isNotEmpty) {
+      whereClauses.add(
+        r"LOWER(COALESCE(json_extract(cp.metadata_json, '$.artist'), json_extract(cc.metadata_json, '$.artist'), '')) LIKE ?",
+      );
+      params.add('%$artist%');
+    }
+
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(cs.code)',
+      values: filter.sets.map((value) => value.trim().toLowerCase()),
+    );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression: 'LOWER(COALESCE(cp.rarity, \'\'))',
+      values: filter.rarities.map((value) => value.trim().toLowerCase()),
+    );
+
+    final normalizedTypes = filter.types
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedTypes.isNotEmpty) {
+      final clauses = <String>[];
+      for (final value in normalizedTypes) {
+        clauses.add(
+          r"LOWER(COALESCE(json_extract(cp.metadata_json, '$.type_line'), json_extract(cc.metadata_json, '$.type_line'), '')) LIKE ?",
+        );
+        params.add('%$value%');
+      }
+      whereClauses.add('(${clauses.join(' OR ')})');
+    }
+  }
+
   String _localizedCardNameSql(List<String> languages, List<Object?> params) {
     final inClause = _inClause(languages.length);
     final orderCases = <String>[];
@@ -1478,6 +1737,28 @@ class CanonicalCatalogStore {
       typeLine: (row['type_line'] as String? ?? '').trim(),
       colors: colorCodes,
       colorIdentity: colorCodes,
+      imageUri: (row['image_uri'] as String?)?.trim(),
+    );
+  }
+
+  CardSearchResult _genericSearchRowToResult(Row row) {
+    final colors = _parseJsonStringList(
+      (row['colors_json'] as String?) ?? '[]',
+    );
+    final colorIdentity = _parseJsonStringList(
+      (row['color_identity_json'] as String?) ?? '[]',
+    );
+    return CardSearchResult(
+      id: (row['legacy_id'] as String? ?? '').trim(),
+      name: (row['display_name'] as String? ?? '').trim(),
+      setCode: (row['set_code'] as String? ?? '').trim().toLowerCase(),
+      setName: (row['set_name'] as String? ?? '').trim(),
+      collectorNumber: (row['collector_number'] as String? ?? '').trim(),
+      setTotal: (row['set_total'] as num?)?.toInt(),
+      rarity: (row['rarity'] as String? ?? '').trim(),
+      typeLine: (row['type_line'] as String? ?? '').trim(),
+      colors: colors.join(','),
+      colorIdentity: colorIdentity.join(','),
       imageUri: (row['image_uri'] as String?)?.trim(),
     );
   }

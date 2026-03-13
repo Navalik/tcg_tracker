@@ -25,6 +25,43 @@ class FilterDefinition {
 
 List<FilterDefinition> filterDefinitionsForGame(TcgGameId gameId) {
   switch (gameId) {
+    case TcgGameId.onePiece:
+      return const <FilterDefinition>[
+        FilterDefinition(
+          key: 'query',
+          kind: FilterValueKind.text,
+          label: 'Name',
+        ),
+        FilterDefinition(
+          key: 'sets',
+          kind: FilterValueKind.multiSelect,
+          label: 'Set',
+        ),
+        FilterDefinition(
+          key: 'collector_number',
+          kind: FilterValueKind.text,
+          label: 'Number',
+        ),
+        FilterDefinition(
+          key: 'rarities',
+          kind: FilterValueKind.multiSelect,
+          label: 'Rarity',
+        ),
+        FilterDefinition(
+          key: 'types',
+          kind: FilterValueKind.multiSelect,
+          label: 'Type',
+          options: <FilterOptionDefinition>[
+            FilterOptionDefinition(value: 'Leader', label: 'Leader'),
+            FilterOptionDefinition(value: 'Character', label: 'Character'),
+          ],
+        ),
+        FilterDefinition(
+          key: 'artist',
+          kind: FilterValueKind.text,
+          label: 'Artist',
+        ),
+      ];
     case TcgGameId.pokemon:
       return const <FilterDefinition>[
         FilterDefinition(

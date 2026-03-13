@@ -31,12 +31,13 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
   @override
   Future<List<SetInfo>> fetchAvailableSets({TcgGameId? gameId}) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.fetchAvailableSets(gameId: resolvedGame);
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.fetchPokemonSets(
+      return store.fetchSetsForGame(
+        gameId: resolvedGame,
         preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
       );
     } finally {
@@ -50,12 +51,13 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     TcgGameId? gameId,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.fetchSetNamesForCodes(setCodes, gameId: resolvedGame);
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.fetchPokemonSetNamesForCodes(
+      return store.fetchSetNamesForCodesForGame(
+        resolvedGame,
         setCodes,
         preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
       );
@@ -75,7 +77,7 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.fetchCardsForFilters(
         gameId: resolvedGame,
         setCodes: setCodes,
@@ -104,7 +106,7 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.searchCardsByName(
         query,
         gameId: resolvedGame,
@@ -115,7 +117,8 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.searchPokemonCards(
+      return store.searchCardsForGame(
+        gameId: resolvedGame,
         filter: const CollectionFilter(),
         searchQuery: query,
         preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
@@ -137,7 +140,7 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.fetchCardsForAdvancedFilters(
         filter,
         gameId: resolvedGame,
@@ -149,7 +152,8 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.searchPokemonCards(
+      return store.searchCardsForGame(
+        gameId: resolvedGame,
         filter: filter,
         searchQuery: searchQuery,
         preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
@@ -167,12 +171,13 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     TcgGameId? gameId,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.countCardsForFilter(filter, gameId: resolvedGame);
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.countPokemonCards(
+      return store.countCardsForGame(
+        gameId: resolvedGame,
         filter: filter,
         preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
       );
@@ -189,7 +194,7 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     List<String> languages = const [],
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    if (resolvedGame != TcgGameId.pokemon) {
+    if (resolvedGame == TcgGameId.mtg) {
       return _legacy.countCardsForFilterWithSearch(
         filter,
         gameId: resolvedGame,
@@ -199,7 +204,8 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
-      return store.countPokemonCards(
+      return store.countCardsForGame(
+        gameId: resolvedGame,
         filter: filter,
         searchQuery: searchQuery,
         preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
@@ -214,6 +220,9 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
   }
 
   Future<List<String>> _preferredLanguagesForGame(TcgGameId gameId) async {
+    if (gameId == TcgGameId.onePiece) {
+      return const <String>['en'];
+    }
     final settingsGame = gameId == TcgGameId.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;

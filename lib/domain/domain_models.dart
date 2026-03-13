@@ -34,6 +34,7 @@ enum CatalogProviderId {
   scryfall('scryfall'),
   pokemonTcgApi('pokemon_tcg_api'),
   tcgdex('tcgdex'),
+  onePiecePilot('one_piece_pilot'),
   unknown('unknown');
 
   const CatalogProviderId(this.value);
@@ -264,11 +265,7 @@ class PokemonAttack {
 }
 
 class PokemonAbility {
-  const PokemonAbility({
-    required this.name,
-    required this.type,
-    this.text,
-  });
+  const PokemonAbility({required this.name, required this.type, this.text});
 
   final String name;
   final String type;
@@ -276,20 +273,14 @@ class PokemonAbility {
 }
 
 class PokemonWeakness {
-  const PokemonWeakness({
-    required this.type,
-    this.value,
-  });
+  const PokemonWeakness({required this.type, this.value});
 
   final String type;
   final String? value;
 }
 
 class PokemonResistance {
-  const PokemonResistance({
-    required this.type,
-    this.value,
-  });
+  const PokemonResistance({required this.type, this.value});
 
   final String type;
   final String? value;

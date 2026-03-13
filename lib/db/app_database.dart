@@ -69,9 +69,13 @@ class CollectionCards extends Table {
   Set<Column> get primaryKey => {collectionId, cardId};
 }
 
+String? debugAppDatabaseDirectoryOverride;
+
 LazyDatabase _openConnection(String fileName) {
   return LazyDatabase(() async {
-    final directory = await getApplicationDocumentsDirectory();
+    final directory = debugAppDatabaseDirectoryOverride == null
+        ? await getApplicationDocumentsDirectory()
+        : Directory(debugAppDatabaseDirectoryOverride!);
     final dbFile = File(path.join(directory.path, fileName));
     return NativeDatabase(
       dbFile,
@@ -146,17 +150,14 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 5) {
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collections
           SET type = 'smart'
           WHERE type = 'custom'
             AND filter_json IS NOT NULL
             AND TRIM(filter_json) != ''
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collection_cards
           SET quantity = 0, foil = 0, alt_art = 0
           WHERE collection_id IN (
@@ -165,42 +166,36 @@ class AppDatabase extends _$AppDatabase {
             WHERE type = 'wishlist'
                OR (type = 'custom' AND name NOT LIKE '__deck_side__:%')
           )
-          ''',
-        );
+          ''');
       }
       if (from < 6) {
-        await customStatement(
-          '''
+        await customStatement('''
           CREATE TEMP TABLE IF NOT EXISTS _legacy_filtered_wishlist_ids AS
           SELECT id
           FROM collections
           WHERE type = 'wishlist'
             AND filter_json IS NOT NULL
             AND TRIM(filter_json) != ''
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           DELETE FROM collection_cards
           WHERE collection_id IN (
             SELECT id FROM _legacy_filtered_wishlist_ids
           )
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collections
           SET filter_json = NULL
           WHERE id IN (
             SELECT id FROM _legacy_filtered_wishlist_ids
           )
-          ''',
+          ''');
+        await customStatement(
+          'DROP TABLE IF EXISTS _legacy_filtered_wishlist_ids',
         );
-        await customStatement('DROP TABLE IF EXISTS _legacy_filtered_wishlist_ids');
       }
       if (from < 7) {
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collection_cards
           SET quantity = 0, foil = 0, alt_art = 0
           WHERE collection_id IN (
@@ -208,39 +203,31 @@ class AppDatabase extends _$AppDatabase {
             FROM collections
             WHERE type = 'wishlist'
           )
-          ''',
-        );
+          ''');
       }
       if (from < 8) {
         // Lightweight normalization only. Full publish-safe cleanup runs in v9.
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collections
           SET type = 'all'
           WHERE lower(trim(name)) IN ('all cards', 'tutte le carte', 'my collection')
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collections
           SET type = 'set'
           WHERE type = 'custom' AND lower(name) LIKE 'set: %'
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collections
           SET type = 'smart'
           WHERE type = 'custom'
             AND filter_json IS NOT NULL
             AND trim(filter_json) != ''
-          ''',
-        );
+          ''');
       }
       if (from < 9) {
         // Publish-safe backup tables before destructive legacy cleanup.
-        await customStatement(
-          '''
+        await customStatement('''
           CREATE TABLE IF NOT EXISTS migration_legacy_collections_backup (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             backup_at INTEGER NOT NULL,
@@ -249,10 +236,8 @@ class AppDatabase extends _$AppDatabase {
             type TEXT,
             filter_json TEXT
           )
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           CREATE TABLE IF NOT EXISTS migration_legacy_collection_cards_backup (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             backup_at INTEGER NOT NULL,
@@ -262,18 +247,14 @@ class AppDatabase extends _$AppDatabase {
             foil INTEGER NOT NULL,
             alt_art INTEGER NOT NULL
           )
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           CREATE TABLE IF NOT EXISTS migration_legacy_audit (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
           )
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           INSERT INTO migration_legacy_collections_backup(
             backup_at, collection_id, name, type, filter_json
           )
@@ -284,10 +265,8 @@ class AppDatabase extends _$AppDatabase {
           WHERE NOT EXISTS (
             SELECT 1 FROM migration_legacy_collections_backup
           )
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           INSERT INTO migration_legacy_collection_cards_backup(
             backup_at, collection_id, card_id, quantity, foil, alt_art
           )
@@ -301,52 +280,40 @@ class AppDatabase extends _$AppDatabase {
           WHERE NOT EXISTS (
             SELECT 1 FROM migration_legacy_collection_cards_backup
           )
-          ''',
-        );
+          ''');
 
         // Normalize collection types.
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collections
           SET type = 'all'
           WHERE lower(trim(name)) IN ('all cards', 'tutte le carte', 'my collection')
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collections
           SET type = 'set'
           WHERE type = 'custom' AND lower(name) LIKE 'set: %'
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collections
           SET type = 'smart'
           WHERE type = 'custom'
             AND filter_json IS NOT NULL
             AND trim(filter_json) != ''
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           INSERT INTO collections(name, type, filter_json)
           SELECT 'All cards', 'all', NULL
           WHERE NOT EXISTS (
             SELECT 1 FROM collections WHERE type = 'all'
           )
-          ''',
-        );
+          ''');
 
         // Merge duplicate "all cards" collections into the oldest one.
-        await customStatement(
-          '''
+        await customStatement('''
           CREATE TEMP TABLE IF NOT EXISTS _all_ids AS
           SELECT id FROM collections WHERE type = 'all' ORDER BY id
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collection_cards
           SET collection_id = (SELECT MIN(id) FROM _all_ids)
           WHERE collection_id IN (
@@ -354,22 +321,18 @@ class AppDatabase extends _$AppDatabase {
             WHERE id != (SELECT MIN(id) FROM _all_ids)
           )
             AND EXISTS (SELECT 1 FROM _all_ids)
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           DELETE FROM collections
           WHERE id IN (
             SELECT id FROM _all_ids
             WHERE id != (SELECT MIN(id) FROM _all_ids)
           )
-          ''',
-        );
+          ''');
         await customStatement('DROP TABLE IF EXISTS _all_ids');
 
         // Normalize card ids and de-duplicate rows after trim.
-        await customStatement(
-          '''
+        await customStatement('''
           CREATE TEMP TABLE IF NOT EXISTS _cc_norm AS
           SELECT
             collection_id AS collection_id,
@@ -380,51 +343,41 @@ class AppDatabase extends _$AppDatabase {
           FROM collection_cards
           WHERE trim(card_id) != ''
           GROUP BY collection_id, trim(card_id)
-          ''',
-        );
+          ''');
         await customStatement('DELETE FROM collection_cards');
-        await customStatement(
-          '''
+        await customStatement('''
           INSERT INTO collection_cards(collection_id, card_id, quantity, foil, alt_art)
           SELECT collection_id, card_id, quantity, foil, alt_art
           FROM _cc_norm
-          ''',
-        );
+          ''');
         await customStatement('DROP TABLE IF EXISTS _cc_norm');
 
         // Derived collections are computed and must not persist memberships.
-        await customStatement(
-          '''
+        await customStatement('''
           DELETE FROM collection_cards
           WHERE collection_id IN (
             SELECT id FROM collections
             WHERE type IN ('set', 'smart')
           )
-          ''',
-        );
+          ''');
 
         // Wishlist: membership-only desired list.
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collections
           SET filter_json = NULL
           WHERE type = 'wishlist'
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           UPDATE collection_cards
           SET quantity = 0, foil = 0, alt_art = 0
           WHERE collection_id IN (
             SELECT id FROM collections
             WHERE type = 'wishlist'
           )
-          ''',
-        );
+          ''');
 
         // Direct custom collections: membership-only list.
-        await customStatement(
-          '''
+        await customStatement('''
           UPDATE collection_cards
           SET quantity = 0, foil = 0, alt_art = 0
           WHERE collection_id IN (
@@ -433,34 +386,27 @@ class AppDatabase extends _$AppDatabase {
               AND (filter_json IS NULL OR trim(filter_json) = '')
               AND name NOT LIKE '__deck_side__:%'
           )
-          ''',
-        );
+          ''');
 
         // Minimal sanity markers for post-release diagnostics.
-        await customStatement(
-          '''
+        await customStatement('''
           INSERT OR REPLACE INTO migration_legacy_audit(key, value)
           VALUES ('cleanup_v9_done_at', CAST(CAST(strftime('%s','now') AS INTEGER) * 1000 AS TEXT))
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           INSERT OR REPLACE INTO migration_legacy_audit(key, value)
           SELECT 'cleanup_v9_all_count', CAST(COUNT(*) AS TEXT)
           FROM collections
           WHERE type = 'all'
-          ''',
-        );
-        await customStatement(
-          '''
+          ''');
+        await customStatement('''
           INSERT OR REPLACE INTO migration_legacy_audit(key, value)
           SELECT 'cleanup_v9_wishlist_with_filter', CAST(COUNT(*) AS TEXT)
           FROM collections
           WHERE type = 'wishlist'
             AND filter_json IS NOT NULL
             AND trim(filter_json) != ''
-          ''',
-        );
+          ''');
       }
       await _createIndexes();
       await _createFts();
@@ -518,10 +464,7 @@ class CardPriceSnapshot {
 }
 
 class _DbAppMigration {
-  const _DbAppMigration({
-    required this.version,
-    required this.run,
-  });
+  const _DbAppMigration({required this.version, required this.run});
 
   final int version;
   final Future<void> Function(AppDatabase db) run;
@@ -558,6 +501,8 @@ class ScryfallDatabase {
   Future<void>? _appMigrationsTask;
   bool _printedNameIndexSelfHealTried = false;
 
+  String get databaseFileName => _dbFileName;
+
   Future<AppDatabase> open() async {
     var db = _db;
     if (db == null) {
@@ -583,6 +528,24 @@ class ScryfallDatabase {
     _appMigrationsEnsured = false;
     _appMigrationsTask = null;
     _printedNameIndexSelfHealTried = false;
+  }
+
+  Future<T> runWithDatabaseFileName<T>(
+    String fileName,
+    Future<T> Function() action,
+  ) async {
+    final next = fileName.trim();
+    final resolved = next.isEmpty ? _defaultDbFileName : next;
+    final previous = _dbFileName;
+    if (previous == resolved) {
+      return action();
+    }
+    await setDatabaseFileName(resolved);
+    try {
+      return await action();
+    } finally {
+      await setDatabaseFileName(previous);
+    }
   }
 
   Future<void> close() async {
@@ -644,15 +607,11 @@ class ScryfallDatabase {
       'filter_json': 'TEXT',
     });
 
-    await _ensureTableColumns(
-      db,
-      'collection_cards',
-      const <String, String>{
-        'quantity': 'INTEGER NOT NULL DEFAULT 1',
-        'foil': 'INTEGER NOT NULL DEFAULT 0',
-        'alt_art': 'INTEGER NOT NULL DEFAULT 0',
-      },
-    );
+    await _ensureTableColumns(db, 'collection_cards', const <String, String>{
+      'quantity': 'INTEGER NOT NULL DEFAULT 1',
+      'foil': 'INTEGER NOT NULL DEFAULT 0',
+      'alt_art': 'INTEGER NOT NULL DEFAULT 0',
+    });
 
     await db.customStatement(
       'CREATE INDEX IF NOT EXISTS cards_name_idx ON cards(name)',
@@ -685,7 +644,8 @@ class ScryfallDatabase {
     if (cardsCount <= 0) {
       return;
     }
-    final hasFtsRows = await db
+    final hasFtsRows =
+        await db
             .customSelect('SELECT rowid AS rowid FROM cards_fts LIMIT 1')
             .getSingleOrNull() !=
         null;
@@ -718,16 +678,19 @@ class ScryfallDatabase {
     await db.customStatement(
       'CREATE INDEX IF NOT EXISTS cards_printed_search_folded_idx ON cards_printed_search(folded_name)',
     );
-    final cardsCount = (await db
-            .customSelect('SELECT COUNT(*) AS c FROM cards')
-            .getSingle())
-        .read<int>('c');
-    final indexCount = (await db
-            .customSelect('SELECT COUNT(*) AS c FROM cards_printed_search')
-            .getSingle())
-        .read<int>('c');
-    final hasPrintedFtsRows = await db
-            .customSelect('SELECT rowid AS rowid FROM cards_printed_fts LIMIT 1')
+    final cardsCount =
+        (await db.customSelect('SELECT COUNT(*) AS c FROM cards').getSingle())
+            .read<int>('c');
+    final indexCount =
+        (await db
+                .customSelect('SELECT COUNT(*) AS c FROM cards_printed_search')
+                .getSingle())
+            .read<int>('c');
+    final hasPrintedFtsRows =
+        await db
+            .customSelect(
+              'SELECT rowid AS rowid FROM cards_printed_fts LIMIT 1',
+            )
             .getSingleOrNull() !=
         null;
     if (cardsCount == indexCount && (cardsCount == 0 || hasPrintedFtsRows)) {
@@ -963,24 +926,20 @@ class ScryfallDatabase {
   }
 
   static Future<void> _runAppDbMigrationV1(AppDatabase db) async {
-    await db.customStatement(
-      '''
+    await db.customStatement('''
       UPDATE cards
       SET lang = lower(trim(lang))
       WHERE lang IS NOT NULL
         AND trim(lang) != ''
         AND lang != lower(trim(lang))
-      ''',
-    );
-    await db.customStatement(
-      '''
+      ''');
+    await db.customStatement('''
       UPDATE cards
       SET set_code = lower(trim(set_code))
       WHERE set_code IS NOT NULL
         AND trim(set_code) != ''
         AND set_code != lower(trim(set_code))
-      ''',
-    );
+      ''');
     await db.rebuildFts();
   }
 
@@ -1010,7 +969,9 @@ class ScryfallDatabase {
       await (db.update(
         db.collections,
       )..where((tbl) => tbl.id.equals(existingId))).write(
-        CollectionsCompanion(type: Value(collectionTypeToDb(CollectionType.all))),
+        CollectionsCompanion(
+          type: Value(collectionTypeToDb(CollectionType.all)),
+        ),
       );
       return existingId;
     }
@@ -1035,7 +996,9 @@ class ScryfallDatabase {
       await (db.update(
         db.collections,
       )..where((tbl) => tbl.id.equals(legacyId))).write(
-        CollectionsCompanion(type: Value(collectionTypeToDb(CollectionType.all))),
+        CollectionsCompanion(
+          type: Value(collectionTypeToDb(CollectionType.all)),
+        ),
       );
       return legacyId;
     }
@@ -1473,11 +1436,13 @@ class ScryfallDatabase {
         if (mappedCollectionId == null || cardId.isEmpty) {
           continue;
         }
-        final mappedCollectionType = collectionTypeById[mappedCollectionId] ?? '';
+        final mappedCollectionType =
+            collectionTypeById[mappedCollectionId] ?? '';
         if (mappedCollectionType == 'smart') {
           continue;
         }
-        final isMembershipOnly = mappedCollectionType == 'custom' ||
+        final isMembershipOnly =
+            mappedCollectionType == 'custom' ||
             mappedCollectionType == 'wishlist';
         final quantity = isMembershipOnly
             ? 0
@@ -2140,10 +2105,11 @@ class ScryfallDatabase {
     if (offset != null && resolvedLimit == null) {
       resolvedLimit = -1;
     }
-    final variables = <Variable>[Variable.withInt(collectionId), Variable.withInt(allCardsId)];
-    final whereClauses = <String>[
-      'wishlist.card_id IS NOT NULL',
+    final variables = <Variable>[
+      Variable.withInt(collectionId),
+      Variable.withInt(allCardsId),
     ];
+    final whereClauses = <String>['wishlist.card_id IS NOT NULL'];
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
       whereClauses.add(
@@ -2280,9 +2246,7 @@ class ScryfallDatabase {
     final whereSql = whereClauses.isEmpty
         ? ''
         : 'WHERE ${whereClauses.join(' AND ')}';
-    final row = await db
-        .customSelect(
-          '''
+    final row = await db.customSelect('''
       SELECT COUNT(*) AS total
       FROM collection_cards membership
       LEFT JOIN collection_cards inventory
@@ -2290,10 +2254,7 @@ class ScryfallDatabase {
         AND inventory.collection_id = ?
       JOIN cards ON cards.id = membership.card_id
       $whereSql
-      ''',
-          variables: variables,
-        )
-        .getSingle();
+      ''', variables: variables).getSingle();
     return row.read<int>('total');
   }
 
@@ -3530,7 +3491,10 @@ class ScryfallDatabase {
         );
   }
 
-  Future<void> upsertCollectionMembership(int collectionId, String cardId) async {
+  Future<void> upsertCollectionMembership(
+    int collectionId,
+    String cardId,
+  ) async {
     final db = await open();
     await db
         .into(db.collectionCards)
@@ -3693,9 +3657,7 @@ class ScryfallDatabase {
     String? searchQuery,
   }) async {
     final db = await open();
-    final whereClauses = <String>[
-      'wishlist.card_id IS NOT NULL',
-    ];
+    final whereClauses = <String>['wishlist.card_id IS NOT NULL'];
     final variables = <Variable>[Variable.withInt(collectionId)];
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
@@ -3709,8 +3671,7 @@ class ScryfallDatabase {
     final whereSql = whereClauses.isEmpty
         ? ''
         : 'WHERE ${whereClauses.join(' AND ')}';
-    final row = await db.customSelect(
-      '''
+    final row = await db.customSelect('''
       SELECT COUNT(*) AS total
       FROM (
         SELECT TRIM(card_id) AS card_id
@@ -3719,9 +3680,7 @@ class ScryfallDatabase {
       ) wishlist
       JOIN cards ON cards.id = wishlist.card_id
       $whereSql
-      ''',
-      variables: variables,
-    ).getSingle();
+      ''', variables: variables).getSingle();
     return row.read<int>('total');
   }
 
@@ -3737,53 +3696,42 @@ class ScryfallDatabase {
       }
 
       // Type normalization (legacy names/patterns).
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collections
         SET type = 'all'
         WHERE lower(trim(name)) IN ('all cards', 'tutte le carte', 'my collection')
           AND type != 'all'
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collections
         SET type = 'set'
         WHERE type = 'custom' AND lower(name) LIKE 'set: %'
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collections
         SET type = 'smart'
         WHERE type != 'smart'
           AND filter_json IS NOT NULL
           AND trim(filter_json) != ''
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
 
       // Ensure canonical all-cards exists and merge duplicates.
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         INSERT INTO collections(name, type, filter_json)
         SELECT 'All cards', 'all', NULL
         WHERE NOT EXISTS (
           SELECT 1 FROM collections WHERE type = 'all'
         )
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         CREATE TEMP TABLE IF NOT EXISTS _coh_all_ids AS
         SELECT id FROM collections WHERE type = 'all' ORDER BY id
-        ''',
-      );
-      await db.customStatement(
-        '''
+        ''');
+      await db.customStatement('''
         UPDATE collection_cards
         SET collection_id = (SELECT MIN(id) FROM _coh_all_ids)
         WHERE collection_id IN (
@@ -3791,30 +3739,24 @@ class ScryfallDatabase {
           WHERE id != (SELECT MIN(id) FROM _coh_all_ids)
         )
           AND EXISTS (SELECT 1 FROM _coh_all_ids)
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         DELETE FROM collections
         WHERE id IN (
           SELECT id FROM _coh_all_ids
           WHERE id != (SELECT MIN(id) FROM _coh_all_ids)
         )
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
       await db.customStatement('DROP TABLE IF EXISTS _coh_all_ids');
 
       // Normalize/trims card ids and deduplicate by (collection_id, card_id).
       final beforeNorm = await db
-          .customSelect(
-            'SELECT COUNT(*) AS total FROM collection_cards',
-          )
+          .customSelect('SELECT COUNT(*) AS total FROM collection_cards')
           .getSingle();
       final beforeNormCount = beforeNorm.read<int>('total');
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         CREATE TEMP TABLE IF NOT EXISTS _coh_cc_norm AS
         SELECT
           collection_id AS collection_id,
@@ -3825,58 +3767,46 @@ class ScryfallDatabase {
         FROM collection_cards
         WHERE trim(card_id) != ''
         GROUP BY collection_id, trim(card_id)
-        ''',
-      );
+        ''');
       await db.customStatement('DELETE FROM collection_cards');
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         INSERT INTO collection_cards(collection_id, card_id, quantity, foil, alt_art)
         SELECT collection_id, card_id, quantity, foil, alt_art
         FROM _coh_cc_norm
-        ''',
-      );
+        ''');
       await db.customStatement('DROP TABLE IF EXISTS _coh_cc_norm');
       final afterNorm = await db
-          .customSelect(
-            'SELECT COUNT(*) AS total FROM collection_cards',
-          )
+          .customSelect('SELECT COUNT(*) AS total FROM collection_cards')
           .getSingle();
       final afterNormCount = afterNorm.read<int>('total');
       repairedEntries += (beforeNormCount - afterNormCount).abs();
 
       // Remove orphan rows (card ids not in catalog).
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         DELETE FROM collection_cards
         WHERE card_id NOT IN (SELECT id FROM cards)
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
 
       // Derived collections must not persist memberships.
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         DELETE FROM collection_cards
         WHERE collection_id IN (
           SELECT id FROM collections
           WHERE type IN ('set', 'smart')
         )
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
 
       // Wishlist must be membership-only desired list.
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collections
         SET filter_json = NULL
         WHERE type = 'wishlist'
           AND filter_json IS NOT NULL
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collection_cards
         SET quantity = 0, foil = 0, alt_art = 0
         WHERE collection_id IN (
@@ -3888,13 +3818,11 @@ class ScryfallDatabase {
             COALESCE(foil, 0) != 0 OR
             COALESCE(alt_art, 0) != 0
           )
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
 
       // Direct custom collections are membership-only lists.
-      await db.customStatement(
-        '''
+      await db.customStatement('''
         UPDATE collection_cards
         SET quantity = 0, foil = 0, alt_art = 0
         WHERE collection_id IN (
@@ -3908,8 +3836,7 @@ class ScryfallDatabase {
             COALESCE(foil, 0) != 0 OR
             COALESCE(alt_art, 0) != 0
           )
-        ''',
-      );
+        ''');
       repairedEntries += await readChanges();
     });
     return repairedEntries;
@@ -4136,17 +4063,19 @@ class ScryfallDatabase {
     Future<List<CardSearchResult>> runSearchWithLanguages(
       List<String>? activeLanguages,
     ) async {
-      final preferredLang =
-          (activeLanguages ?? const <String>[])
-              .map((item) => item.trim().toLowerCase())
-              .firstWhere(
-                (item) => item.isNotEmpty && item != 'en',
-                orElse: () => 'en',
-              );
+      final preferredLang = (activeLanguages ?? const <String>[])
+          .map((item) => item.trim().toLowerCase())
+          .firstWhere(
+            (item) => item.isNotEmpty && item != 'en',
+            orElse: () => 'en',
+          );
       final whereClauses = <String>['cards_printed_fts MATCH ?'];
       final args = <Variable>[Variable.withString(ftsQuery)];
       if (activeLanguages != null && activeLanguages.isNotEmpty) {
-        final placeholders = List.filled(activeLanguages.length, '?').join(', ');
+        final placeholders = List.filled(
+          activeLanguages.length,
+          '?',
+        ).join(', ');
         whereClauses.add('cards_printed_fts.lang IN ($placeholders)');
         args.addAll(
           activeLanguages.map(
@@ -4237,8 +4166,8 @@ class ScryfallDatabase {
     if (fallback.isNotEmpty) {
       return fallback;
     }
-    final shouldTrySelfHeal = (offset == null || offset <= 0) &&
-        !_printedNameIndexSelfHealTried;
+    final shouldTrySelfHeal =
+        (offset == null || offset <= 0) && !_printedNameIndexSelfHealTried;
     if (!shouldTrySelfHeal) {
       return fallback;
     }
@@ -4823,6 +4752,7 @@ String _foldLatinToAsciiLower(String value) {
   }
   return buffer.toString();
 }
+
 List<String> _readPokemonColorCodes(dynamic raw) {
   if (raw is List) {
     return _normalizeColorList(raw.whereType<String>().toList());
