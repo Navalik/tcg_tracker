@@ -28,6 +28,7 @@ import 'l10n/app_localizations.dart';
 
 import 'db/app_database.dart';
 import 'models.dart';
+import 'repositories/app_repositories.dart';
 import 'services/app_settings.dart';
 import 'services/analytics_service.dart';
 import 'services/local_backup_service.dart';

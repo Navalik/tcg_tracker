@@ -325,7 +325,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _artworkSearchEnabled &&
         query.isNotEmpty &&
         !hasAdvancedFilters) {
-      final localResults = await ScryfallDatabase.instance.searchCardsByName(
+      final localResults = await appRepositories.search.searchCardsByName(
         query,
         languages: _effectiveLanguages(),
         limit: 400,
@@ -371,7 +371,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       hasMorePages = false;
     } else if (hasAdvancedFilters) {
       final filter = _effectiveAdvancedFilter();
-      page = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+      page = await appRepositories.search.fetchCardsForAdvancedFilters(
         filter,
         searchQuery: query.isEmpty ? null : query,
         languages: _effectiveLanguages(),
@@ -379,16 +379,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         offset: _offset,
       );
     } else if (query.isEmpty) {
-      page = await ScryfallDatabase.instance.fetchCardsForFilters(
-        setCodes: _selectedSetCodes.toList(),
-        rarities: _selectedRarities.toList(),
-        types: _selectedTypes.toList(),
+      page = await appRepositories.search.fetchCardsForFilters(
+        setCodes: _selectedSetCodes,
+        rarities: _selectedRarities,
+        types: _selectedTypes,
         languages: _effectiveLanguages(),
         limit: _pageSize,
         offset: _offset,
       );
     } else {
-      page = await ScryfallDatabase.instance.searchCardsByName(
+      page = await appRepositories.search.searchCardsByName(
         query,
         languages: _effectiveLanguages(),
         limit: _pageSize,
@@ -803,7 +803,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (cached != null) {
       return cached;
     }
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     final map = <String, String>{};
     for (final set in sets) {
       map[set.code.trim().toLowerCase()] = set.name.trim().isNotEmpty
@@ -1133,7 +1133,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           .where((code) => !availableSetCodes.containsKey(code))
           .toList();
       if (missing.isNotEmpty) {
-        final names = await ScryfallDatabase.instance.fetchSetNamesForCodes(
+        final names = await appRepositories.sets.fetchSetNamesForCodes(
           missing,
         );
         for (final entry in names.entries) {

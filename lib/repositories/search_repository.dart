@@ -16,6 +16,16 @@ class SearchPageRequest {
 }
 
 abstract class SearchRepository {
+  Future<List<CardSearchResult>> fetchCardsForFilters({
+    TcgGameId? gameId,
+    Set<String> setCodes = const {},
+    Set<String> rarities = const {},
+    Set<String> types = const {},
+    List<String> languages = const [],
+    int limit = 200,
+    int? offset,
+  });
+
   Future<List<CardSearchResult>> searchCardsByName(
     String query, {
     TcgGameId? gameId,

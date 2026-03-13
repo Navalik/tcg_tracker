@@ -62,6 +62,26 @@ class LegacyScryfallRepositoryAdapter
   }
 
   @override
+  Future<List<CardSearchResult>> fetchCardsForFilters({
+    TcgGameId? gameId,
+    Set<String> setCodes = const {},
+    Set<String> rarities = const {},
+    Set<String> types = const {},
+    List<String> languages = const [],
+    int limit = 200,
+    int? offset,
+  }) {
+    return _database.fetchCardsForFilters(
+      setCodes: setCodes.toList(growable: false),
+      rarities: rarities.toList(growable: false),
+      types: types.toList(growable: false),
+      languages: languages,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  @override
   Future<List<CardSearchResult>> searchCardsByName(
     String query, {
     TcgGameId? gameId,
