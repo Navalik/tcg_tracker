@@ -3142,7 +3142,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _showSetCollectionLimitDialog();
       return;
     }
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     if (!context.mounted) {
       return;
     }
@@ -4456,7 +4456,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<Set<String>> _fetchKnownSetCodes() async {
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     return sets
         .map((set) => set.code.trim().toLowerCase())
         .where((code) => code.isNotEmpty)
@@ -7621,7 +7621,7 @@ class _CollectionFilterBuilderPageState
   }
 
   Future<void> _loadSets() async {
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     if (!mounted) {
       return;
     }
@@ -8148,13 +8148,13 @@ Future<CardSearchResult?> _pickCardPrintingForName(
   if (normalizedTarget.isEmpty) {
     return null;
   }
-  var results = await ScryfallDatabase.instance.fetchCardsForAdvancedFilters(
+  var results = await appRepositories.search.fetchCardsForAdvancedFilters(
     CollectionFilter(name: cardName),
     languages: languages,
     limit: 250,
   );
   if (results.isEmpty) {
-    results = await ScryfallDatabase.instance.searchCardsByName(
+    results = await appRepositories.search.searchCardsByName(
       cardName,
       limit: 120,
       languages: languages,
@@ -8610,7 +8610,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
   }
 
   Future<void> _loadKnownSetCodesForScanner() async {
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     if (!mounted) {
       return;
     }
