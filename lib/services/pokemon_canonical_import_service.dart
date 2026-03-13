@@ -28,8 +28,8 @@ class PokemonCanonicalImportService {
   PokemonCanonicalImportService({
     TcgdexPokemonProvider? provider,
     CanonicalCatalogStore? store,
-  })  : _provider = provider ?? TcgdexPokemonProvider(),
-        _store = store;
+  }) : _provider = provider ?? TcgdexPokemonProvider(),
+       _store = store;
 
   final TcgdexPokemonProvider _provider;
   final CanonicalCatalogStore? _store;
@@ -38,10 +38,15 @@ class PokemonCanonicalImportService {
     required String profile,
     List<TcgCardLanguage> languages = TcgdexPokemonProvider.supportedLanguages,
     void Function(double progress)? onProgress,
+    void Function(CanonicalCatalogImportBatch batch)? onBatchBuilt,
   }) async {
     final setSpecs = PokemonDatasetManifest.setsForProfile(profile);
     if (setSpecs.isEmpty) {
-      throw ArgumentError.value(profile, 'profile', 'No manifest sets configured');
+      throw ArgumentError.value(
+        profile,
+        'profile',
+        'No manifest sets configured',
+      );
     }
     final cardsById = <String, CatalogCard>{};
     final setsById = <String, CatalogSet>{};
@@ -64,10 +69,14 @@ class PokemonCanonicalImportService {
           localizedSets[language] = localizedSet;
         }
       }
-      final canonicalSet = localizedSets[TcgdexPokemonProvider.canonicalLanguage] ??
+      final canonicalSet =
+          localizedSets[TcgdexPokemonProvider.canonicalLanguage] ??
           (localizedSets.isEmpty ? null : localizedSets.values.first);
       if (canonicalSet != null) {
-        setsById[canonicalSet.setId] = _mergeSet(setsById[canonicalSet.setId], canonicalSet);
+        setsById[canonicalSet.setId] = _mergeSet(
+          setsById[canonicalSet.setId],
+          canonicalSet,
+        );
         for (final localized in canonicalSet.localizedData) {
           setLocalizationsByKey[_setLocalizationKey(localized)] = localized;
         }
@@ -83,7 +92,10 @@ class PokemonCanonicalImportService {
       );
       for (final bundle in bundles) {
         cardsById[bundle.card.cardId] = bundle.card;
-        setsById[bundle.set.setId] = _mergeSet(setsById[bundle.set.setId], bundle.set);
+        setsById[bundle.set.setId] = _mergeSet(
+          setsById[bundle.set.setId],
+          bundle.set,
+        );
         printingsById[bundle.printing.printingId] = bundle.printing;
         for (final localized in bundle.card.localizedData) {
           cardLocalizationsByKey[_cardLocalizationKey(localized)] = localized;
@@ -92,7 +104,10 @@ class PokemonCanonicalImportService {
           setLocalizationsByKey[_setLocalizationKey(localized)] = localized;
         }
         for (final mapping in bundle.printing.providerMappings) {
-          providerMappings[_providerMappingKey(mapping, bundle)] = ProviderMappingRecord(
+          providerMappings[_providerMappingKey(
+            mapping,
+            bundle,
+          )] = ProviderMappingRecord(
             mapping: mapping,
             cardId: bundle.card.cardId,
             printingId: bundle.printing.printingId,
@@ -119,6 +134,7 @@ class PokemonCanonicalImportService {
       providerMappings: providerMappings.values.toList(growable: false),
       priceSnapshots: priceSnapshotsByKey.values.toList(growable: false),
     );
+    onBatchBuilt?.call(batch);
     _store?.replacePokemonCatalog(batch);
 
     return PokemonCanonicalImportReport(
@@ -150,7 +166,8 @@ class PokemonCanonicalImportService {
       canonicalName: existing.canonicalName,
       seriesId: existing.seriesId ?? next.seriesId,
       releaseDate: existing.releaseDate ?? next.releaseDate,
-      defaultLocalizedData: existing.defaultLocalizedData ?? next.defaultLocalizedData,
+      defaultLocalizedData:
+          existing.defaultLocalizedData ?? next.defaultLocalizedData,
       localizedData: mergedLocalizations.values.toList(growable: false),
       metadata: <String, Object?>{...existing.metadata, ...next.metadata},
     );
@@ -162,7 +179,10 @@ class PokemonCanonicalImportService {
   String _setLocalizationKey(LocalizedSetData localized) =>
       '${localized.setId}:${localized.language.code}';
 
-  String _providerMappingKey(ProviderMapping mapping, ProviderPrintingBundle bundle) =>
+  String _providerMappingKey(
+    ProviderMapping mapping,
+    ProviderPrintingBundle bundle,
+  ) =>
       '${mapping.providerId.value}:${mapping.objectType}:${mapping.providerObjectId}:${bundle.printing.printingId}';
 
   String _priceSnapshotKey(PriceSnapshot snapshot) =>

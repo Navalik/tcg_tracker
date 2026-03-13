@@ -1130,6 +1130,12 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     final text = error.toString();
     if (_isItalianUi) {
+      if (text.contains('pokemon_canonical_cache_empty')) {
+        return 'Reimport fallito: snapshot locale del catalogo Pokemon non trovato.';
+      }
+      if (text.contains('pokemon_canonical_cache_invalid')) {
+        return 'Reimport fallito: snapshot locale del catalogo Pokemon non valido.';
+      }
       if (text.contains('pokemon_dataset_cache_empty')) {
         return 'Reimport fallito: nessun file locale trovato per Pokemon.';
       }
@@ -1140,6 +1146,12 @@ class _SettingsPageState extends State<SettingsPage> {
         return 'Reimport fallito: il file locale non contiene abbastanza carte italiane. Scarica di nuovo "All printings".';
       }
       return 'Reimport fallito: $text';
+    }
+    if (text.contains('pokemon_canonical_cache_empty')) {
+      return 'Reimport failed: local Pokemon catalog snapshot not found.';
+    }
+    if (text.contains('pokemon_canonical_cache_invalid')) {
+      return 'Reimport failed: local Pokemon catalog snapshot is invalid.';
     }
     if (text.contains('pokemon_dataset_cache_empty')) {
       return 'Reimport failed: no local Pokemon cache files found.';

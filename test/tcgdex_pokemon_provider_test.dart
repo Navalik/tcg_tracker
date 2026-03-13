@@ -11,48 +11,105 @@ import 'package:tcg_tracker/services/pokemon_canonical_import_service.dart';
 import 'package:tcg_tracker/services/tcgdex_api_client.dart';
 
 void main() {
-  test('TCGdex provider maps Pokemon printing with italian localization', () async {
+  test(
+    'TCGdex provider maps Pokemon printing with italian localization',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+
+      final bundle = await provider.fetchPrintingByProviderId('base1-1');
+
+      expect(bundle, isNotNull);
+      expect(bundle!.card.cardId, 'pokemon:card:tcgdex:base1-1');
+      expect(bundle.printing.printingId, 'pokemon:printing:tcgdex:base1-1');
+      expect(bundle.set.setId, 'pokemon:set:base1');
+      expect(bundle.card.pokemon?.illustrator, 'Ken Sugimori');
+      expect(bundle.card.pokemon?.attacks.first.name, 'Confuse Ray');
+      expect(
+        bundle.card.localizedData.map((item) => item.language),
+        containsAll(<TcgCardLanguage>[TcgCardLanguage.en, TcgCardLanguage.it]),
+      );
+      expect(
+        bundle.printing.providerMappings.map((item) => item.providerId),
+        containsAll(<CatalogProviderId>[
+          CatalogProviderId.tcgdex,
+          CatalogProviderId.pokemonTcgApi,
+        ]),
+      );
+    },
+  );
+
+  test(
+    'Pokemon canonical import stores cards and compatibility mappings',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+      final report = await service.importProfile(
+        profile: 'starter',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+
+      expect(report.cardsImported, greaterThan(0));
+      expect(report.setsImported, equals(3));
+      expect(store.countTableRows('catalog_cards'), greaterThan(0));
+      expect(store.countTableRows('catalog_sets'), equals(3));
+      expect(store.countTableRows('provider_mappings'), greaterThan(0));
+      expect(store.countTableRows('pokemon_printing_metadata'), greaterThan(0));
+    },
+  );
+
+  test('Pokemon canonical batch snapshot round-trips through json', () async {
     final provider = TcgdexPokemonProvider(
       apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
     );
+    final service = PokemonCanonicalImportService(provider: provider);
+    CanonicalCatalogImportBatch? capturedBatch;
 
-    final bundle = await provider.fetchPrintingByProviderId('base1-1');
-
-    expect(bundle, isNotNull);
-    expect(bundle!.card.cardId, 'pokemon:card:tcgdex:base1-1');
-    expect(bundle.printing.printingId, 'pokemon:printing:tcgdex:base1-1');
-    expect(bundle.set.setId, 'pokemon:set:base1');
-    expect(bundle.card.pokemon?.illustrator, 'Ken Sugimori');
-    expect(bundle.card.pokemon?.attacks.first.name, 'Confuse Ray');
-    expect(bundle.card.localizedData.map((item) => item.language), containsAll(<TcgCardLanguage>[
-      TcgCardLanguage.en,
-      TcgCardLanguage.it,
-    ]));
-    expect(bundle.printing.providerMappings.map((item) => item.providerId), containsAll(<CatalogProviderId>[
-      CatalogProviderId.tcgdex,
-      CatalogProviderId.pokemonTcgApi,
-    ]));
-  });
-
-  test('Pokemon canonical import stores cards and compatibility mappings', () async {
-    final provider = TcgdexPokemonProvider(
-      apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+    await service.importProfile(
+      profile: 'starter',
+      languages: const <TcgCardLanguage>[
+        TcgCardLanguage.en,
+        TcgCardLanguage.it,
+      ],
+      onBatchBuilt: (batch) {
+        capturedBatch = batch;
+      },
     );
-    final store = CanonicalCatalogStore.openInMemory();
-    addTearDown(store.dispose);
 
-    final service = PokemonCanonicalImportService(provider: provider, store: store);
-    final report = await service.importProfile(profile: 'starter', languages: const <TcgCardLanguage>[
-      TcgCardLanguage.en,
-      TcgCardLanguage.it,
-    ]);
+    expect(capturedBatch, isNotNull);
+    final encoded = jsonEncode(canonicalCatalogBatchToJson(capturedBatch!));
+    final decoded = canonicalCatalogBatchFromJson(
+      Map<String, dynamic>.from(jsonDecode(encoded) as Map),
+    );
 
-    expect(report.cardsImported, greaterThan(0));
-    expect(report.setsImported, equals(3));
-    expect(store.countTableRows('catalog_cards'), greaterThan(0));
-    expect(store.countTableRows('catalog_sets'), equals(3));
-    expect(store.countTableRows('provider_mappings'), greaterThan(0));
-    expect(store.countTableRows('pokemon_printing_metadata'), greaterThan(0));
+    expect(decoded.cards.length, equals(capturedBatch!.cards.length));
+    expect(decoded.sets.length, equals(capturedBatch!.sets.length));
+    expect(decoded.printings.length, equals(capturedBatch!.printings.length));
+    expect(
+      decoded.providerMappings.length,
+      equals(capturedBatch!.providerMappings.length),
+    );
+    expect(
+      decoded.priceSnapshots.length,
+      equals(capturedBatch!.priceSnapshots.length),
+    );
+    expect(decoded.cards.first.pokemon?.attacks.first.name, 'Confuse Ray');
+    expect(
+      decoded.cardLocalizations.map((item) => item.language),
+      contains(TcgCardLanguage.it),
+    );
   });
 }
 
@@ -191,36 +248,48 @@ http.Client _fakeTcgdexClient() {
       return http.Response(jsonEncode(<Object?>[setResponse]), 200);
     }
     if (uri.contains('/en/sets/swsh1')) {
-      return http.Response(jsonEncode(<String, Object?>{
-        ...setResponse,
-        'id': 'swsh1',
-        'name': 'Sword & Shield',
-        'cards': <Map<String, Object?>>[],
-      }), 200);
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          ...setResponse,
+          'id': 'swsh1',
+          'name': 'Sword & Shield',
+          'cards': <Map<String, Object?>>[],
+        }),
+        200,
+      );
     }
     if (uri.contains('/en/sets/sv1')) {
-      return http.Response(jsonEncode(<String, Object?>{
-        ...setResponse,
-        'id': 'sv1',
-        'name': 'Scarlet & Violet',
-        'cards': <Map<String, Object?>>[],
-      }), 200);
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          ...setResponse,
+          'id': 'sv1',
+          'name': 'Scarlet & Violet',
+          'cards': <Map<String, Object?>>[],
+        }),
+        200,
+      );
     }
     if (uri.contains('/it/sets/swsh1')) {
-      return http.Response(jsonEncode(<String, Object?>{
-        ...setResponseIt,
-        'id': 'swsh1',
-        'name': 'Spada e Scudo',
-        'cards': <Map<String, Object?>>[],
-      }), 200);
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          ...setResponseIt,
+          'id': 'swsh1',
+          'name': 'Spada e Scudo',
+          'cards': <Map<String, Object?>>[],
+        }),
+        200,
+      );
     }
     if (uri.contains('/it/sets/sv1')) {
-      return http.Response(jsonEncode(<String, Object?>{
-        ...setResponseIt,
-        'id': 'sv1',
-        'name': 'Scarlatto e Violetto',
-        'cards': <Map<String, Object?>>[],
-      }), 200);
+      return http.Response(
+        jsonEncode(<String, Object?>{
+          ...setResponseIt,
+          'id': 'sv1',
+          'name': 'Scarlatto e Violetto',
+          'cards': <Map<String, Object?>>[],
+        }),
+        200,
+      );
     }
     throw StateError('Unhandled test request: $uri');
   });

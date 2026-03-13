@@ -32,6 +32,8 @@ class PokemonBulkService {
   static const String _prefsKeyInstalledProfile =
       'pokemon_dataset_profile_installed';
   static const int _maxAttemptsPerPage = 4;
+  static const String _canonicalSnapshotFileName =
+      'canonical_catalog_snapshot.json';
   static const String _apiKey = String.fromEnvironment(
     'POKEMON_TCG_API_KEY',
     defaultValue: '',
@@ -286,10 +288,17 @@ class PokemonBulkService {
     final store = await CanonicalCatalogStore.openDefault();
     try {
       final service = PokemonCanonicalImportService(store: store);
+      CanonicalCatalogImportBatch? batch;
       await service.importProfile(
         profile: profile,
         onProgress: onProgress,
+        onBatchBuilt: (value) {
+          batch = value;
+        },
       );
+      if (batch != null) {
+        await _writeCanonicalCatalogSnapshot(batch!, profile: profile);
+      }
     } finally {
       store.dispose();
     }
@@ -302,19 +311,32 @@ class PokemonBulkService {
     final database = await ScryfallDatabase.instance.open();
     final selectedProfile = await AppSettings.loadPokemonDatasetProfile();
     final datasetDir = await _ensureDatasetDirectory();
-    final files = datasetDir
-        .listSync()
-        .whereType<File>()
-        .where((file) => file.path.toLowerCase().endsWith('.json'))
-        .toList()
-      ..sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+    onStatus?.call('Restoring Pokemon canonical catalog');
+    onProgress(0.02);
+    final snapshotFile = await _canonicalSnapshotFile();
+    if (!await snapshotFile.exists()) {
+      throw const FormatException('pokemon_canonical_cache_empty');
+    }
+    await _restoreCanonicalCatalogSnapshot(snapshotFile);
+    final files =
+        datasetDir
+            .listSync()
+            .whereType<File>()
+            .where((file) => file.path.toLowerCase().endsWith('.json'))
+            .where(
+              (file) => p.basename(file.path) != _canonicalSnapshotFileName,
+            )
+            .toList()
+          ..sort(
+            (a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()),
+          );
 
     if (files.isEmpty) {
       throw const FormatException('pokemon_dataset_cache_empty');
     }
 
     onStatus?.call('Reimporting from local cache');
-    onProgress(0.02);
+    onProgress(0.12);
 
     var inserted = 0;
     await database.transaction(() async {
@@ -349,7 +371,7 @@ class PokemonBulkService {
           }
           inserted += mapped.length;
         }
-        final progress = 0.05 + (((i + 1) / files.length) * 0.90);
+        final progress = 0.12 + (((i + 1) / files.length) * 0.84);
         onProgress(progress.clamp(0.0, 0.98));
       }
     });
@@ -372,6 +394,48 @@ class PokemonBulkService {
     );
     onStatus?.call('Completed');
     onProgress(1);
+  }
+
+  Future<File> _canonicalSnapshotFile() async {
+    final datasetDir = await _ensureDatasetDirectory();
+    return File(p.join(datasetDir.path, _canonicalSnapshotFileName));
+  }
+
+  Future<void> _writeCanonicalCatalogSnapshot(
+    CanonicalCatalogImportBatch batch, {
+    required String profile,
+  }) async {
+    final file = await _canonicalSnapshotFile();
+    final payload = <String, Object?>{
+      'profile': profile,
+      'generated_at': DateTime.now().toUtc().toIso8601String(),
+      'batch': canonicalCatalogBatchToJson(batch),
+    };
+    await file.writeAsString(jsonEncode(payload));
+  }
+
+  Future<void> _restoreCanonicalCatalogSnapshot(File snapshotFile) async {
+    final raw = await snapshotFile.readAsString();
+    final parsed = jsonDecode(raw);
+    if (parsed is! Map<String, dynamic>) {
+      throw const FormatException('pokemon_canonical_cache_invalid');
+    }
+    final batchJson = parsed['batch'];
+    if (batchJson is! Map) {
+      throw const FormatException('pokemon_canonical_cache_invalid');
+    }
+    final batch = canonicalCatalogBatchFromJson(
+      Map<String, dynamic>.from(batchJson),
+    );
+    if (batch.cards.isEmpty || batch.printings.isEmpty) {
+      throw const FormatException('pokemon_canonical_cache_invalid');
+    }
+    final store = await CanonicalCatalogStore.openDefault();
+    try {
+      store.replacePokemonCatalog(batch);
+    } finally {
+      store.dispose();
+    }
   }
 
   List<dynamic> _extractDatasetRows(dynamic parsed) {
