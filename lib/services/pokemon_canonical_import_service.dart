@@ -114,8 +114,16 @@ class PokemonCanonicalImportService {
             setId: bundle.set.setId,
           );
         }
+        final primaryMapping = bundle.printing.providerMappings.isEmpty
+            ? null
+            : bundle.printing.providerMappings.first;
         final snapshots = await _provider.fetchLatestPrices(
-          bundle.printing.providerMappings.first.providerObjectId,
+          PriceQuoteRequest(
+            gameId: TcgGameId.pokemon,
+            printingId: bundle.printing.printingId,
+            catalogProviderId: primaryMapping?.providerId,
+            providerObjectId: primaryMapping?.providerObjectId,
+          ),
         );
         for (final snapshot in snapshots) {
           priceSnapshotsByKey[_priceSnapshotKey(snapshot)] = snapshot;

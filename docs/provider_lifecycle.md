@@ -24,16 +24,17 @@ The provider layer is split by responsibility:
 - `DeckRulesProvider`
   - expose format legality and rules-related checks
 - `PriceProvider`
-  - fetch price snapshots independent from local storage
+  - fetch price snapshots independent from local storage and independent from catalog ownership
 
 ## Why The Split Exists
 
 One provider may implement all roles, but the architecture must not assume that.
 
 Examples:
-- MTG/Scryfall can cover catalog, set, search, rules, and pricing
+- MTG/Scryfall can cover catalog, set, search, rules, while pricing may be split into a dedicated provider
 - a future provider may expose catalog and sets but not prices
 - a future local sync service may exist separately from remote search
+- a future price-only provider may exist without any catalog/search role
 
 ## Lifecycle Expectations
 
@@ -42,8 +43,8 @@ Examples:
 Each game is associated declaratively in `ProviderRegistry`.
 
 Current baseline:
-- `mtg` -> Scryfall adapter
-- `pokemon` -> no provider bundle yet
+- `mtg` -> Scryfall catalog adapter + separate Scryfall price adapter
+- `pokemon` -> TCGdex provider bundle
 
 ### 2. Resolution
 
@@ -69,6 +70,11 @@ Provider adapters are responsible for translating payloads into:
 - `CardPrintingRef`
 - `PriceSnapshot`
 
+Price adapters additionally receive explicit price quote requests:
+- target `printingId`
+- source-facing `providerObjectId`
+- optional currency/finish preferences
+
 ### 5. Storage Handoff
 
 Providers do not own local persistence directly.
@@ -79,13 +85,17 @@ Expected future direction:
 
 ## Scryfall MTG Adapter Scope
 
-The initial MTG/Scryfall adapter in this branch supports:
+The initial MTG/Scryfall catalog adapter in this branch supports:
 - card/printing fetch by provider id
 - set fetch
 - name search
 - deck legality lookup via Scryfall legalities
-- price snapshot fetch
 - remote bulk dataset descriptor lookup
+
+The transitional MTG price adapter supports:
+- snapshot fetch through Scryfall prices
+- explicit refresh policy
+- no catalog/search responsibilities
 
 This is intentionally enough to validate the contracts without forcing immediate runtime replacement of all existing flows.
 
@@ -122,6 +132,7 @@ During the current refactor phase:
 - provider contracts can coexist with legacy repository/database code
 - new architecture work should prefer provider interfaces
 - runtime flows may still use legacy implementations until moved intentionally
+- MTG may continue using Scryfall for prices, but only through a dedicated price provider boundary
 
 ## Next Recommended Follow-up
 

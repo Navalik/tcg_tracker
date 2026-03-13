@@ -3,8 +3,14 @@ import '../services/tcgdex_api_client.dart';
 import 'provider_contracts.dart';
 
 class TcgdexPokemonProvider
-    implements CatalogProvider, CatalogSyncService, SearchProvider, SetProvider, PriceProvider {
-  TcgdexPokemonProvider({TcgdexApiClient? apiClient}) : _apiClient = apiClient ?? TcgdexApiClient();
+    implements
+        CatalogProvider,
+        CatalogSyncService,
+        SearchProvider,
+        SetProvider,
+        PriceProvider {
+  TcgdexPokemonProvider({TcgdexApiClient? apiClient})
+    : _apiClient = apiClient ?? TcgdexApiClient();
 
   static const TcgCardLanguage canonicalLanguage = TcgCardLanguage.en;
   static const List<TcgCardLanguage> supportedLanguages = <TcgCardLanguage>[
@@ -21,21 +27,30 @@ class TcgdexPokemonProvider
   TcgGameId get gameId => TcgGameId.pokemon;
 
   @override
-  Future<ProviderPrintingBundle?> fetchPrintingByProviderId(String providerObjectId) {
+  Future<ProviderPrintingBundle?> fetchPrintingByProviderId(
+    String providerObjectId,
+  ) {
     return fetchPrintingBundle(providerObjectId, languages: supportedLanguages);
   }
 
   @override
-  Future<CatalogSyncStatus> fetchLatestCatalogStatus({required String datasetKey}) async {
+  Future<CatalogSyncStatus> fetchLatestCatalogStatus({
+    required String datasetKey,
+  }) async {
     final normalizedKey = datasetKey.trim().toLowerCase();
     final probeUri = normalizedKey.isEmpty
-        ? _buildUri(canonicalLanguage, 'sets', queryParameters: const <String, String>{
-            'pagination:itemsPerPage': '1',
-          })
+        ? _buildUri(
+            canonicalLanguage,
+            'sets',
+            queryParameters: const <String, String>{
+              'pagination:itemsPerPage': '1',
+            },
+          )
         : _buildUri(canonicalLanguage, 'sets/$normalizedKey');
     try {
       final payload = await _apiClient.getJson(probeUri);
-      final remoteAvailable = payload is Map<String, dynamic> || payload is List<dynamic>;
+      final remoteAvailable =
+          payload is Map<String, dynamic> || payload is List<dynamic>;
       return CatalogSyncStatus(
         providerId: providerId,
         gameId: gameId,
@@ -89,7 +104,10 @@ class TcgdexPokemonProvider
       if (id.isEmpty) {
         continue;
       }
-      final bundle = await fetchPrintingBundle(id, languages: requestedLanguages);
+      final bundle = await fetchPrintingBundle(
+        id,
+        languages: requestedLanguages,
+      );
       if (bundle != null) {
         bundles.add(bundle);
       }
@@ -103,9 +121,11 @@ class TcgdexPokemonProvider
   @override
   Future<List<CatalogSet>> fetchSets({int limit = 500}) async {
     final payload = await _apiClient.getJson(
-      _buildUri(canonicalLanguage, 'sets', queryParameters: <String, String>{
-        'pagination:itemsPerPage': '$limit',
-      }),
+      _buildUri(
+        canonicalLanguage,
+        'sets',
+        queryParameters: <String, String>{'pagination:itemsPerPage': '$limit'},
+      ),
     );
     if (payload is! List) {
       return const <CatalogSet>[];
@@ -115,7 +135,10 @@ class TcgdexPokemonProvider
       if (item is! Map) {
         continue;
       }
-      final mapped = _mapSet(Map<String, dynamic>.from(item), canonicalLanguage);
+      final mapped = _mapSet(
+        Map<String, dynamic>.from(item),
+        canonicalLanguage,
+      );
       if (mapped != null) {
         sets.add(mapped);
       }
@@ -136,7 +159,9 @@ class TcgdexPokemonProvider
     if (normalized.isEmpty) {
       return null;
     }
-    final payload = await _apiClient.getJson(_buildUri(language, 'sets/$normalized'));
+    final payload = await _apiClient.getJson(
+      _buildUri(language, 'sets/$normalized'),
+    );
     if (payload is! Map<String, dynamic>) {
       return null;
     }
@@ -151,7 +176,9 @@ class TcgdexPokemonProvider
     if (normalized.isEmpty) {
       return const <String>[];
     }
-    final payload = await _apiClient.getJson(_buildUri(language, 'sets/$normalized'));
+    final payload = await _apiClient.getJson(
+      _buildUri(language, 'sets/$normalized'),
+    );
     if (payload is! Map<String, dynamic>) {
       return const <String>[];
     }
@@ -212,7 +239,10 @@ class TcgdexPokemonProvider
       if (language == canonicalLanguage) {
         continue;
       }
-      final localized = await _fetchCardPayload(normalizedId, language: language);
+      final localized = await _fetchCardPayload(
+        normalizedId,
+        language: language,
+      );
       if (localized != null) {
         localizedPayloads[language] = localized;
       }
@@ -221,20 +251,40 @@ class TcgdexPokemonProvider
   }
 
   @override
-  Future<List<PriceSnapshot>> fetchLatestPrices(String providerObjectId) async {
-    final payload = await _fetchCardPayload(providerObjectId, language: canonicalLanguage);
+  PriceRefreshPolicy get refreshPolicy => const PriceRefreshPolicy(
+    ttl: Duration(hours: 24),
+    maxConcurrentRequests: 2,
+    allowsStaleReads: true,
+  );
+
+  @override
+  PriceSourceId get sourceId => PriceSourceId.unknown;
+
+  @override
+  Future<List<PriceSnapshot>> fetchLatestPrices(
+    PriceQuoteRequest request,
+  ) async {
+    final providerObjectId = request.providerObjectId?.trim() ?? '';
+    if (providerObjectId.isEmpty) {
+      return const <PriceSnapshot>[];
+    }
+    final payload = await _fetchCardPayload(
+      providerObjectId,
+      language: canonicalLanguage,
+    );
     if (payload == null) {
       return const <PriceSnapshot>[];
     }
-    final printingId = _printingId(providerObjectId);
-    return _extractPriceSnapshots(payload, printingId);
+    return _extractPriceSnapshots(payload, request.printingId.trim());
   }
 
   Future<Map<String, dynamic>?> _fetchCardPayload(
     String providerObjectId, {
     required TcgCardLanguage language,
   }) async {
-    final payload = await _apiClient.getJson(_buildUri(language, 'cards/$providerObjectId'));
+    final payload = await _apiClient.getJson(
+      _buildUri(language, 'cards/$providerObjectId'),
+    );
     if (payload is! Map<String, dynamic>) {
       return null;
     }
@@ -269,7 +319,11 @@ class TcgdexPokemonProvider
       if (localizedCard != null) {
         localizedCards.add(localizedCard);
       }
-      final localizedSetData = _mapLocalizedSet(setId, language, payload['set']);
+      final localizedSetData = _mapLocalizedSet(
+        setId,
+        language,
+        payload['set'],
+      );
       if (localizedSetData != null) {
         localizedSets.add(localizedSetData);
       }
@@ -309,15 +363,22 @@ class TcgdexPokemonProvider
       code: setCode,
       canonicalName: defaultLocalizedSet.name,
       seriesId: _seriesId(canonicalPayload['set']),
-      releaseDate: _parseDate(_nestedString(canonicalPayload['set'], 'releaseDate')),
+      releaseDate: _parseDate(
+        _nestedString(canonicalPayload['set'], 'releaseDate'),
+      ),
       defaultLocalizedData: defaultLocalizedSet,
       localizedData: localizedSets,
       metadata: <String, Object?>{
         'serie_id': _nestedString(canonicalPayload['set'], 'serie', 'id'),
         'serie_name': _nestedString(canonicalPayload['set'], 'serie', 'name'),
         'tcg_online': _nestedString(canonicalPayload['set'], 'tcgOnline'),
-        'abbreviation_official': _nestedString(canonicalPayload['set'], 'abbreviation', 'official'),
-        'card_count': _nestedInt(canonicalPayload['set'], 'cardCount', 'official') ??
+        'abbreviation_official': _nestedString(
+          canonicalPayload['set'],
+          'abbreviation',
+          'official',
+        ),
+        'card_count':
+            _nestedInt(canonicalPayload['set'], 'cardCount', 'official') ??
             _nestedInt(canonicalPayload['set'], 'cardCount', 'total'),
       },
     );
@@ -334,7 +395,8 @@ class TcgdexPokemonProvider
       cardId: cardId,
       setId: setId,
       gameId: gameId,
-      collectorNumber: (canonicalPayload['localId'] as String?)?.trim() ?? providerObjectId,
+      collectorNumber:
+          (canonicalPayload['localId'] as String?)?.trim() ?? providerObjectId,
       providerMappings: <ProviderMapping>[
         ProviderMapping(
           providerId: providerId,
@@ -353,7 +415,9 @@ class TcgdexPokemonProvider
         ),
       ],
       rarity: (canonicalPayload['rarity'] as String?)?.trim(),
-      releaseDate: _parseDate(_nestedString(canonicalPayload['set'], 'releaseDate')),
+      releaseDate: _parseDate(
+        _nestedString(canonicalPayload['set'], 'releaseDate'),
+      ),
       imageUris: imageUris,
       finishKeys: variants,
       metadata: <String, Object?>{
@@ -391,7 +455,8 @@ class TcgdexPokemonProvider
       metadata: <String, Object?>{
         'serie_id': _nestedString(payload, 'serie', 'id'),
         'serie_name': _nestedString(payload, 'serie', 'name'),
-        'card_count': _nestedInt(payload, 'cardCount', 'official') ??
+        'card_count':
+            _nestedInt(payload, 'cardCount', 'official') ??
             _nestedInt(payload, 'cardCount', 'total'),
       },
     );
@@ -463,7 +528,10 @@ class TcgdexPokemonProvider
     );
   }
 
-  List<PriceSnapshot> _extractPriceSnapshots(Map<String, dynamic> payload, String printingId) {
+  List<PriceSnapshot> _extractPriceSnapshots(
+    Map<String, dynamic> payload,
+    String printingId,
+  ) {
     final pricing = payload['pricing'];
     if (pricing is! Map) {
       return const <PriceSnapshot>[];
@@ -492,12 +560,15 @@ class TcgdexPokemonProvider
     final cardmarket = pricingMap['cardmarket'];
     if (cardmarket is Map) {
       final cardmarketMap = Map<String, dynamic>.from(cardmarket);
-      final capturedAt = _parseDateTime(cardmarketMap['updated']) ?? DateTime.now().toUtc();
+      final capturedAt =
+          _parseDateTime(cardmarketMap['updated']) ?? DateTime.now().toUtc();
       final avg = _toDouble(cardmarketMap['avg']);
       if (avg != null) {
         addSnapshot(
           sourceId: PriceSourceId.unknown,
-          currencyCode: ((cardmarketMap['unit'] as String?) ?? 'eur').trim().toLowerCase(),
+          currencyCode: ((cardmarketMap['unit'] as String?) ?? 'eur')
+              .trim()
+              .toLowerCase(),
           amount: avg,
           capturedAt: capturedAt,
         );
@@ -506,7 +577,9 @@ class TcgdexPokemonProvider
       if (holo != null) {
         addSnapshot(
           sourceId: PriceSourceId.unknown,
-          currencyCode: ((cardmarketMap['unit'] as String?) ?? 'eur').trim().toLowerCase(),
+          currencyCode: ((cardmarketMap['unit'] as String?) ?? 'eur')
+              .trim()
+              .toLowerCase(),
           amount: holo,
           capturedAt: capturedAt,
           finishKey: 'holo',
@@ -517,8 +590,11 @@ class TcgdexPokemonProvider
     final tcgplayer = pricingMap['tcgplayer'];
     if (tcgplayer is Map) {
       final tcgplayerMap = Map<String, dynamic>.from(tcgplayer);
-      final capturedAt = _parseDateTime(tcgplayerMap['updated']) ?? DateTime.now().toUtc();
-      final unit = ((tcgplayerMap['unit'] as String?) ?? 'usd').trim().toLowerCase();
+      final capturedAt =
+          _parseDateTime(tcgplayerMap['updated']) ?? DateTime.now().toUtc();
+      final unit = ((tcgplayerMap['unit'] as String?) ?? 'usd')
+          .trim()
+          .toLowerCase();
       for (final entry in tcgplayerMap.entries) {
         if (entry.value is! Map) {
           continue;
@@ -546,9 +622,9 @@ class TcgdexPokemonProvider
     Map<String, String>? queryParameters,
   }) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
-    return Uri.parse('${TcgdexApiClient.baseUrl}/${language.code}/$normalizedPath').replace(
-      queryParameters: queryParameters,
-    );
+    return Uri.parse(
+      '${TcgdexApiClient.baseUrl}/${language.code}/$normalizedPath',
+    ).replace(queryParameters: queryParameters);
   }
 
   List<TcgCardLanguage> _resolveLanguages(List<String> rawLanguages) {
@@ -567,17 +643,23 @@ class TcgdexPokemonProvider
     return resolved;
   }
 
-  String _cardId(String providerObjectId) => 'pokemon:card:tcgdex:$providerObjectId';
+  String _cardId(String providerObjectId) =>
+      'pokemon:card:tcgdex:$providerObjectId';
 
   String _setId(String setCode) => 'pokemon:set:$setCode';
 
-  String _printingId(String providerObjectId) => 'pokemon:printing:tcgdex:$providerObjectId';
+  String _printingId(String providerObjectId) =>
+      'pokemon:printing:tcgdex:$providerObjectId';
 
   String? _seriesId(Object? rawSet) {
     if (rawSet is! Map) {
       return null;
     }
-    final value = _nestedString(Map<String, dynamic>.from(rawSet), 'serie', 'id');
+    final value = _nestedString(
+      Map<String, dynamic>.from(rawSet),
+      'serie',
+      'id',
+    );
     if (value == null || value.isEmpty) {
       return null;
     }
@@ -659,10 +741,10 @@ class TcgdexPokemonProvider
   List<String> _subtypes(Map<String, dynamic> payload) {
     final category = (payload['category'] as String?)?.trim() ?? '';
     final stage = (payload['stage'] as String?)?.trim() ?? '';
-    final values = <String>[
-      ..._stringList(payload['types']),
-    ];
-    if (category.isNotEmpty && category.toLowerCase() != 'pokemon' && !values.contains(category)) {
+    final values = <String>[..._stringList(payload['types'])];
+    if (category.isNotEmpty &&
+        category.toLowerCase() != 'pokemon' &&
+        !values.contains(category)) {
       values.add(category);
     }
     if (stage.isNotEmpty && !values.contains(stage)) {
@@ -737,7 +819,9 @@ class TcgdexPokemonProvider
       if (type.isEmpty) {
         continue;
       }
-      result.add(PokemonWeakness(type: type, value: (map['value'] as String?)?.trim()));
+      result.add(
+        PokemonWeakness(type: type, value: (map['value'] as String?)?.trim()),
+      );
     }
     return result;
   }
@@ -756,7 +840,9 @@ class TcgdexPokemonProvider
       if (type.isEmpty) {
         continue;
       }
-      result.add(PokemonResistance(type: type, value: (map['value'] as String?)?.trim()));
+      result.add(
+        PokemonResistance(type: type, value: (map['value'] as String?)?.trim()),
+      );
     }
     return result;
   }
@@ -783,7 +869,12 @@ class TcgdexPokemonProvider
     return cost.length;
   }
 
-  String? _nestedString(Map<String, dynamic> source, String key1, [String? key2, String? key3]) {
+  String? _nestedString(
+    Map<String, dynamic> source,
+    String key1, [
+    String? key2,
+    String? key3,
+  ]) {
     Object? current = source[key1];
     if (key2 != null) {
       if (current is! Map) {
@@ -804,7 +895,12 @@ class TcgdexPokemonProvider
     return value;
   }
 
-  int? _nestedInt(Map<String, dynamic> source, String key1, [String? key2, String? key3]) {
+  int? _nestedInt(
+    Map<String, dynamic> source,
+    String key1, [
+    String? key2,
+    String? key3,
+  ]) {
     Object? current = source[key1];
     if (key2 != null) {
       if (current is! Map) {

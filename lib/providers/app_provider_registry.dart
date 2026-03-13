@@ -1,9 +1,11 @@
 import '../domain/domain_models.dart';
 import 'provider_registry.dart';
+import 'scryfall_mtg_price_provider_adapter.dart';
 import 'scryfall_mtg_provider_adapter.dart';
 import 'tcgdex_pokemon_provider.dart';
 
 const _scryfallMtgProvider = ScryfallMtgProviderAdapter();
+const _scryfallMtgPriceProvider = ScryfallMtgPriceProviderAdapter();
 final _tcgdexPokemonProvider = TcgdexPokemonProvider();
 
 final ProviderRegistry appProviderRegistry = ProviderRegistry({
@@ -14,7 +16,7 @@ final ProviderRegistry appProviderRegistry = ProviderRegistry({
     search: _scryfallMtgProvider,
     sets: _scryfallMtgProvider,
     deckRules: _scryfallMtgProvider,
-    prices: _scryfallMtgProvider,
+    prices: _scryfallMtgPriceProvider,
   ),
   TcgGameId.pokemon: GameProviderBundle(
     gameId: TcgGameId.pokemon,

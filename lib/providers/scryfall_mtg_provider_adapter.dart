@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import '../domain/domain_models.dart';
-import '../services/price_provider.dart' as legacy_prices;
 import '../services/scryfall_api_client.dart';
 import 'provider_contracts.dart';
 
@@ -11,8 +10,7 @@ class ScryfallMtgProviderAdapter
         CatalogSyncService,
         SearchProvider,
         SetProvider,
-        DeckRulesProvider,
-        PriceProvider {
+        DeckRulesProvider {
   const ScryfallMtgProviderAdapter();
 
   @override
@@ -29,7 +27,9 @@ class ScryfallMtgProviderAdapter
     if (id.isEmpty) {
       return null;
     }
-    final payload = await _fetchJsonMap(Uri.parse('https://api.scryfall.com/cards/$id'));
+    final payload = await _fetchJsonMap(
+      Uri.parse('https://api.scryfall.com/cards/$id'),
+    );
     if (payload == null) {
       return null;
     }
@@ -144,7 +144,8 @@ class ScryfallMtgProviderAdapter
       }
       final mapped = Map<String, dynamic>.from(item);
       final lang = (mapped['lang'] as String?)?.trim().toLowerCase() ?? 'en';
-      if (normalizedLanguages.isNotEmpty && !normalizedLanguages.contains(lang)) {
+      if (normalizedLanguages.isNotEmpty &&
+          !normalizedLanguages.contains(lang)) {
         continue;
       }
       final bundle = _mapPrintingBundle(mapped);
@@ -160,7 +161,9 @@ class ScryfallMtgProviderAdapter
 
   @override
   Future<List<CatalogSet>> fetchSets({int limit = 500}) async {
-    final payload = await _fetchJsonMap(Uri.parse('https://api.scryfall.com/sets'));
+    final payload = await _fetchJsonMap(
+      Uri.parse('https://api.scryfall.com/sets'),
+    );
     if (payload == null) {
       return const [];
     }
@@ -224,43 +227,6 @@ class ScryfallMtgProviderAdapter
     return value == 'legal' || value == 'restricted';
   }
 
-  @override
-  Future<List<PriceSnapshot>> fetchLatestPrices(String providerObjectId) async {
-    final prices = await legacy_prices.ScryfallPriceProvider().fetchPrices(
-      providerObjectId,
-    );
-    if (prices == null) {
-      return const [];
-    }
-    final printingId = _printingId(providerObjectId.trim());
-    final capturedAt = DateTime.now().toUtc();
-    final snapshots = <PriceSnapshot>[];
-    void addPrice(String? raw, String currencyCode, {String? finishKey}) {
-      final parsed = double.tryParse((raw ?? '').trim());
-      if (parsed == null) {
-        return;
-      }
-      snapshots.add(
-        PriceSnapshot(
-          printingId: printingId,
-          sourceId: PriceSourceId.scryfall,
-          currencyCode: currencyCode,
-          amount: parsed,
-          capturedAt: capturedAt,
-          finishKey: finishKey,
-        ),
-      );
-    }
-
-    addPrice(prices.usd, 'usd');
-    addPrice(prices.usdFoil, 'usd', finishKey: 'foil');
-    addPrice(prices.usdEtched, 'usd', finishKey: 'etched');
-    addPrice(prices.eur, 'eur');
-    addPrice(prices.eurFoil, 'eur', finishKey: 'foil');
-    addPrice(prices.tix, 'tix');
-    return snapshots;
-  }
-
   Future<Map<String, dynamic>?> _fetchJsonMap(Uri uri) async {
     final response = await ScryfallApiClient.instance.get(
       uri,
@@ -285,7 +251,8 @@ class ScryfallMtgProviderAdapter
       return null;
     }
     final oracleId = (payload['oracle_id'] as String?)?.trim();
-    final setName = (payload['set_name'] as String?)?.trim() ?? setCode.toUpperCase();
+    final setName =
+        (payload['set_name'] as String?)?.trim() ?? setCode.toUpperCase();
     final collectorNumber =
         (payload['collector_number'] as String?)?.trim() ?? '';
     final lang = ((payload['lang'] as String?)?.trim().toLowerCase() ?? 'en');
@@ -439,11 +406,7 @@ class ScryfallMtgProviderAdapter
         name: name,
       ),
       localizedData: [
-        LocalizedSetData(
-          setId: setId,
-          language: language,
-          name: name,
-        ),
+        LocalizedSetData(setId: setId, language: language, name: name),
       ],
       metadata: <String, Object?>{
         'set_type': payload['set_type'],

@@ -88,9 +88,41 @@ abstract class DeckRulesProvider {
 }
 
 abstract class PriceProvider {
-  CatalogProviderId get providerId;
+  PriceSourceId get sourceId;
 
   TcgGameId get gameId;
 
-  Future<List<PriceSnapshot>> fetchLatestPrices(String providerObjectId);
+  PriceRefreshPolicy get refreshPolicy;
+
+  Future<List<PriceSnapshot>> fetchLatestPrices(PriceQuoteRequest request);
+}
+
+class PriceQuoteRequest {
+  const PriceQuoteRequest({
+    required this.gameId,
+    required this.printingId,
+    this.catalogProviderId,
+    this.providerObjectId,
+    this.preferredCurrencies = const <String>{},
+    this.preferredFinishKeys = const <String>{},
+  });
+
+  final TcgGameId gameId;
+  final String printingId;
+  final CatalogProviderId? catalogProviderId;
+  final String? providerObjectId;
+  final Set<String> preferredCurrencies;
+  final Set<String> preferredFinishKeys;
+}
+
+class PriceRefreshPolicy {
+  const PriceRefreshPolicy({
+    required this.ttl,
+    this.maxConcurrentRequests = 2,
+    this.allowsStaleReads = true,
+  });
+
+  final Duration ttl;
+  final int maxConcurrentRequests;
+  final bool allowsStaleReads;
 }
