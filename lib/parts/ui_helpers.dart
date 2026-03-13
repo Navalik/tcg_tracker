@@ -97,9 +97,7 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
     decoration: BoxDecoration(
       color: const Color(0xFF201A14),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(
-        color: const Color(0xFF3A2F24),
-      ),
+      border: Border.all(color: const Color(0xFF3A2F24)),
     ),
     child: isPokemonGame
         ? ColorFiltered(
@@ -148,12 +146,15 @@ Widget _emptySetIcon(double size) {
 }
 
 Widget _buildBadge(String label, {bool inverted = false}) {
-  final background =
-      inverted ? const Color(0xFFE9C46A) : const Color(0xFF2A221B);
-  final foreground =
-      inverted ? const Color(0xFF2A221B) : const Color(0xFFE9C46A);
-  final borderColor =
-      inverted ? const Color(0xFFE9C46A) : const Color(0xFF3A2F24);
+  final background = inverted
+      ? const Color(0xFFE9C46A)
+      : const Color(0xFF2A221B);
+  final foreground = inverted
+      ? const Color(0xFF2A221B)
+      : const Color(0xFFE9C46A);
+  final borderColor = inverted
+      ? const Color(0xFFE9C46A)
+      : const Color(0xFF3A2F24);
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
     decoration: BoxDecoration(
@@ -172,11 +173,7 @@ Widget _buildBadge(String label, {bool inverted = false}) {
   );
 }
 
-Widget _statusMiniBadge({
-  IconData? icon,
-  String? label,
-  double iconSize = 12,
-}) {
+Widget _statusMiniBadge({IconData? icon, String? label, double iconSize = 12}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
@@ -185,11 +182,7 @@ Widget _statusMiniBadge({
       border: Border.all(color: const Color(0xFF3A2F24)),
     ),
     child: icon != null
-        ? Icon(
-            icon,
-            size: iconSize,
-            color: const Color(0xFFE9C46A),
-          )
+        ? Icon(icon, size: iconSize, color: const Color(0xFFE9C46A))
         : Text(
             label ?? '',
             style: const TextStyle(
@@ -209,7 +202,7 @@ String _formatRarity(String raw) {
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.4.7+8';
+const String _latestReleaseNotesId = '0.4.7+9';
 
 String _whatsNewLabel(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
@@ -219,24 +212,21 @@ String _whatsNewLabel(BuildContext context) {
 Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
   final l10n = AppLocalizations.of(context)!;
   final title = l10n.whatsNewDialogTitle;
-  final localeIsItalian = Localizations.localeOf(
-    context,
-  ).languageCode.toLowerCase().startsWith('it');
-  final featureSectionTitle = localeIsItalian ? 'Feature' : 'Features';
-  final bugFixSectionTitle = localeIsItalian ? 'Bug fix' : 'Bug fixes';
+  final featureSectionTitle = l10n.whatsNewFeaturesTitle;
+  final bugFixSectionTitle = l10n.whatsNewBugFixesTitle;
   final featureLines = <String>[
     l10n.whatsNewLine3,
     l10n.whatsNewLine4,
     l10n.whatsNewLine5,
     l10n.whatsNewLine6,
     l10n.whatsNewLine7,
-  ];
+  ].where((line) => line.trim().isNotEmpty).toList(growable: false);
   final bugFixLines = <String>[
     l10n.whatsNewLine1,
     l10n.whatsNewLine2,
     l10n.whatsNewLine8,
     l10n.whatsNewLine9,
-  ];
+  ].where((line) => line.trim().isNotEmpty).toList(growable: false);
 
   await showDialog<void>(
     context: context,
@@ -249,27 +239,36 @@ Future<void> _showLatestReleaseNotesPanel(BuildContext context) async {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                featureSectionTitle,
-                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              for (final line in featureLines)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('- $line', style: textTheme.bodyMedium),
+              if (featureLines.isNotEmpty) ...[
+                Text(
+                  featureSectionTitle,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              const SizedBox(height: 4),
-              Text(
-                bugFixSectionTitle,
-                style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              for (final line in bugFixLines)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('- $line', style: textTheme.bodyMedium),
+                const SizedBox(height: 8),
+                for (final line in featureLines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('- $line', style: textTheme.bodyMedium),
+                  ),
+              ],
+              if (featureLines.isNotEmpty && bugFixLines.isNotEmpty)
+                const SizedBox(height: 4),
+              if (bugFixLines.isNotEmpty) ...[
+                Text(
+                  bugFixSectionTitle,
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
+                const SizedBox(height: 8),
+                for (final line in bugFixLines)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text('- $line', style: textTheme.bodyMedium),
+                  ),
+              ],
             ],
           ),
         ),

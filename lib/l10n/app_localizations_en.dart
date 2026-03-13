@@ -983,14 +983,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get proCardSubtitle =>
-      'Unlock higher limits and upcoming premium features.';
+      'BinderVault is fully usable for free. Plus gives you higher limits.';
 
   @override
-  String get needMoreThanFreeTitle => 'Need more than Free?';
+  String get needMoreThanFreeTitle => 'Want higher limits?';
 
   @override
   String get needMoreThanFreeBody =>
-      'See plans, compare limits, and choose the best option for your collection workflow.';
+      'Use BinderVault for free, or compare Plus plans if you need more room for your collection workflow.';
 
   @override
   String get discoverPlus => 'Discover Plus';
@@ -1134,10 +1134,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get upgradeToPlus => 'Upgrade to Plus';
 
   @override
+  String get plusPaywallSubtitle =>
+      'Unlock premium features across your unlocked TCGs.';
+
+  @override
+  String get plusTagAccountWide => 'Account-wide';
+
+  @override
+  String get plusTagAllUnlockedTcgs => 'All unlocked TCGs';
+
+  @override
+  String get plusPaywallCoverageNote =>
+      'Plus applies to premium features for every TCG you have already unlocked or purchased.';
+
+  @override
   String get freePlanLabel => 'Free';
 
   @override
   String get plusPlanLabel => 'Plus';
+
+  @override
+  String get smartCollectionsFeature => 'Smart collections';
 
   @override
   String get dailyCardScansFeature => 'Daily card scans';
@@ -1181,17 +1198,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get yearlyPlanLabel => 'Yearly';
 
   @override
-  String get oneMonthLabel => '1 month';
+  String get plusMonthlyLabel => 'Monthly';
 
   @override
-  String get twelveMonthsLabel => '12 months';
+  String get plusYearlyLabel => 'Yearly';
+
+  @override
+  String plusMonthlyPlanPrice(Object price) {
+    return '$price/month, billed monthly';
+  }
+
+  @override
+  String plusYearlyPlanPrice(Object price) {
+    return '$price/year, billed yearly';
+  }
+
+  @override
+  String get plusDisclosureAutoRenew =>
+      'Subscriptions renew automatically unless cancelled.';
+
+  @override
+  String get plusDisclosureCancellation =>
+      'Cancel anytime in Google Play Subscriptions.';
+
+  @override
+  String get plusDisclosureFreeUsage =>
+      'BinderVault can be used without a subscription. Plus unlocks premium features only.';
+
+  @override
+  String get plusDisclosureRegionalPricing =>
+      'Prices may vary by region and include applicable taxes.';
+
+  @override
+  String get continueWithFree => 'Continue with Free';
 
   @override
   String get alreadySubscribedRestore => 'Already subscribed? Restore';
 
   @override
   String get previewBillingNotice =>
-      'Purchases are handled client-side for now. Server validation can be added later.';
+      'Subscription terms are shown here before Google Play checkout.';
 
   @override
   String get billingLoadingPlans => 'Loading subscription plans...';
@@ -1552,12 +1598,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String buyGameTitle(Object game) {
-    return 'Buy $game';
+    return 'Unlock $game Support';
   }
 
   @override
   String buyGameBody(Object game, Object price) {
-    return 'You unlock $game with a one-time purchase, forever on this account. Price is $price. Purchases are handled by Google Play.';
+    return 'This one-time purchase unlocks $game features in BinderVault for this account.\nPrice: $price\n\nNo subscription required.\nPurchases are handled by Google Play.';
   }
 
   @override
@@ -1688,40 +1734,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewDialogTitle => 'What\'s new in 0.4.7';
 
   @override
+  String get whatsNewFeaturesTitle => 'Interface improvements';
+
+  @override
+  String get whatsNewBugFixesTitle => 'Bug fixes';
+
+  @override
   String get whatsNewLine1 =>
-      'Collections logic updated: Inventory is now the single source of truth for quantities.';
+      'Deck updates are now saved correctly only inside the deck, without affecting All Cards.';
 
   @override
   String get whatsNewLine2 =>
-      'Add (+1) behavior and free limits are now coherent: deleting a collection always frees the promised slot.';
+      'Secondary game access now refreshes correctly after purchase revoke or entitlement changes.';
 
   @override
   String get whatsNewLine3 =>
-      'Languages updated: guided onboarding for app language and card languages; Pokemon source is currently English-only (Italian coming soon).';
+      'BinderVault Plus screens are clearer, with improved pricing readability and purchase disclosures.';
 
   @override
   String get whatsNewLine4 =>
-      'New Home gallery look: under All cards, latest additions are now clearer and easier to scan.';
+      'Several interface details were refined for better clarity in collection and upgrade flows.';
 
   @override
-  String get whatsNewLine5 =>
-      'First-open onboarding is now sequential: steps appear one after another with no overlap.';
+  String get whatsNewLine5 => '';
 
   @override
-  String get whatsNewLine6 =>
-      'Scanner upgraded: set filter by active game, foil toggle, and check button to confirm recognized name.';
+  String get whatsNewLine6 => '';
 
   @override
-  String get whatsNewLine7 =>
-      'Scanner UX improved: startup tutorial with \"do not show again\" and a dedicated tutorial button.';
+  String get whatsNewLine7 => '';
 
   @override
-  String get whatsNewLine8 =>
-      'Visual consistency improved: golden icons and Pokemon database selector aligned with Magic style.';
+  String get whatsNewLine8 => '';
 
   @override
-  String get whatsNewLine9 =>
-      'Release cleanup: removed test/dev toggles and helper flows from production build.';
+  String get whatsNewLine9 => '';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

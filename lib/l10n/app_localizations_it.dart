@@ -1001,14 +1001,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get proCardSubtitle =>
-      'Sblocca limiti piu alti e funzionalita premium in arrivo.';
+      'BinderVault e completamente utilizzabile gratis. Plus ti offre limiti piu alti.';
 
   @override
-  String get needMoreThanFreeTitle => 'Ti serve piu del piano Free?';
+  String get needMoreThanFreeTitle => 'Vuoi limiti piu alti?';
 
   @override
   String get needMoreThanFreeBody =>
-      'Confronta i piani, i limiti, e scegli l\'opzione migliore per il tuo flusso di collezione.';
+      'Usa BinderVault gratis, oppure confronta i piani Plus se ti serve piu spazio per il tuo flusso di collezione.';
 
   @override
   String get discoverPlus => 'Scopri Plus';
@@ -1154,10 +1154,27 @@ class AppLocalizationsIt extends AppLocalizations {
   String get upgradeToPlus => 'Passa a Plus';
 
   @override
+  String get plusPaywallSubtitle =>
+      'Sblocca le funzioni premium per tutti i TCG gia attivati.';
+
+  @override
+  String get plusTagAccountWide => 'Valido su account';
+
+  @override
+  String get plusTagAllUnlockedTcgs => 'Tutti i TCG sbloccati';
+
+  @override
+  String get plusPaywallCoverageNote =>
+      'Plus si applica alle funzioni premium di ogni TCG che hai gia sbloccato o acquistato.';
+
+  @override
   String get freePlanLabel => 'Gratis';
 
   @override
   String get plusPlanLabel => 'Plus';
+
+  @override
+  String get smartCollectionsFeature => 'Collezioni smart';
 
   @override
   String get dailyCardScansFeature => 'Scansioni carte giornaliere';
@@ -1202,17 +1219,46 @@ class AppLocalizationsIt extends AppLocalizations {
   String get yearlyPlanLabel => 'Annuale';
 
   @override
-  String get oneMonthLabel => '1 mese';
+  String get plusMonthlyLabel => 'Mensile';
 
   @override
-  String get twelveMonthsLabel => '12 mesi';
+  String get plusYearlyLabel => 'Annuale';
+
+  @override
+  String plusMonthlyPlanPrice(Object price) {
+    return '$price/mese, fatturato ogni mese';
+  }
+
+  @override
+  String plusYearlyPlanPrice(Object price) {
+    return '$price/anno, fatturato ogni anno';
+  }
+
+  @override
+  String get plusDisclosureAutoRenew =>
+      'Gli abbonamenti si rinnovano automaticamente salvo disdetta.';
+
+  @override
+  String get plusDisclosureCancellation =>
+      'Puoi annullare in qualsiasi momento nelle sottoscrizioni di Google Play.';
+
+  @override
+  String get plusDisclosureFreeUsage =>
+      'BinderVault puo essere usata anche senza abbonamento. Plus sblocca solo le funzioni premium.';
+
+  @override
+  String get plusDisclosureRegionalPricing =>
+      'I prezzi possono variare in base alla regione e includere le imposte applicabili.';
+
+  @override
+  String get continueWithFree => 'Continua gratis';
 
   @override
   String get alreadySubscribedRestore => 'Hai gia un abbonamento? Ripristina';
 
   @override
   String get previewBillingNotice =>
-      'Gli acquisti sono gestiti lato client per ora. La validazione server puo essere aggiunta in seguito.';
+      'I termini dell\'abbonamento sono mostrati qui prima del checkout Google Play.';
 
   @override
   String get billingLoadingPlans => 'Caricamento piani di abbonamento...';
@@ -1575,12 +1621,12 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String buyGameTitle(Object game) {
-    return 'Acquista $game';
+    return 'Sblocca il supporto a $game';
   }
 
   @override
   String buyGameBody(Object game, Object price) {
-    return 'Sblocchi $game una sola volta, per sempre su questo account. Il prezzo e $price. Gli acquisti sono gestiti da Google Play.';
+    return 'Questo acquisto una tantum sblocca le funzionalita di $game in BinderVault per questo account.\nPrezzo: $price\n\nNessun abbonamento richiesto.\nGli acquisti sono gestiti da Google Play.';
   }
 
   @override
@@ -1709,40 +1755,41 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewDialogTitle => 'Novita versione 0.4.7';
 
   @override
+  String get whatsNewFeaturesTitle => 'Miglioramenti interfaccia';
+
+  @override
+  String get whatsNewBugFixesTitle => 'Correzioni';
+
+  @override
   String get whatsNewLine1 =>
-      'Logica collezioni aggiornata: Inventory e ora la fonte unica delle quantita.';
+      'Gli aggiornamenti ai mazzi ora vengono salvati correttamente solo nel mazzo, senza modificare All Cards.';
 
   @override
   String get whatsNewLine2 =>
-      'Comportamento add (+1) e limiti free resi coerenti: eliminando una collezione si libera sempre lo slot promesso.';
+      'L\'accesso al secondo gioco ora si aggiorna correttamente dopo revoca acquisto o cambi di entitlement.';
 
   @override
   String get whatsNewLine3 =>
-      'Lingue aggiornate: onboarding guidato per lingua app e lingue carte; su Pokemon la sorgente attuale e solo inglese (italiano in arrivo).';
+      'Le schermate BinderVault Plus sono ora piu chiare, con prezzi e termini di acquisto piu leggibili.';
 
   @override
   String get whatsNewLine4 =>
-      'Nuova grafica galleria in Home: sotto All cards gli ultimi inserimenti sono piu chiari e leggibili.';
+      'Diversi dettagli dell\'interfaccia sono stati rifiniti per rendere piu chiari i flussi collezione e upgrade.';
 
   @override
-  String get whatsNewLine5 =>
-      'Onboarding primo avvio reso sequenziale: i passaggi ora compaiono uno dopo l\'altro senza sovrapporsi.';
+  String get whatsNewLine5 => '';
 
   @override
-  String get whatsNewLine6 =>
-      'Scanner potenziato: filtro set per gioco attivo, toggle foil e pulsante check per confermare il nome.';
+  String get whatsNewLine6 => '';
 
   @override
-  String get whatsNewLine7 =>
-      'Scanner UX migliorata: tutorial iniziale con opzione \"non mostrare piu\" e pulsante tutorial dedicato.';
+  String get whatsNewLine7 => '';
 
   @override
-  String get whatsNewLine8 =>
-      'Grafica uniformata: icone dorate e selettore database Pokemon allineato allo stile Magic.';
+  String get whatsNewLine8 => '';
 
   @override
-  String get whatsNewLine9 =>
-      'Pulizia release: rimossi toggle e funzioni test/dev dalla build pubblica.';
+  String get whatsNewLine9 => '';
 
   @override
   String get createSmartCollectionTitle => 'Crea una smart collection';

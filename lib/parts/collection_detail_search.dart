@@ -31,6 +31,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.initialSetCode,
     this.initialCollectorNumber,
     this.selectionEnabled = true,
+    this.addToOwnershipCollectionDirectly = false,
     this.ownershipCollectionId,
     this.customMembershipCollectionId,
     this.addMissingToCollectionId,
@@ -42,6 +43,7 @@ class _CardSearchSheet extends StatefulWidget {
   final String? initialSetCode;
   final String? initialCollectorNumber;
   final bool selectionEnabled;
+  final bool addToOwnershipCollectionDirectly;
   final int? ownershipCollectionId;
   final int? customMembershipCollectionId;
   final int? addMissingToCollectionId;
@@ -597,7 +599,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final displayName = printedName.isNotEmpty ? printedName : name;
     final setCode = (raw['set'] as String?)?.trim().toLowerCase() ?? '';
     final collector = (raw['collector_number'] as String?)?.trim() ?? '';
-    if (id.isEmpty || displayName.isEmpty || setCode.isEmpty || collector.isEmpty) {
+    if (id.isEmpty ||
+        displayName.isEmpty ||
+        setCode.isEmpty ||
+        collector.isEmpty) {
       return null;
     }
     final setName = (raw['set_name'] as String?)?.trim() ?? '';
@@ -994,8 +999,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _artistQuery.trim().isNotEmpty ||
-        (!_isPokemonSearch &&
-            (_manaValueMin != null || _manaValueMax != null));
+        (!_isPokemonSearch && (_manaValueMin != null || _manaValueMax != null));
   }
 
   bool _hasNarrowingFilters() {
@@ -1785,15 +1789,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final isItalian = Localizations.localeOf(
       context,
     ).languageCode.toLowerCase().startsWith('it');
-    final langs = _effectiveLanguages()
-        .map((lang) => lang.trim().toLowerCase())
-        .where((lang) => lang.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
-    final readableLangs = langs
-        .map((lang) => lang.toUpperCase())
-        .join(', ');
+    final langs =
+        _effectiveLanguages()
+            .map((lang) => lang.trim().toLowerCase())
+            .where((lang) => lang.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final readableLangs = langs.map((lang) => lang.toUpperCase()).join(', ');
     if (isItalian) {
       return 'Copertura locale limitata ($readableLangs). '
           'Per ricerca offline multilingua usa database All Cards, '
@@ -1857,38 +1860,46 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     return Wrap(
       spacing: 6,
       runSpacing: 6,
-      children: tokens.map((token) {
-        final color = _manaPipColor(token);
-        final isColoredSingle = const {'W', 'U', 'B', 'R', 'G'}.contains(token);
-        final label = isColoredSingle ? '' : token;
-        return Container(
-          width: 23,
-          height: 23,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            border: Border.all(color: const Color(0xFF3A2F24)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: label.isEmpty
-              ? null
-              : Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF1A1714),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
+      children: tokens
+          .map((token) {
+            final color = _manaPipColor(token);
+            final isColoredSingle = const {
+              'W',
+              'U',
+              'B',
+              'R',
+              'G',
+            }.contains(token);
+            final label = isColoredSingle ? '' : token;
+            return Container(
+              width: 23,
+              height: 23,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF3A2F24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
                   ),
-                ),
-        );
-      }).toList(growable: false),
+                ],
+              ),
+              alignment: Alignment.center,
+              child: label.isEmpty
+                  ? null
+                  : Text(
+                      label,
+                      style: const TextStyle(
+                        color: Color(0xFF1A1714),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+            );
+          })
+          .toList(growable: false),
     );
   }
 
@@ -2549,10 +2560,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             if (hasStatusBadge) ...[
                               FittedBox(
                                 fit: BoxFit.scaleDown,
-                                child: _buildBadge(
-                                  statusBadge,
-                                  inverted: true,
-                                ),
+                                child: _buildBadge(statusBadge, inverted: true),
                               ),
                               const SizedBox(height: 4),
                             ],
@@ -2567,10 +2575,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 ),
                                 visualDensity: VisualDensity.compact,
                                 iconSize: 32,
-                                icon: const Icon(
-                                  Icons.add_circle,
-                                  size: 32,
-                                ),
+                                icon: const Icon(Icons.add_circle, size: 32),
                                 color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
@@ -2705,10 +2710,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                 ),
                                 visualDensity: VisualDensity.compact,
                                 iconSize: 32,
-                                icon: const Icon(
-                                  Icons.add_circle,
-                                  size: 32,
-                                ),
+                                icon: const Icon(Icons.add_circle, size: 32),
                                 color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
@@ -3368,9 +3370,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           if (mounted) {
             showAppSnackBar(
               context,
-              Localizations.localeOf(context).languageCode
-                      .toLowerCase()
-                      .startsWith('it')
+              Localizations.localeOf(
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Carta gia posseduta.'
                   : 'Card already owned.',
             );
@@ -3389,9 +3391,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           if (mounted) {
             showAppSnackBar(
               context,
-              Localizations.localeOf(context).languageCode
-                      .toLowerCase()
-                      .startsWith('it')
+              Localizations.localeOf(
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Aggiungila prima all\'inventario.'
                   : 'Add it to inventory first.',
             );
@@ -3403,7 +3405,18 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           card.id,
         );
       } else if (ownedCollectionId != null) {
-        await InventoryService.instance.addToInventory(card.id, deltaQty: 1);
+        if (widget.addToOwnershipCollectionDirectly) {
+          final currentQty = _ownedQuantitiesByCardId[card.id] ?? 0;
+          await ScryfallDatabase.instance.upsertCollectionCard(
+            ownedCollectionId,
+            card.id,
+            quantity: currentQty + 1,
+            foil: false,
+            altArt: false,
+          );
+        } else {
+          await InventoryService.instance.addToInventory(card.id, deltaQty: 1);
+        }
       }
       if (!mounted) {
         return;
@@ -3456,9 +3469,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           if (mounted) {
             showAppSnackBar(
               context,
-              Localizations.localeOf(context).languageCode
-                      .toLowerCase()
-                      .startsWith('it')
+              Localizations.localeOf(
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Carta gia posseduta.'
                   : 'Card already owned.',
             );
@@ -3477,9 +3490,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           if (mounted) {
             showAppSnackBar(
               context,
-              Localizations.localeOf(context).languageCode
-                      .toLowerCase()
-                      .startsWith('it')
+              Localizations.localeOf(
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Aggiungila prima all\'inventario.'
                   : 'Add it to inventory first.',
             );
@@ -3491,7 +3504,21 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           entry.cardId,
         );
       } else if (ownedCollectionId != null) {
-        await InventoryService.instance.addToInventory(entry.cardId, deltaQty: 1);
+        if (widget.addToOwnershipCollectionDirectly) {
+          final currentQty = _ownedQuantitiesByCardId[entry.cardId] ?? 0;
+          await ScryfallDatabase.instance.upsertCollectionCard(
+            ownedCollectionId,
+            entry.cardId,
+            quantity: currentQty + 1,
+            foil: false,
+            altArt: false,
+          );
+        } else {
+          await InventoryService.instance.addToInventory(
+            entry.cardId,
+            deltaQty: 1,
+          );
+        }
       }
       if (!mounted) {
         return;
@@ -3682,4 +3709,3 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         .toList(growable: false);
   }
 }
-

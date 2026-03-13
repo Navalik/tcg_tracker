@@ -100,24 +100,6 @@ Future<int> _cleanupMtgBulkFilesKeepingType(String keepType) async {
   return deleted;
 }
 
-Future<int> _countMtgBulkCacheFiles() async {
-  final directory = await getApplicationDocumentsDirectory();
-  var count = 0;
-  await for (final entity in directory.list(followLinks: false)) {
-    if (entity is! File) {
-      continue;
-    }
-    final fileName = entity.path.split(RegExp(r'[\\/]')).last.toLowerCase();
-    final isMtgBulkFile =
-        fileName.startsWith('scryfall_') &&
-        (fileName.endsWith('.json') || fileName.endsWith('.download'));
-    if (isMtgBulkFile) {
-      count += 1;
-    }
-  }
-  return count;
-}
-
 bool _isLimitedPrintCoverage(String? bulkType) {
   return bulkType != null &&
       bulkType.isNotEmpty &&
@@ -233,10 +215,11 @@ Future<String?> _showPokemonDatasetProfilePicker(
                                     context,
                                     profile,
                                   ),
-                                  description: _pokemonDatasetProfileDescription(
-                                    context,
-                                    profile,
-                                  ),
+                                  description:
+                                      _pokemonDatasetProfileDescription(
+                                        context,
+                                        profile,
+                                      ),
                                   selected: profile == currentSelection,
                                   onTap: () {
                                     setModalState(() {
@@ -264,8 +247,7 @@ Future<String?> _showPokemonDatasetProfilePicker(
                         ),
                         onPressed: currentSelection.isEmpty
                             ? null
-                            : () =>
-                                  Navigator.of(context).pop(currentSelection),
+                            : () => Navigator.of(context).pop(currentSelection),
                         icon: const Icon(Icons.download_rounded, size: 18),
                         label: Text(confirmLabel ?? l10n.downloadUpdate),
                       ),
@@ -306,10 +288,9 @@ Future<String?> _showBulkTypePicker(
     builder: (context) {
       final l10n = AppLocalizations.of(context)!;
       final theme = Theme.of(context);
-      final isItalian = Localizations.localeOf(context)
-          .languageCode
-          .toLowerCase()
-          .startsWith('it');
+      final isItalian = Localizations.localeOf(
+        context,
+      ).languageCode.toLowerCase().startsWith('it');
       final isPokemonActive =
           TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
       final subtitle = isPokemonActive
@@ -516,10 +497,7 @@ Widget _buildSelectableInfoTile({
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleSmall,
-                  ),
+                  Text(title, style: theme.textTheme.titleSmall),
                   const SizedBox(height: 3),
                   Text(
                     description,

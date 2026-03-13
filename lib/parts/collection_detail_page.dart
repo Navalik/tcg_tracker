@@ -1,4 +1,4 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 enum _CardSortMode { name, color, type }
 
@@ -329,10 +329,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           .ensureAllCardsCollectionId();
       final useAllCardsAsOwnership =
           _isFilterCollection || _isWishlistCollection;
-      _ownedCollectionId =
-          widget.isDeckCollection
+      _ownedCollectionId = widget.isDeckCollection
           ? widget.collectionId
-          : (useAllCardsAsOwnership ? _allCardsCollectionId : widget.collectionId);
+          : (useAllCardsAsOwnership
+                ? _allCardsCollectionId
+                : widget.collectionId);
       if (widget.isDeckCollection) {
         _sideboardCollectionId = await ScryfallDatabase.instance
             .ensureDeckSideboardCollectionId(widget.collectionId);
@@ -747,10 +748,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final currentLang =
         (currentFilter?.languages.toList() ?? const <String>['en'])
             .map((value) => value.trim().toLowerCase())
-            .firstWhere(
-              (value) => value.isNotEmpty,
-              orElse: () => 'en',
-            );
+            .firstWhere((value) => value.isNotEmpty, orElse: () => 'en');
     if (currentLang == normalizedNext) {
       return;
     }
@@ -795,11 +793,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       return;
     }
     final selectedGame = _isPokemonActive ? AppTcgGame.pokemon : AppTcgGame.mtg;
-    final available = (await AppSettings.loadCardLanguagesForGame(selectedGame))
-        .map((value) => value.trim().toLowerCase())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-      ..add('en');
+    final available =
+        (await AppSettings.loadCardLanguagesForGame(selectedGame))
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toSet()
+          ..add('en');
     final options = available.toList()..sort();
     if (!mounted) {
       return;
@@ -807,7 +806,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (options.length <= 1) {
       showAppSnackBar(
         context,
-        Localizations.localeOf(context).languageCode.toLowerCase().startsWith('it')
+        Localizations.localeOf(
+              context,
+            ).languageCode.toLowerCase().startsWith('it')
             ? 'Solo inglese disponibile per questa configurazione.'
             : 'Only English is available for this setup.',
       );
@@ -817,10 +818,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final currentLang =
         (currentFilter?.languages.toList() ?? const <String>['en'])
             .map((value) => value.trim().toLowerCase())
-            .firstWhere(
-              (value) => value.isNotEmpty,
-              orElse: () => 'en',
-            );
+            .firstWhere((value) => value.isNotEmpty, orElse: () => 'en');
     var selected = options.contains(currentLang) ? currentLang : options.first;
     final picked = await showDialog<String>(
       context: context,
@@ -830,8 +828,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           builder: (context, setModalState) => AlertDialog(
             title: Text(
               Localizations.localeOf(
-                context,
-              ).languageCode.toLowerCase().startsWith('it')
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Lingua della collezione'
                   : 'Collection language',
             ),
@@ -1000,12 +998,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               offset: _loadedOffset,
             )
           : _isWishlistCollection
-          ? await ScryfallDatabase.instance.fetchWishlistCardsWithOwnedQuantities(
-              widget.collectionId,
-              searchQuery: _searchQuery,
-              limit: _pageSize,
-              offset: _loadedOffset,
-            )
+          ? await ScryfallDatabase.instance
+                .fetchWishlistCardsWithOwnedQuantities(
+                  widget.collectionId,
+                  searchQuery: _searchQuery,
+                  limit: _pageSize,
+                  offset: _loadedOffset,
+                )
           : filter != null
           ? await ScryfallDatabase.instance.fetchFilteredCollectionCards(
               filter,
@@ -1299,9 +1298,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         );
       } else {
         await ScryfallDatabase.instance.deleteCollectionCard(
-          _isWishlistCollection
-              ? widget.collectionId
-              : ownedCollectionId!,
+          _isWishlistCollection ? widget.collectionId : ownedCollectionId!,
           cardId,
         );
       }
@@ -1695,8 +1692,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       for (final cardId in cardIds) {
         await PriceRepository.instance.ensurePricesFresh(cardId);
       }
-      final lookupCollectionId =
-          widget.isAllCards || _isWishlistCollection
+      final lookupCollectionId = widget.isAllCards || _isWishlistCollection
           ? widget.collectionId
           : (_ownedCollectionId ?? -1);
       final refreshedEntries = await Future.wait(
@@ -2277,7 +2273,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     BuildContext? anchorContext,
   }) async {
     final ownedCollectionId = _ownedCollectionId;
-    if (ownedCollectionId == null || _isWishlistCollection || entry.quantity <= 0) {
+    if (ownedCollectionId == null ||
+        _isWishlistCollection ||
+        entry.quantity <= 0) {
       return;
     }
     if (widget.isDeckCollection) {
@@ -2361,7 +2359,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
         selectionEnabled: false,
-        ownershipCollectionId: _allCardsCollectionId ?? ownedCollectionId,
+        addToOwnershipCollectionDirectly: widget.isDeckCollection,
+        ownershipCollectionId: widget.isDeckCollection
+            ? ownedCollectionId
+            : (_allCardsCollectionId ?? ownedCollectionId),
         customMembershipCollectionId: _isDirectCustomCollection
             ? widget.collectionId
             : null,
@@ -2463,10 +2464,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       }
       if (_isWishlistCollection) {
         final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
-        final ownedMap = await ScryfallDatabase.instance.fetchCollectionQuantities(
-          allCardsId,
-          cardIds,
-        );
+        final ownedMap = await ScryfallDatabase.instance
+            .fetchCollectionQuantities(allCardsId, cardIds);
         var added = 0;
         for (final cardId in cardIds) {
           if ((ownedMap[cardId] ?? 0) > 0) {
@@ -2492,10 +2491,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       }
       if (_isDirectCustomCollection) {
         final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
-        final ownedMap = await ScryfallDatabase.instance.fetchCollectionQuantities(
-          allCardsId,
-          cardIds,
-        );
+        final ownedMap = await ScryfallDatabase.instance
+            .fetchCollectionQuantities(allCardsId, cardIds);
         var added = 0;
         var skipped = 0;
         for (final cardId in cardIds) {
@@ -2530,10 +2527,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       if (!context.mounted) {
         return;
       }
-      showAppSnackBar(
-        context,
-        AppLocalizations.of(context)!.addedCards(added),
-      );
+      showAppSnackBar(context, AppLocalizations.of(context)!.addedCards(added));
       await _loadCards();
     } catch (_) {
       if (context.mounted) {
@@ -2732,11 +2726,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (cardName == null || cardName.isEmpty) {
       return seed;
     }
-    final activeGame = TcgEnvironmentController.instance.currentGame ==
-            TcgGame.pokemon
+    final activeGame =
+        TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;
-    final cardLanguages = await AppSettings.loadCardLanguagesForGame(activeGame);
+    final cardLanguages = await AppSettings.loadCardLanguagesForGame(
+      activeGame,
+    );
     if (!mounted || !context.mounted) {
       return seed;
     }
@@ -3660,11 +3656,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     final position = box.localToGlobal(Offset.zero);
     final size = box.size;
+    final toastTopOffset = widget.isDeckCollection ? 44.0 : 34.0;
     final entry = OverlayEntry(
       builder: (context) {
         return Positioned(
           left: position.dx + (size.width / 2) - 18,
-          top: position.dy - 34,
+          top: position.dy - toastTopOffset,
           child: Material(
             color: Colors.transparent,
             child: Container(
@@ -3706,11 +3703,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     final position = box.localToGlobal(Offset.zero);
     final size = box.size;
+    final toastTopOffset = widget.isDeckCollection ? 44.0 : 34.0;
     final entry = OverlayEntry(
       builder: (context) {
         return Positioned(
           left: position.dx + (size.width / 2) - 18,
-          top: position.dy - 34,
+          top: position.dy - toastTopOffset,
           child: Material(
             color: Colors.transparent,
             child: Container(
@@ -3968,15 +3966,17 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                   entry.cardId,
                                 );
                           } else if (_isDirectCustomCollection) {
-                            await ScryfallDatabase.instance.deleteCollectionCard(
-                              widget.collectionId,
-                              entry.cardId,
-                            );
+                            await ScryfallDatabase.instance
+                                .deleteCollectionCard(
+                                  widget.collectionId,
+                                  entry.cardId,
+                                );
                           } else if (widget.isDeckCollection) {
-                            await ScryfallDatabase.instance.deleteCollectionCard(
-                              ownedCollectionId!,
-                              entry.cardId,
-                            );
+                            await ScryfallDatabase.instance
+                                .deleteCollectionCard(
+                                  ownedCollectionId!,
+                                  entry.cardId,
+                                );
                           } else {
                             await _inventoryService.setInventoryQty(
                               entry.cardId,
@@ -4019,28 +4019,31 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                 );
                           } else if (_isDirectCustomCollection) {
                             if (quantity <= 0) {
-                              await ScryfallDatabase.instance.deleteCollectionCard(
-                                widget.collectionId,
-                                entry.cardId,
-                              );
+                              await ScryfallDatabase.instance
+                                  .deleteCollectionCard(
+                                    widget.collectionId,
+                                    entry.cardId,
+                                  );
                             } else {
                               await _inventoryService.setInventoryQty(
                                 entry.cardId,
                                 quantity,
                               );
-                              await ScryfallDatabase.instance.upsertCollectionMembership(
-                                widget.collectionId,
-                                entry.cardId,
-                              );
+                              await ScryfallDatabase.instance
+                                  .upsertCollectionMembership(
+                                    widget.collectionId,
+                                    entry.cardId,
+                                  );
                             }
                           } else if (widget.isDeckCollection) {
-                            await ScryfallDatabase.instance.upsertCollectionCard(
-                              ownedCollectionId!,
-                              entry.cardId,
-                              quantity: quantity,
-                              foil: false,
-                              altArt: altArt,
-                            );
+                            await ScryfallDatabase.instance
+                                .upsertCollectionCard(
+                                  ownedCollectionId!,
+                                  entry.cardId,
+                                  quantity: quantity,
+                                  foil: false,
+                                  altArt: altArt,
+                                );
                           } else {
                             await _inventoryService.setInventoryQty(
                               entry.cardId,
@@ -4689,7 +4692,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
-                          right: (_isMissingStyleCollection || widget.isAllCards)
+                          right:
+                              (_isMissingStyleCollection || widget.isAllCards)
                               ? 56
                               : 0,
                         ),
@@ -4704,7 +4708,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                     entry.name,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context).textTheme.titleMedium
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
                                         ?.copyWith(
                                           fontSize: 25,
                                           fontWeight: FontWeight.w500,
@@ -4716,7 +4722,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                                         widget.isAllCards) &&
                                     isMissing) ...[
                                   const SizedBox(width: 6),
-                                  _buildBadge(l10n.missingLabel, inverted: true),
+                                  _buildBadge(
+                                    l10n.missingLabel,
+                                    inverted: true,
+                                  ),
                                 ],
                               ],
                             ),
@@ -4725,7 +4734,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                               builder: (context) {
                                 final setLabel = _setLabelForEntry(entry);
                                 final progress = _collectorProgressLabel(entry);
-                                final hasRarity = entry.rarity.trim().isNotEmpty;
+                                final hasRarity = entry.rarity
+                                    .trim()
+                                    .isNotEmpty;
                                 final leftLabel = setLabel.isNotEmpty
                                     ? setLabel
                                     : progress;
@@ -5362,9 +5373,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         actions: [
           if (widget.isSetCollection)
             IconButton(
-              tooltip: Localizations.localeOf(
-                        context,
-                      ).languageCode.toLowerCase().startsWith('it')
+              tooltip:
+                  Localizations.localeOf(
+                    context,
+                  ).languageCode.toLowerCase().startsWith('it')
                   ? 'Cambia lingua collezione'
                   : 'Change collection language',
               icon: const Icon(Icons.translate_rounded),
@@ -5483,8 +5495,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     Text(
                       _showOfflineLanguageDbWarning
                           ? (Localizations.localeOf(
-                                      context,
-                                    ).languageCode.toLowerCase().startsWith('it')
+                                  context,
+                                ).languageCode.toLowerCase().startsWith('it')
                                 ? 'Nessun risultato locale con questo database'
                                 : 'No local results with this database')
                           : (widget.isAllCards
@@ -5499,8 +5511,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                     Text(
                       _showOfflineLanguageDbWarning
                           ? (Localizations.localeOf(
-                                      context,
-                                    ).languageCode.toLowerCase().startsWith('it')
+                                  context,
+                                ).languageCode.toLowerCase().startsWith('it')
                                 ? 'Questa collezione usa lingue aggiuntive (es. IT). Per ricerca offline serve il database "All Cards". Con il database attuale, i risultati in lingua aggiuntiva sono disponibili solo online.'
                                 : 'This collection uses additional languages (for example IT). Offline search requires the "All Cards" database. With the current database, additional-language results are available online only.')
                           : (_isFilterCollection
@@ -5525,10 +5537,9 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         },
                         icon: const Icon(Icons.settings_rounded),
                         label: Text(
-                          Localizations.localeOf(context)
-                                  .languageCode
-                                  .toLowerCase()
-                                  .startsWith('it')
+                          Localizations.localeOf(
+                                context,
+                              ).languageCode.toLowerCase().startsWith('it')
                               ? 'Apri impostazioni database'
                               : 'Open database settings',
                         ),
@@ -5540,16 +5551,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                         onPressed: () => _applySetCollectionLanguage('en'),
                         icon: const Icon(Icons.swap_horiz_rounded),
                         label: Text(
-                          Localizations.localeOf(context)
-                                  .languageCode
-                                  .toLowerCase()
-                                  .startsWith('it')
+                          Localizations.localeOf(
+                                context,
+                              ).languageCode.toLowerCase().startsWith('it')
                               ? 'Passa a Inglese'
                               : 'Switch to English',
                         ),
                       ),
                     ],
-                    if (_showOfflineLanguageDbWarning) const SizedBox(height: 10),
+                    if (_showOfflineLanguageDbWarning)
+                      const SizedBox(height: 10),
                     if (!widget.isSetCollection &&
                         !widget.isBasicLandsCollection)
                       FilledButton.icon(

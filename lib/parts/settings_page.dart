@@ -252,7 +252,8 @@ class _SettingsPageState extends State<SettingsPage> {
         .map((value) => value.trim().toLowerCase())
         .where((value) => value.isNotEmpty)
         .toSet();
-    if (pokemonCardLanguages.length != 1 || !pokemonCardLanguages.contains('en')) {
+    if (pokemonCardLanguages.length != 1 ||
+        !pokemonCardLanguages.contains('en')) {
       await AppSettings.saveCardLanguagesForGame(
         AppTcgGame.pokemon,
         const <String>{'en'},
@@ -282,7 +283,8 @@ class _SettingsPageState extends State<SettingsPage> {
           : TcgGame.mtg;
       final pokemonAccessible =
           pokemonUnlocked || ownedTcgs.contains(_pokemonOwnershipKey);
-      final baseOwned = pokemonAccessible && !ownedTcgs.contains(_pokemonOwnershipKey)
+      final baseOwned =
+          pokemonAccessible && !ownedTcgs.contains(_pokemonOwnershipKey)
           ? {...ownedTcgs, _pokemonOwnershipKey}
           : ownedTcgs;
       _ownedTcgs = _resolveOwnedTcgsForUi(baseOwned);
@@ -302,7 +304,9 @@ class _SettingsPageState extends State<SettingsPage> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(_isItalianUi ? 'Pokemon: solo inglese' : 'Pokemon: English only'),
+        title: Text(
+          _isItalianUi ? 'Pokemon: solo inglese' : 'Pokemon: English only',
+        ),
         content: Text(
           _isItalianUi
               ? 'Le carte Pokemon sono disponibili solo in inglese con la sorgente attuale. Il supporto italiano e in arrivo in una futura release.'
@@ -323,10 +327,7 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     final l10n = AppLocalizations.of(context)!;
-    showAppSnackBar(
-      context,
-      l10n.primaryGameFixedMessage,
-    );
+    showAppSnackBar(context, l10n.primaryGameFixedMessage);
   }
 
   Widget _buildGameSelectorEntry(TcgGame game) {
@@ -340,9 +341,7 @@ class _SettingsPageState extends State<SettingsPage> {
         value: game,
         title: Text(gameName),
         subtitle: Text(
-          isPrimary
-              ? l10n.primaryFreeForever
-              : l10n.purchasedLabel,
+          isPrimary ? l10n.primaryFreeForever : l10n.purchasedLabel,
         ),
       );
     }
@@ -473,9 +472,13 @@ class _SettingsPageState extends State<SettingsPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
-          title: Text(AppLocalizations.of(context)!.buyGameTitle(secondaryName)),
+          title: Text(
+            AppLocalizations.of(context)!.buyGameTitle(secondaryName),
+          ),
           content: Text(
-            AppLocalizations.of(context)!.buyGameBody(secondaryName, priceLabel),
+            AppLocalizations.of(
+              context,
+            )!.buyGameBody(secondaryName, priceLabel),
           ),
           actions: [
             TextButton(
@@ -712,9 +715,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   autofocus: true,
                   minLines: 4,
                   maxLines: 8,
-                  decoration: InputDecoration(
-                    hintText: l10n.issueDescribeHint,
-                  ),
+                  decoration: InputDecoration(hintText: l10n.issueDescribeHint),
                 ),
               ],
             ),
@@ -725,8 +726,9 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Text(l10n.cancel),
             ),
             FilledButton(
-              onPressed: () =>
-                  Navigator.of(context).pop((controller.text, selectedCategory)),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop((controller.text, selectedCategory)),
               child: Text(l10n.sendLabel),
             ),
           ],
@@ -782,10 +784,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.diagnosticsCopied,
-    );
+    showAppSnackBar(context, AppLocalizations.of(context)!.diagnosticsCopied);
   }
 
   Future<void> _runManualCollectionCoherenceCheck() async {
@@ -876,7 +875,9 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       return;
     }
-    final target = game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg;
+    final target = game == TcgGame.pokemon
+        ? AppTcgGame.pokemon
+        : AppTcgGame.mtg;
     final languages = <String>{'en'};
     if (enabled) {
       languages.add('it');
@@ -1034,12 +1035,8 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(
-            l10n.resetGameDatabaseTitle(gameLabel),
-          ),
-          content: Text(
-            l10n.resetGameDatabaseBody(gameLabel),
-          ),
+          title: Text(l10n.resetGameDatabaseTitle(gameLabel)),
+          content: Text(l10n.resetGameDatabaseBody(gameLabel)),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -1070,11 +1067,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                l10n.cleaningGameDatabase(gameLabel),
-              ),
-            ),
+            Expanded(child: Text(l10n.cleaningGameDatabase(gameLabel))),
           ],
         ),
       ),
@@ -1109,10 +1102,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (!mounted) {
       return;
     }
-    showAppSnackBar(
-      context,
-      l10n.gameDatabaseResetDone(gameLabel),
-    );
+    showAppSnackBar(context, l10n.gameDatabaseResetDone(gameLabel));
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
   }
 
@@ -1240,7 +1230,9 @@ class _SettingsPageState extends State<SettingsPage> {
         activeGame,
       );
       final targetConfig = TcgEnvironmentController.instance.configFor(game);
-      await ScryfallDatabase.instance.setDatabaseFileName(targetConfig.dbFileName);
+      await ScryfallDatabase.instance.setDatabaseFileName(
+        targetConfig.dbFileName,
+      );
       try {
         if (game == TcgGame.mtg) {
           final bulkType =
@@ -1259,8 +1251,7 @@ class _SettingsPageState extends State<SettingsPage> {
             languages.add('en');
           }
           final normalizedBulkType = bulkType.trim().toLowerCase();
-          if (normalizedBulkType == 'all_cards' &&
-              languages.contains('it')) {
+          if (normalizedBulkType == 'all_cards' && languages.contains('it')) {
             final preflight = await ScryfallBulkImporter()
                 .inspectLocalBulkLanguageCounts(bulkPath);
             final italianCount = preflight.languageCounts['it'] ?? 0;
@@ -1619,6 +1610,7 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     }
   }
+
   Widget _buildProfileTile(User? user) {
     final displayName = user?.displayName?.trim();
     final email = user?.email?.trim();
@@ -1841,9 +1833,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   )
                                 : const Icon(Icons.restore),
-                            label: Text(
-                              l10n.restorePurchases,
-                            ),
+                            label: Text(l10n.restorePurchases),
                           ),
                         ],
                       ),
@@ -1944,7 +1934,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             child: Text(l10n.reset),
                           ),
                           OutlinedButton(
-                            onPressed: () => _reimportDatabaseForGame(TcgGame.mtg),
+                            onPressed: () =>
+                                _reimportDatabaseForGame(TcgGame.mtg),
                             style: OutlinedButton.styleFrom(
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
@@ -2026,8 +2017,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     Builder(
                       builder: (context) {
-                        final normalizedBulk =
-                            (_bulkType ?? '').trim().toLowerCase();
+                        final normalizedBulk = (_bulkType ?? '')
+                            .trim()
+                            .toLowerCase();
                         final mtgOfflineReady =
                             !_mtgItalianCardsEnabled ||
                             normalizedBulk == 'all_cards';
@@ -2093,12 +2085,15 @@ class _SettingsPageState extends State<SettingsPage> {
                             : 'Include Italian cards',
                       ),
                       subtitle: Text(
-                        _isItalianUi ? 'Inglese sempre incluso' : 'English always included',
+                        _isItalianUi
+                            ? 'Inglese sempre incluso'
+                            : 'English always included',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFBFAE95),
                         ),
                       ),
-                      onChanged: (value) => _setItalianCardsEnabled(TcgGame.mtg, value),
+                      onChanged: (value) =>
+                          _setItalianCardsEnabled(TcgGame.mtg, value),
                     ),
                     const Divider(height: 20, color: Color(0xFF3A2F24)),
                     Text(
@@ -2272,7 +2267,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 children: [
                                   Text(
                                     l10n.versionLabel,
-                                    style: Theme.of(context).textTheme.titleSmall
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
                                         ?.copyWith(
                                           color: const Color(0xFFBFAE95),
                                           fontWeight: FontWeight.w700,
@@ -2281,7 +2278,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                   const SizedBox(height: 3),
                                   Text(
                                     _appVersion,
-                                    style: Theme.of(context).textTheme.titleMedium
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
                                         ?.copyWith(
                                           color: const Color(0xFFEFE7D8),
                                           fontWeight: FontWeight.w800,
@@ -2331,7 +2330,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     LayoutBuilder(
                       builder: (context, constraints) {
                         final spacing = 10.0;
-                        final buttonWidth = (constraints.maxWidth - spacing) / 2;
+                        final buttonWidth =
+                            (constraints.maxWidth - spacing) / 2;
                         final uniformHeight = const Size.fromHeight(44);
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2429,4 +2429,3 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
-

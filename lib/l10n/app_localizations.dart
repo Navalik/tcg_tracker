@@ -1829,19 +1829,19 @@ abstract class AppLocalizations {
   /// No description provided for @proCardSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Unlock higher limits and upcoming premium features.'**
+  /// **'BinderVault is fully usable for free. Plus gives you higher limits.'**
   String get proCardSubtitle;
 
   /// No description provided for @needMoreThanFreeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Need more than Free?'**
+  /// **'Want higher limits?'**
   String get needMoreThanFreeTitle;
 
   /// No description provided for @needMoreThanFreeBody.
   ///
   /// In en, this message translates to:
-  /// **'See plans, compare limits, and choose the best option for your collection workflow.'**
+  /// **'Use BinderVault for free, or compare Plus plans if you need more room for your collection workflow.'**
   String get needMoreThanFreeBody;
 
   /// No description provided for @discoverPlus.
@@ -2114,6 +2114,30 @@ abstract class AppLocalizations {
   /// **'Upgrade to Plus'**
   String get upgradeToPlus;
 
+  /// No description provided for @plusPaywallSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock premium features across your unlocked TCGs.'**
+  String get plusPaywallSubtitle;
+
+  /// No description provided for @plusTagAccountWide.
+  ///
+  /// In en, this message translates to:
+  /// **'Account-wide'**
+  String get plusTagAccountWide;
+
+  /// No description provided for @plusTagAllUnlockedTcgs.
+  ///
+  /// In en, this message translates to:
+  /// **'All unlocked TCGs'**
+  String get plusTagAllUnlockedTcgs;
+
+  /// No description provided for @plusPaywallCoverageNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Plus applies to premium features for every TCG you have already unlocked or purchased.'**
+  String get plusPaywallCoverageNote;
+
   /// No description provided for @freePlanLabel.
   ///
   /// In en, this message translates to:
@@ -2125,6 +2149,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Plus'**
   String get plusPlanLabel;
+
+  /// No description provided for @smartCollectionsFeature.
+  ///
+  /// In en, this message translates to:
+  /// **'Smart collections'**
+  String get smartCollectionsFeature;
 
   /// No description provided for @dailyCardScansFeature.
   ///
@@ -2204,17 +2234,59 @@ abstract class AppLocalizations {
   /// **'Yearly'**
   String get yearlyPlanLabel;
 
-  /// No description provided for @oneMonthLabel.
+  /// No description provided for @plusMonthlyLabel.
   ///
   /// In en, this message translates to:
-  /// **'1 month'**
-  String get oneMonthLabel;
+  /// **'Monthly'**
+  String get plusMonthlyLabel;
 
-  /// No description provided for @twelveMonthsLabel.
+  /// No description provided for @plusYearlyLabel.
   ///
   /// In en, this message translates to:
-  /// **'12 months'**
-  String get twelveMonthsLabel;
+  /// **'Yearly'**
+  String get plusYearlyLabel;
+
+  /// No description provided for @plusMonthlyPlanPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'{price}/month, billed monthly'**
+  String plusMonthlyPlanPrice(Object price);
+
+  /// No description provided for @plusYearlyPlanPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'{price}/year, billed yearly'**
+  String plusYearlyPlanPrice(Object price);
+
+  /// No description provided for @plusDisclosureAutoRenew.
+  ///
+  /// In en, this message translates to:
+  /// **'Subscriptions renew automatically unless cancelled.'**
+  String get plusDisclosureAutoRenew;
+
+  /// No description provided for @plusDisclosureCancellation.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime in Google Play Subscriptions.'**
+  String get plusDisclosureCancellation;
+
+  /// No description provided for @plusDisclosureFreeUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'BinderVault can be used without a subscription. Plus unlocks premium features only.'**
+  String get plusDisclosureFreeUsage;
+
+  /// No description provided for @plusDisclosureRegionalPricing.
+  ///
+  /// In en, this message translates to:
+  /// **'Prices may vary by region and include applicable taxes.'**
+  String get plusDisclosureRegionalPricing;
+
+  /// No description provided for @continueWithFree.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with Free'**
+  String get continueWithFree;
 
   /// No description provided for @alreadySubscribedRestore.
   ///
@@ -2225,7 +2297,7 @@ abstract class AppLocalizations {
   /// No description provided for @previewBillingNotice.
   ///
   /// In en, this message translates to:
-  /// **'Purchases are handled client-side for now. Server validation can be added later.'**
+  /// **'Subscription terms are shown here before Google Play checkout.'**
   String get previewBillingNotice;
 
   /// No description provided for @billingLoadingPlans.
@@ -2831,13 +2903,13 @@ abstract class AppLocalizations {
   /// No description provided for @buyGameTitle.
   ///
   /// In en, this message translates to:
-  /// **'Buy {game}'**
+  /// **'Unlock {game} Support'**
   String buyGameTitle(Object game);
 
   /// No description provided for @buyGameBody.
   ///
   /// In en, this message translates to:
-  /// **'You unlock {game} with a one-time purchase, forever on this account. Price is {price}. Purchases are handled by Google Play.'**
+  /// **'This one-time purchase unlocks {game} features in BinderVault for this account.\nPrice: {price}\n\nNo subscription required.\nPurchases are handled by Google Play.'**
   String buyGameBody(Object game, Object price);
 
   /// No description provided for @continuePurchaseLabel.
@@ -3062,58 +3134,70 @@ abstract class AppLocalizations {
   /// **'What\'s new in 0.4.7'**
   String get whatsNewDialogTitle;
 
+  /// No description provided for @whatsNewFeaturesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface improvements'**
+  String get whatsNewFeaturesTitle;
+
+  /// No description provided for @whatsNewBugFixesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bug fixes'**
+  String get whatsNewBugFixesTitle;
+
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Collections logic updated: Inventory is now the single source of truth for quantities.'**
+  /// **'Deck updates are now saved correctly only inside the deck, without affecting All Cards.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Add (+1) behavior and free limits are now coherent: deleting a collection always frees the promised slot.'**
+  /// **'Secondary game access now refreshes correctly after purchase revoke or entitlement changes.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'Languages updated: guided onboarding for app language and card languages; Pokemon source is currently English-only (Italian coming soon).'**
+  /// **'BinderVault Plus screens are clearer, with improved pricing readability and purchase disclosures.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'New Home gallery look: under All cards, latest additions are now clearer and easier to scan.'**
+  /// **'Several interface details were refined for better clarity in collection and upgrade flows.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'First-open onboarding is now sequential: steps appear one after another with no overlap.'**
+  /// **''**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
   ///
   /// In en, this message translates to:
-  /// **'Scanner upgraded: set filter by active game, foil toggle, and check button to confirm recognized name.'**
+  /// **''**
   String get whatsNewLine6;
 
   /// No description provided for @whatsNewLine7.
   ///
   /// In en, this message translates to:
-  /// **'Scanner UX improved: startup tutorial with \"do not show again\" and a dedicated tutorial button.'**
+  /// **''**
   String get whatsNewLine7;
 
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **'Visual consistency improved: golden icons and Pokemon database selector aligned with Magic style.'**
+  /// **''**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **'Release cleanup: removed test/dev toggles and helper flows from production build.'**
+  /// **''**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.

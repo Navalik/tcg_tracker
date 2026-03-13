@@ -334,19 +334,20 @@ class PurchaseManager extends ChangeNotifier {
       await _setTier(plusActive ? UserTier.plus : UserTier.free);
       _extraTcgSlots = additionalTcgUnlocked ? 1 : 0;
       await AppSettings.saveExtraTcgSlots(_extraTcgSlots);
-      if (additionalTcgUnlocked) {
-        final secondary = _knownGames.firstWhere(
-          (candidate) => candidate != _primaryGame,
-          orElse: () => AppTcgGame.pokemon,
-        );
-        final key = _ownershipKeyForGame(secondary);
-        if (!_ownedTcgs.contains(key)) {
-          _ownedTcgs = {..._ownedTcgs, key};
-          _pokemonUnlocked = _ownedTcgs.contains(pokemonOwnershipKey);
-          await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
-          await AppSettings.saveOwnedTcgs(_ownedTcgs);
-        }
+      final secondary = _knownGames.firstWhere(
+        (candidate) => candidate != _primaryGame,
+        orElse: () => AppTcgGame.pokemon,
+      );
+      final key = _ownershipKeyForGame(secondary);
+      final nextOwnedTcgs = additionalTcgUnlocked
+          ? {..._ownedTcgs, key}
+          : ({..._ownedTcgs}..remove(key));
+      if (!setEquals(nextOwnedTcgs, _ownedTcgs)) {
+        _ownedTcgs = nextOwnedTcgs;
+        await AppSettings.saveOwnedTcgs(_ownedTcgs);
       }
+      _pokemonUnlocked = _ownedTcgs.contains(pokemonOwnershipKey);
+      await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
       notifyListeners();
     } catch (_) {
       _lastError = 'entitlement_refresh_failed';
@@ -618,7 +619,9 @@ class PurchaseManager extends ChangeNotifier {
     if (error == null) {
       return false;
     }
-    return _isAlreadyOwnedError('${error.code} ${error.message} ${error.details}');
+    return _isAlreadyOwnedError(
+      '${error.code} ${error.message} ${error.details}',
+    );
   }
 
   bool _isAlreadyOwnedError(Object error) {
