@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import '../domain/domain_models.dart';
 import 'pokemon_bulk_service.dart';
 import 'purchase_manager.dart';
 import 'tcg_environment.dart';
+import 'game_registry.dart';
 
 abstract class TcgDataSource {
   Future<void> ensureInstalled({
@@ -47,14 +49,15 @@ class TcgScopeFactory {
 
   static final TcgScopeFactory instance = TcgScopeFactory._();
 
-  static const MagicDataSource _magicDataSource = MagicDataSource();
-  static const PokemonDataSource _pokemonDataSource = PokemonDataSource();
+  static const Map<TcgGameId, TcgDataSource> _dataSources = {
+    TcgGameId.mtg: MagicDataSource(),
+    TcgGameId.pokemon: PokemonDataSource(),
+  };
 
   TcgScope scopeFor(TcgGame game) {
     final config = TcgEnvironmentController.instance.configFor(game);
-    final dataSource = game == TcgGame.pokemon
-        ? _pokemonDataSource
-        : _magicDataSource;
+    final gameId = GameRegistry.instance.gameIdForRuntimeGame(game);
+    final dataSource = _dataSources[gameId] ?? const MagicDataSource();
     return TcgScope(config: config, dataSource: dataSource);
   }
 }

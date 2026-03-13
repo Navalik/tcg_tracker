@@ -2,65 +2,55 @@ import 'package:flutter/foundation.dart';
 
 import 'app_settings.dart';
 import '../db/app_database.dart';
-
-enum TcgGame { mtg, pokemon }
-
-class TcgConfig {
-  const TcgConfig({
-    required this.game,
-    required this.displayName,
-    required this.dbFileName,
-    required this.requiresPurchase,
-    this.iapProductId,
-  });
-
-  final TcgGame game;
-  final String displayName;
-  final String dbFileName;
-  final bool requiresPurchase;
-  final String? iapProductId;
-}
+import '../domain/domain_models.dart';
+import '../providers/provider_registry.dart';
+import 'game_types.dart';
+import 'game_registry.dart';
+export 'game_types.dart';
 
 class TcgEnvironmentController extends ChangeNotifier {
   TcgEnvironmentController._();
 
   static final TcgEnvironmentController instance = TcgEnvironmentController._();
 
-  static const TcgConfig mtgConfig = TcgConfig(
-    game: TcgGame.mtg,
-    displayName: 'Magic',
-    dbFileName: 'scryfall.db',
-    requiresPurchase: false,
-  );
-
-  static const TcgConfig pokemonConfig = TcgConfig(
-    game: TcgGame.pokemon,
-    displayName: 'Pokemon',
-    dbFileName: 'pokemon.db',
-    requiresPurchase: true,
-    iapProductId: 'unlock_pokemon',
-  );
-
-  static const Map<TcgGame, TcgConfig> _configs = {
-    TcgGame.mtg: mtgConfig,
-    TcgGame.pokemon: pokemonConfig,
-  };
-
   TcgGame _currentGame = TcgGame.mtg;
   bool _initialized = false;
 
   TcgGame get currentGame => _currentGame;
   bool get initialized => _initialized;
-  TcgConfig get currentConfig => _configs[_currentGame] ?? mtgConfig;
+  GameDefinition get currentDefinition =>
+      GameRegistry.instance.definitionForRuntimeGame(_currentGame) ??
+      GameRegistry.instance.defaultDefinition();
+  TcgConfig get currentConfig => _configFromDefinition(currentDefinition);
+  TcgGameId get currentGameId => currentDefinition.gameId;
+  GameCapabilities get currentCapabilities => currentDefinition.capabilities;
+  GameProviderBundle? get currentProviders => currentDefinition.providers;
 
-  TcgConfig configFor(TcgGame game) => _configs[game] ?? mtgConfig;
+  TcgConfig configFor(TcgGame game) {
+    final definition =
+        GameRegistry.instance.definitionForRuntimeGame(game) ??
+        GameRegistry.instance.defaultDefinition();
+    return _configFromDefinition(definition);
+  }
+
+  GameDefinition definitionFor(TcgGame game) =>
+      GameRegistry.instance.definitionForRuntimeGame(game) ??
+      GameRegistry.instance.defaultDefinition();
+
+  GameCapabilities capabilitiesFor(TcgGame game) =>
+      definitionFor(game).capabilities;
+
+  GameProviderBundle? providersFor(TcgGame game) => definitionFor(game).providers;
 
   Future<void> init() async {
     if (_initialized) {
       return;
     }
     final stored = await AppSettings.loadSelectedTcgGame();
-    _currentGame = stored == AppTcgGame.pokemon ? TcgGame.pokemon : TcgGame.mtg;
+    final definition =
+        GameRegistry.instance.definitionForSettingsGame(stored) ??
+        GameRegistry.instance.defaultDefinition();
+    _currentGame = definition.runtimeGame ?? TcgGame.mtg;
     await ScryfallDatabase.instance.setDatabaseFileName(currentConfig.dbFileName);
     _initialized = true;
     notifyListeners();
@@ -72,10 +62,18 @@ class TcgEnvironmentController extends ChangeNotifier {
       return;
     }
     _currentGame = game;
-    await AppSettings.saveSelectedTcgGame(
-      game == TcgGame.pokemon ? AppTcgGame.pokemon : AppTcgGame.mtg,
-    );
+    await AppSettings.saveSelectedTcgGame(definitionFor(game).appSettingsGame ?? AppTcgGame.mtg);
     await ScryfallDatabase.instance.setDatabaseFileName(currentConfig.dbFileName);
     notifyListeners();
+  }
+
+  TcgConfig _configFromDefinition(GameDefinition definition) {
+    return TcgConfig(
+      game: definition.runtimeGame ?? TcgGame.mtg,
+      displayName: definition.displayName,
+      dbFileName: definition.dbFileName,
+      requiresPurchase: definition.requiresPurchase,
+      iapProductId: definition.iapProductId,
+    );
   }
 }

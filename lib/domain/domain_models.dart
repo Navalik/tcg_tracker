@@ -1,6 +1,9 @@
 enum TcgGameId {
   mtg('mtg'),
-  pokemon('pokemon');
+  pokemon('pokemon'),
+  onePiece('one_piece'),
+  yugioh('yugioh'),
+  lorcana('lorcana');
 
   const TcgGameId(this.value);
 
