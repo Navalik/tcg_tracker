@@ -1,4 +1,4 @@
-﻿part of 'package:tcg_tracker/main.dart';
+part of 'package:tcg_tracker/main.dart';
 
 class _CardDetail {
   const _CardDetail(this.label, this.value);
@@ -20,15 +20,12 @@ class _DetailRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: const Color(0xFFBFAE95),
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: const Color(0xFFBFAE95)),
         ),
         const SizedBox(height: 4),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
+        Text(value, style: Theme.of(context).textTheme.bodyMedium),
       ],
     );
   }
@@ -389,7 +386,10 @@ Color _manaColorFromCode(String code) {
   }
 }
 
-Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) {
+Decoration _cardTintDecoration(
+  BuildContext context,
+  CollectionCardEntry entry,
+) {
   final base = Theme.of(context).colorScheme.surface;
   final accents = _accentColorsForCard(
     colors: entry.colors,
@@ -429,7 +429,10 @@ Decoration _cardTintDecoration(BuildContext context, CollectionCardEntry entry) 
   );
 }
 
-Decoration _priceBadgeDecoration(BuildContext context, CollectionCardEntry entry) {
+Decoration _priceBadgeDecoration(
+  BuildContext context,
+  CollectionCardEntry entry,
+) {
   final base = Theme.of(context).colorScheme.surface;
   final accents = _accentColorsForCard(
     colors: entry.colors,
@@ -484,4 +487,3 @@ Widget _raritySquare(String raw) {
     ),
   );
 }
-
