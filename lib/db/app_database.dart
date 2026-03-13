@@ -87,6 +87,7 @@ LazyDatabase _openConnection(String fileName) {
 @DriftDatabase(tables: [Cards, Collections, CollectionCards])
 class AppDatabase extends _$AppDatabase {
   AppDatabase({required String fileName}) : super(_openConnection(fileName));
+  AppDatabase.forTesting(QueryExecutor executor) : super(executor);
 
   @override
   int get schemaVersion => 9;
