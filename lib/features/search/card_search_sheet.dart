@@ -117,6 +117,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   bool get _isPokemonSearch => _activeSearchGame == AppTcgGame.pokemon;
 
+  bool get _shouldAutoLoadInitialResults {
+    return _query.trim().isNotEmpty || _hasRequiredAdvancedFilters();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -177,7 +181,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           : _isLimitedPrintCoverage(bulkType);
       _searchLanguages = cardLanguages;
     });
-    if (_query.trim().isNotEmpty) {
+    if (_shouldAutoLoadInitialResults) {
       await _runSearch(forceRefresh: true);
     }
   }
@@ -219,9 +223,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final trimmedQuery = _query.trim();
     final meetsMinQueryLength = _query.length >= 2;
     final shouldFetchByFilters =
-        trimmedQuery.isEmpty &&
         _hasActiveAdvancedFilters() &&
-        _hasNarrowingFilters();
+        (_hasNarrowingFilters() || trimmedQuery.isNotEmpty);
     if (!meetsMinQueryLength && !shouldFetchByFilters) {
       if (mounted) {
         setState(() {
@@ -804,7 +807,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       manaMax: base.manaMax ?? required.manaMax,
       hpMin: base.hpMin ?? required.hpMin,
       hpMax: base.hpMax ?? required.hpMax,
-      format: base.format,
+      format: base.format ?? required.format,
       collectorNumber: base.collectorNumber ?? required.collectorNumber,
       sets: {...required.sets, ...base.sets},
       rarities: {...required.rarities, ...base.rarities},

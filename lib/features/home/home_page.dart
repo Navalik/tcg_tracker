@@ -1070,6 +1070,79 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
+  Widget _buildMtgSyncChip({
+    required IconData icon,
+    required String percentText,
+    required String title,
+    required String metaLine,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9C46A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF5DEA0), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: const Color(0xFF1C1510)),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0x1A1C1510),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$percentText%',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF1C1510),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF1C1510),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            metaLine,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF4A3720),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _pokemonDownloadErrorLabel(String raw) {
     final value = raw.trim().toLowerCase();
     final italian = _isItalianUi();
@@ -1142,6 +1215,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return true;
     }
     return collection.name.startsWith(_setPrefix);
+  }
+
+  bool _isValidSetCollection(CollectionInfo collection) {
+    if (!_isSetCollection(collection)) {
+      return false;
+    }
+    final setCode = _setCodeForCollection(collection);
+    return setCode != null && setCode.trim().isNotEmpty;
   }
 
   bool _isBasicLandsCollection(CollectionInfo collection) {
@@ -1260,7 +1341,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   int _setCollectionCount() {
-    return _collections.where(_isSetCollection).length;
+    return _collections.where(_isValidSetCollection).length;
   }
 
   bool _canCreateSetCollection() {
@@ -1282,6 +1363,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .where(
           (item) =>
               item.type == CollectionType.custom &&
+              !_isSetCollection(item) &&
               !_isDeckSideboardCollection(item),
         )
         .length;
@@ -1294,7 +1376,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   int _smartCollectionCount() {
     return _collections
-        .where((item) => item.type == CollectionType.smart)
+        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
         .length;
   }
 
@@ -1573,13 +1655,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final canCreateDeck = _canCreateDeckCollection();
     final canCreateWishlist = _canCreateWishlist();
     final setCollections = nonDeckCollections
-        .where(_isSetCollection)
+        .where(_isValidSetCollection)
         .toList(growable: false);
     final customCollections = nonDeckCollections
-        .where((item) => item.type == CollectionType.custom)
+        .where((item) => item.type == CollectionType.custom && !_isSetCollection(item))
         .toList(growable: false);
     final smartCollections = nonDeckCollections
-        .where((item) => item.type == CollectionType.smart)
+        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
         .toList(growable: false);
     final wishlistCollections = nonDeckCollections
         .where((item) => item.type == CollectionType.wishlist)
@@ -2246,7 +2328,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       details.add(_CardDetail(label, text));
     }
 
-    add(l10n.detailRarity, entry.rarity);
+    add(l10n.detailRarity, _formatRarity(context, entry.rarity));
     add(l10n.detailSetName, entry.setName);
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
@@ -2578,16 +2660,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
 
-    final setItems = userCollections.where(_isSetCollection).toList();
+    final setItems = userCollections.where(_isValidSetCollection).toList();
     final customItems = userCollections
         .where(
           (item) =>
               item.type == CollectionType.custom &&
+              !_isSetCollection(item) &&
               !_isDeckSideboardCollection(item),
         )
         .toList();
     final smartItems = userCollections
-        .where((item) => item.type == CollectionType.smart)
+        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
         .toList();
     final deckItems = userCollections
         .where((item) => item.type == CollectionType.deck)
@@ -6540,9 +6623,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       ...?((pinnedAllCardsCard == null) ? null : [pinnedAllCardsCard]),
       ...?((pinnedLatestAddsHeader == null) ? null : [pinnedLatestAddsHeader]),
     ];
-    final blockingChipTopPadding = !_isMtgActiveGame && isBlockingSync
-        ? 146.0
-        : 86.0;
     final pokemonPhase = (!_isMtgActiveGame && isBlockingSync)
         ? _pokemonSyncPhaseInfo()
         : null;
@@ -6572,20 +6652,42 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             metaLine: pokemonSyncMeta,
           )
         : null;
-    final blockingLabel = _bulkDownloading
-        ? (!_isMtgActiveGame && pokemonPhase != null
-              ? '${pokemonPhase.index}/${pokemonPhase.total} - $pokemonPercentText%'
-              : (_bulkDownloadTotal > 0
-                    ? l10n.downloadingWithPercent(
-                        (_bulkDownloadProgress * 100).clamp(0, 100).round(),
-                      )
-                    : l10n.downloading))
-        : (!_isMtgActiveGame && pokemonPhase != null
-              ? '${pokemonPhase.index}/${pokemonPhase.total} - $pokemonPercentText%'
-              : l10n.importingCardsWithCount(
-                  (_bulkImportProgress * 100).clamp(0, 100).round(),
-                  _bulkImportedCount,
-                ));
+    final mtgPercentValue = (_bulkDownloading
+            ? _bulkDownloadProgress
+            : _bulkImportProgress) *
+        100;
+    final mtgPercentText = mtgPercentValue >= 99.95
+        ? '100'
+        : mtgPercentValue.clamp(0.0, 100.0).toStringAsFixed(1);
+    final mtgTitle = _bulkDownloading
+        ? (_bulkDownloadTotal > 0
+              ? l10n.downloadingUpdateWithTotal(
+                  (_bulkDownloadProgress * 100).clamp(0, 100).round(),
+                  _formatBytes(_bulkDownloadReceived),
+                  _formatBytes(_bulkDownloadTotal),
+                )
+              : l10n.downloadingUpdateNoTotal(
+                  _formatBytes(_bulkDownloadReceived),
+                ))
+        : l10n.importingCardsWithCount(
+            (_bulkImportProgress * 100).clamp(0, 100).round(),
+            _bulkImportedCount,
+          );
+    final mtgMeta = ((_mtgSyncStatus ?? '').trim().isNotEmpty)
+        ? _mtgSyncStatus!.trim()
+        : (_bulkDownloading
+              ? l10n.downloading
+              : (_isItalianUi() ? 'Importazione in corso' : 'Importing'));
+    final mtgSyncChip = (_isMtgActiveGame && isBlockingSync)
+        ? _buildMtgSyncChip(
+            icon: _bulkDownloading
+                ? Icons.download_rounded
+                : Icons.inventory_2_rounded,
+            percentText: mtgPercentText,
+            title: mtgTitle,
+            metaLine: mtgMeta,
+          )
+        : null;
     final bulkLabel = _bulkTypeLabel(l10n, _selectedBulkType);
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -6659,61 +6761,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                         )
                       else if (_bulkDownloading)
                         _isMtgActiveGame
-                            ? Text(
-                                _bulkDownloadTotal > 0
-                                    ? l10n.downloadingUpdateWithTotal(
-                                        (_bulkDownloadProgress * 100)
-                                            .clamp(0, 100)
-                                            .round(),
-                                        _formatBytes(_bulkDownloadReceived),
-                                        _formatBytes(_bulkDownloadTotal),
-                                      )
-                                    : l10n.downloadingUpdateNoTotal(
-                                        _formatBytes(_bulkDownloadReceived),
-                                      ),
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: const Color(0xFFE3B55C)),
-                              )
+                            ? (mtgSyncChip ?? const SizedBox.shrink())
                             : (pokemonSyncChip ??
                                   const SizedBox.shrink())
                       else if (_bulkImporting)
                         _isMtgActiveGame
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    l10n.importingCardsWithCount(
-                                      (_bulkImportProgress * 100)
-                                          .clamp(0, 100)
-                                          .round(),
-                                      _bulkImportedCount,
-                                    ),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodySmall
-                                        ?.copyWith(
-                                          color: const Color(0xFFE3B55C),
-                                        ),
-                                  ),
-                                  if ((_mtgSyncStatus ?? '')
-                                      .trim()
-                                      .isNotEmpty) ...[
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      _mtgSyncStatus!,
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFFBFAE95),
-                                          ),
-                                    ),
-                                  ],
-                                ],
-                              )
+                            ? (mtgSyncChip ?? const SizedBox.shrink())
                             : (pokemonSyncChip ??
                                   const SizedBox.shrink())
                       else if (_bulkDownloadError != null)
@@ -6907,33 +6960,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ),
           if (isBlockingSync) ...[
             const ModalBarrier(dismissible: false, color: Color(0x880E0A08)),
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: EdgeInsets.only(top: blockingChipTopPadding),
-                  child: Chip(
-                    avatar: const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    label: Text(blockingLabel),
-                    backgroundColor: const Color(0xFFE9C46A),
-                    labelStyle: Theme.of(context).textTheme.labelLarge
-                        ?.copyWith(
-                          color: const Color(0xFF1C1510),
-                          fontWeight: FontWeight.w800,
-                        ),
-                    side: BorderSide.none,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ),
-            ),
           ],
         ],
       ),

@@ -3131,55 +3131,55 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.5.0'**
+  /// **'What\'s new in 0.5.1'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon catalog update'**
+  /// **'Smart collection improvements'**
   String get whatsNewFeaturesTitle;
 
   /// No description provided for @whatsNewBugFixesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Fixes and reliability'**
+  /// **'Minor fixes'**
   String get whatsNewBugFixesTitle;
 
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon now installs from the hosted GitHub bundle, with a more reliable offline catalog flow.'**
+  /// **'Search started from a smart collection now always respects the collection\'s original filter.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon set names now follow the app language, while card language stays selectable when you add a set.'**
+  /// **'Search now shows matching cards immediately when opened, avoiding empty screens before typing.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon search now matches localized names such as Kissara while keeping the correct localized card name in results.'**
+  /// **'As you type, results refresh while staying inside the smart collection scope.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Search gallery cards were aligned with the All Cards layout for a more consistent browsing flow.'**
+  /// **'Advanced filters now show a summary of the collection\'s original filter.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'The Pokemon sync badge is clearer and now shows phase, progress, and status in a single chip.'**
+  /// **'Options already enforced by the original filter are no longer duplicated in additional filters.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
   ///
   /// In en, this message translates to:
-  /// **''**
+  /// **'The sync banner was visually aligned across Magic and Pokemon.'**
   String get whatsNewLine6;
 
   /// No description provided for @whatsNewLine7.
@@ -3191,13 +3191,13 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon image loading is now consistent across search, home, and collection views, with better fallbacks for missing art.'**
+  /// **'Fixed the overlap between sync indicators on the home screen.'**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **'Several Pokemon import edge cases were fixed, including duplicate localizations, metadata conflicts, and incomplete EN/IT merges.'**
+  /// **'Filter presentation was updated to reduce cases where adding a card looked like it had failed.'**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.

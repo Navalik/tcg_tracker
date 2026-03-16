@@ -1732,47 +1732,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.0';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.1';
 
   @override
-  String get whatsNewFeaturesTitle => 'Pokemon catalog update';
+  String get whatsNewFeaturesTitle => 'Smart collection improvements';
 
   @override
-  String get whatsNewBugFixesTitle => 'Fixes and reliability';
+  String get whatsNewBugFixesTitle => 'Minor fixes';
 
   @override
   String get whatsNewLine1 =>
-      'Pokemon now installs from the hosted GitHub bundle, with a more reliable offline catalog flow.';
+      'Search started from a smart collection now always respects the collection\'s original filter.';
 
   @override
   String get whatsNewLine2 =>
-      'Pokemon set names now follow the app language, while card language stays selectable when you add a set.';
+      'Search now shows matching cards immediately when opened, avoiding empty screens before typing.';
 
   @override
   String get whatsNewLine3 =>
-      'Pokemon search now matches localized names such as Kissara while keeping the correct localized card name in results.';
+      'As you type, results refresh while staying inside the smart collection scope.';
 
   @override
   String get whatsNewLine4 =>
-      'Search gallery cards were aligned with the All Cards layout for a more consistent browsing flow.';
+      'Advanced filters now show a summary of the collection\'s original filter.';
 
   @override
   String get whatsNewLine5 =>
-      'The Pokemon sync badge is clearer and now shows phase, progress, and status in a single chip.';
+      'Options already enforced by the original filter are no longer duplicated in additional filters.';
 
   @override
-  String get whatsNewLine6 => '';
+  String get whatsNewLine6 =>
+      'The sync banner was visually aligned across Magic and Pokemon.';
 
   @override
   String get whatsNewLine7 => '';
 
   @override
   String get whatsNewLine8 =>
-      'Pokemon image loading is now consistent across search, home, and collection views, with better fallbacks for missing art.';
+      'Fixed the overlap between sync indicators on the home screen.';
 
   @override
   String get whatsNewLine9 =>
-      'Several Pokemon import edge cases were fixed, including duplicate localizations, metadata conflicts, and incomplete EN/IT merges.';
+      'Filter presentation was updated to reduce cases where adding a card looked like it had failed.';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

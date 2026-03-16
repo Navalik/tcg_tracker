@@ -79,6 +79,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   int? _missingCount;
   bool _autoAddShown = false;
   Map<String, int> _setTotalsByCode = {};
+  Map<String, String> _localizedSetNamesByCode = {};
   _CardSortMode _sortMode = _CardSortMode.name;
   bool _selectionMode = false;
   final Set<String> _selectedCardIds = {};
@@ -224,6 +225,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _cards.clear();
       _sideboardCards.clear();
       _setTotalsByCode = {};
+      _localizedSetNamesByCode = {};
       _selectionMode = false;
       _selectedCardIds.clear();
     });
@@ -557,6 +559,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       final totals = newSetCodes.isEmpty
           ? <String, int>{}
           : await ScryfallDatabase.instance.fetchSetTotalsForCodes(newSetCodes);
+      final localizedSetNames = newSetCodes.isEmpty
+          ? const <String, String>{}
+          : await appRepositories.sets.fetchSetNamesForCodes(
+              newSetCodes,
+              gameId: _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg,
+            );
 
       if (!mounted) {
         return;
@@ -564,6 +572,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       setState(() {
         _cards.addAll(cards);
         _setTotalsByCode.addAll(totals);
+        _localizedSetNamesByCode.addAll(
+          localizedSetNames.map(
+            (code, name) => MapEntry(code.trim().toLowerCase(), name.trim()),
+          ),
+        );
         _loadedOffset += cards.length;
         _hasMore = cards.length == _pageSize;
         _loadingMore = false;
@@ -1011,6 +1024,11 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   String _setLabelForEntry(CollectionCardEntry entry) {
+    final code = entry.setCode.trim().toLowerCase();
+    final localized = _localizedSetNamesByCode[code];
+    if (localized != null && localized.isNotEmpty) {
+      return localized;
+    }
     if (entry.setName.trim().isNotEmpty) {
       return entry.setName.trim();
     }

@@ -274,7 +274,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
       details.add(_CardDetail(label, text));
     }
 
-    add(l10n.detailRarity, entry.rarity);
+    add(l10n.detailRarity, _formatRarity(context, entry.rarity));
     add(l10n.detailSetName, entry.setName);
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);

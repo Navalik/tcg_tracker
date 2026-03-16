@@ -3,6 +3,78 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
+  bool _isItalianCollectionUi() {
+    return Localizations.localeOf(context).languageCode.toLowerCase().startsWith(
+      'it',
+    );
+  }
+
+  String _originalCollectionFilterTitle() {
+    return _isItalianCollectionUi()
+        ? 'Filtro originale della collection'
+        : 'Original collection filter';
+  }
+
+  String _additionalFiltersTitle() {
+    return _isItalianCollectionUi() ? 'Filtri aggiuntivi' : 'Additional filters';
+  }
+
+  List<String> _requiredCollectionFilterLabels(
+    CollectionFilter filter,
+    Map<String, String> availableSetCodes,
+  ) {
+    final labels = <String>[];
+    final name = filter.name?.trim();
+    if (name != null && name.isNotEmpty) {
+      labels.add(name);
+    }
+    final artist = filter.artist?.trim();
+    if (artist != null && artist.isNotEmpty) {
+      labels.add(
+        _isItalianCollectionUi() ? 'Artista: $artist' : 'Artist: $artist',
+      );
+    }
+    final collector = filter.collectorNumber?.trim();
+    if (collector != null && collector.isNotEmpty) {
+      labels.add(
+        _isItalianCollectionUi()
+            ? 'Numero: $collector'
+            : 'Collector: $collector',
+      );
+    }
+    final format = filter.format?.trim();
+    if (format != null && format.isNotEmpty) {
+      labels.add(
+        _isItalianCollectionUi() ? 'Formato: $format' : 'Format: $format',
+      );
+    }
+    if (filter.manaMin != null || filter.manaMax != null) {
+      final min = filter.manaMin?.toString() ?? '-';
+      final max = filter.manaMax?.toString() ?? '-';
+      labels.add('Mana: $min-$max');
+    }
+    if (filter.hpMin != null || filter.hpMax != null) {
+      final min = filter.hpMin?.toString() ?? '-';
+      final max = filter.hpMax?.toString() ?? '-';
+      labels.add('HP: $min-$max');
+    }
+    labels.addAll(
+      filter.sets.map(
+        (code) =>
+            availableSetCodes[code] ??
+            (code.trim().isEmpty ? code : code.toUpperCase()),
+      ),
+    );
+    labels.addAll(filter.rarities.map((value) => _formatRarity(context, value)));
+    labels.addAll(filter.colors.map(_colorLabel));
+    labels.addAll(filter.types.map(_typeLabel));
+    labels.addAll(filter.pokemonCategories.map(_typeLabel));
+    labels.addAll(filter.pokemonSubtypes);
+    labels.addAll(filter.pokemonRegulationMarks.map((value) => 'Reg. $value'));
+    labels.addAll(filter.pokemonStages);
+    return labels.where((value) => value.trim().isNotEmpty).toList();
+  }
+
   Future<void> _showAdvancedFilters() async {
     final base = _baseVisibleCards();
     final availableRarities = <String>{};
@@ -21,10 +93,35 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
       availableTypes.addAll(_cardTypes(entry));
     }
 
-    final tempRarities = _selectedRarities.toSet();
-    final tempSetCodes = _selectedSetCodes.toSet();
-    final tempColors = _selectedColors.toSet();
-    final tempTypes = _selectedTypes.toSet();
+    final requiredFilter = _effectiveFilter();
+    final requiredRarities = (requiredFilter?.rarities ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredSetCodes = (requiredFilter?.sets ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredColors = (requiredFilter?.colors ?? const <String>{})
+        .map((value) => value.trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredTypes = (requiredFilter?.types ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final tempRarities = _selectedRarities
+        .where((value) => !requiredRarities.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempSetCodes = _selectedSetCodes
+        .where((value) => !requiredSetCodes.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempColors = _selectedColors
+        .where((value) => !requiredColors.contains(value.trim().toUpperCase()))
+        .toSet();
+    final tempTypes = _selectedTypes
+        .where((value) => !requiredTypes.contains(value.trim().toLowerCase()))
+        .toSet();
     final minController = TextEditingController(
       text: _manaValueMin?.toString() ?? '',
     );
@@ -72,11 +169,42 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                     onSelected: (_) => setSheetState(() => toggle(item)),
                   );
                 }).toList(),
+                );
+            }
+
+            Widget buildInfoChipRow(List<String> labels) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: labels
+                    .map(
+                      (label) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF221B15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF5B4938)),
+                        ),
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            color: Color(0xFFE9C46A),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
               );
             }
 
             final rarityOrder = ['common', 'uncommon', 'rare', 'mythic'];
-            final sortedRarities = availableRarities.toList()
+            final sortedRarities = availableRarities
+                .where((value) => !requiredRarities.contains(value))
+                .toList()
               ..sort((a, b) {
                 final ai = rarityOrder.indexOf(a);
                 final bi = rarityOrder.indexOf(b);
@@ -87,7 +215,9 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                 if (bi == -1) return -1;
                 return ai.compareTo(bi);
               });
-            final sortedSets = availableSetCodes.entries.toList()
+            final sortedSets = availableSetCodes.entries
+                .where((entry) => !requiredSetCodes.contains(entry.key))
+                .toList()
               ..sort((a, b) => a.value.compareTo(b.value));
             final filteredSets = sortedSets.where((entry) {
               if (setQuery.isEmpty) {
@@ -99,7 +229,11 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
             final colorOrder = _isPokemonActive
                 ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
                 : const ['W', 'U', 'B', 'R', 'G', 'C'];
-            final sortedColors = availableColors.toList()
+            final sortedColors = availableColors
+                .where(
+                  (value) => !requiredColors.contains(value.trim().toUpperCase()),
+                )
+                .toList()
               ..sort((a, b) {
                 final ai = colorOrder.indexOf(a);
                 final bi = colorOrder.indexOf(b);
@@ -114,7 +248,19 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                 }
                 return ai.compareTo(bi);
               });
-            final sortedTypes = availableTypes.toList()..sort();
+            final sortedTypes = availableTypes
+                .where(
+                  (value) => !requiredTypes.contains(value.trim().toLowerCase()),
+                )
+                .toList()
+              ..sort();
+            final requiredFilterLabels =
+                requiredFilter == null || widget.isDeckCollection
+                ? const <String>[]
+                : _requiredCollectionFilterLabels(
+                    requiredFilter,
+                    availableSetCodes,
+                  );
 
             return Container(
               margin: const EdgeInsets.all(16),
@@ -148,6 +294,43 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                         ),
                       ],
                     ),
+                    if (requiredFilterLabels.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF18120E),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF3A2F24)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _originalCollectionFilterTitle(),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _isItalianCollectionUi()
+                                  ? 'Questa collection resta sempre dentro questo perimetro.'
+                                  : 'This collection always stays inside this scope.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFFBFAE95),
+                                  ),
+                            ),
+                            const SizedBox(height: 10),
+                            buildInfoChipRow(requiredFilterLabels),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _additionalFiltersTitle(),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ],
                     if (sortedRarities.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -163,7 +346,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                             tempRarities.remove(value);
                           }
                         },
-                        (value) => _formatRarity(value),
+                        (value) => _formatRarity(context, value),
                       ),
                     ],
                     if (sortedSets.isNotEmpty) ...[

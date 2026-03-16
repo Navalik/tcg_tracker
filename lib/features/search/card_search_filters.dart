@@ -3,6 +3,78 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _CardSearchFiltersSection on _CardSearchSheetState {
+  bool _isItalianSearchUi() {
+    return Localizations.localeOf(context).languageCode.toLowerCase().startsWith(
+      'it',
+    );
+  }
+
+  String _originalCollectionFilterTitle() {
+    return _isItalianSearchUi()
+        ? 'Filtro originale della collection'
+        : 'Original collection filter';
+  }
+
+  String _additionalFiltersTitle() {
+    return _isItalianSearchUi() ? 'Filtri aggiuntivi' : 'Additional filters';
+  }
+
+  List<String> _requiredFilterSummaryLabels(
+    CollectionFilter filter,
+    Map<String, String> availableSetCodes,
+  ) {
+    final labels = <String>[];
+    final name = filter.name?.trim();
+    if (name != null && name.isNotEmpty) {
+      labels.add(name);
+    }
+    final artist = filter.artist?.trim();
+    if (artist != null && artist.isNotEmpty) {
+      labels.add(
+        _isItalianSearchUi() ? 'Artista: $artist' : 'Artist: $artist',
+      );
+    }
+    final collector = filter.collectorNumber?.trim();
+    if (collector != null && collector.isNotEmpty) {
+      labels.add(
+        _isItalianSearchUi()
+            ? 'Numero: $collector'
+            : 'Collector: $collector',
+      );
+    }
+    final format = filter.format?.trim();
+    if (format != null && format.isNotEmpty) {
+      labels.add(
+        _isItalianSearchUi() ? 'Formato: $format' : 'Format: $format',
+      );
+    }
+    if (filter.manaMin != null || filter.manaMax != null) {
+      final min = filter.manaMin?.toString() ?? '-';
+      final max = filter.manaMax?.toString() ?? '-';
+      labels.add(_isItalianSearchUi() ? 'Mana: $min-$max' : 'Mana: $min-$max');
+    }
+    if (filter.hpMin != null || filter.hpMax != null) {
+      final min = filter.hpMin?.toString() ?? '-';
+      final max = filter.hpMax?.toString() ?? '-';
+      labels.add(_isItalianSearchUi() ? 'HP: $min-$max' : 'HP: $min-$max');
+    }
+    labels.addAll(
+      filter.sets.map(
+        (code) =>
+            availableSetCodes[code] ??
+            (code.trim().isEmpty ? code : code.toUpperCase()),
+      ),
+    );
+    labels.addAll(filter.rarities.map((value) => _formatRarity(context, value)));
+    labels.addAll(filter.colors.map(_colorLabel));
+    labels.addAll(filter.types.map(_typeLabel));
+    labels.addAll(filter.pokemonCategories.map(_typeLabel));
+    labels.addAll(filter.pokemonSubtypes);
+    labels.addAll(filter.pokemonRegulationMarks.map((value) => 'Reg. $value'));
+    labels.addAll(filter.pokemonStages);
+    return labels.where((value) => value.trim().isNotEmpty).toList();
+  }
+
   Future<void> _showAdvancedFilters() async {
     final availableRarities = <String>{};
     final availableSetCodes = <String, String>{};
@@ -92,13 +164,68 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
       return;
     }
 
-    final tempRarities = _selectedRarities.toSet();
-    final tempSetCodes = _selectedSetCodes.toSet();
-    final tempColors = _selectedColors.toSet();
-    final tempTypes = _selectedTypes.toSet();
-    final tempPokemonCategories = _selectedPokemonCategories.toSet();
-    final tempPokemonRegulationMarks = _selectedPokemonRegulationMarks.toSet();
-    final tempPokemonStages = _selectedPokemonStages.toSet();
+    final requiredFilter = widget.requiredFilter;
+    final requiredRarities = (requiredFilter?.rarities ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredSetCodes = (requiredFilter?.sets ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredColors = (requiredFilter?.colors ?? const <String>{})
+        .map((value) => value.trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredTypes = (requiredFilter?.types ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final requiredPokemonCategories =
+        (requiredFilter?.pokemonCategories ?? const <String>{})
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toSet();
+    final requiredPokemonRegulationMarks =
+        (requiredFilter?.pokemonRegulationMarks ?? const <String>{})
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toSet();
+    final requiredPokemonStages =
+        (requiredFilter?.pokemonStages ?? const <String>{})
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toSet();
+    final tempRarities = _selectedRarities
+        .where((value) => !requiredRarities.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempSetCodes = _selectedSetCodes
+        .where((value) => !requiredSetCodes.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempColors = _selectedColors
+        .where((value) => !requiredColors.contains(value.trim().toUpperCase()))
+        .toSet();
+    final tempTypes = _selectedTypes
+        .where((value) => !requiredTypes.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempPokemonCategories = _selectedPokemonCategories
+        .where(
+          (value) =>
+              !requiredPokemonCategories.contains(value.trim().toLowerCase()),
+        )
+        .toSet();
+    final tempPokemonRegulationMarks = _selectedPokemonRegulationMarks
+        .where(
+          (value) => !requiredPokemonRegulationMarks.contains(
+            value.trim().toLowerCase(),
+          ),
+        )
+        .toSet();
+    final tempPokemonStages = _selectedPokemonStages
+        .where(
+          (value) => !requiredPokemonStages.contains(value.trim().toLowerCase()),
+        )
+        .toSet();
     final nameController = TextEditingController(text: _query);
     final collectorController = TextEditingController(
       text: _collectorNumberQuery,
@@ -162,11 +289,42 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                     onSelected: (_) => setSheetState(() => toggle(item)),
                   );
                 }).toList(),
+                );
+            }
+
+            Widget buildInfoChipRow(List<String> labels) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: labels
+                    .map(
+                      (label) => Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF221B15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF5B4938)),
+                        ),
+                        child: Text(
+                          label,
+                          style: const TextStyle(
+                            color: Color(0xFFE9C46A),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
               );
             }
 
             final rarityOrder = ['common', 'uncommon', 'rare', 'mythic'];
-            final sortedRarities = availableRarities.toList()
+            final sortedRarities = availableRarities
+                .where((value) => !requiredRarities.contains(value))
+                .toList()
               ..sort((a, b) {
                 final ai = rarityOrder.indexOf(a);
                 final bi = rarityOrder.indexOf(b);
@@ -177,7 +335,9 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                 if (bi == -1) return -1;
                 return ai.compareTo(bi);
               });
-            final sortedSets = availableSetCodes.entries.toList()
+            final sortedSets = availableSetCodes.entries
+                .where((entry) => !requiredSetCodes.contains(entry.key))
+                .toList()
               ..sort((a, b) => a.value.compareTo(b.value));
             final filteredSets = sortedSets.where((entry) {
               if (setQuery.isEmpty) {
@@ -189,7 +349,11 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
             final colorOrder = _isPokemonSearch
                 ? const ['G', 'R', 'L', 'U', 'B', 'F', 'D', 'W', 'C', 'M', 'N']
                 : const ['W', 'U', 'B', 'R', 'G', 'C'];
-            final sortedColors = availableColors.toList()
+            final sortedColors = availableColors
+                .where(
+                  (value) => !requiredColors.contains(value.trim().toUpperCase()),
+                )
+                .toList()
               ..sort((a, b) {
                 final ai = colorOrder.indexOf(a);
                 final bi = colorOrder.indexOf(b);
@@ -204,7 +368,12 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                 }
                 return ai.compareTo(bi);
               });
-            final sortedTypes = availableTypes.toList()..sort();
+            final sortedTypes = availableTypes
+                .where(
+                  (value) => !requiredTypes.contains(value.trim().toLowerCase()),
+                )
+                .toList()
+              ..sort();
             final filteredRarities = sortedRarities;
             final filteredColors = sortedColors;
             final filteredTypes = sortedTypes
@@ -228,6 +397,9 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
               'G',
               'H',
             ];
+            final requiredFilterLabels = requiredFilter == null
+                ? const <String>[]
+                : _requiredFilterSummaryLabels(requiredFilter, availableSetCodes);
 
             return Container(
               margin: const EdgeInsets.all(16),
@@ -261,7 +433,46 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                         ),
                       ],
                     ),
+                    if (requiredFilterLabels.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF18120E),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFF3A2F24)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _originalCollectionFilterTitle(),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _isItalianSearchUi()
+                                  ? 'La ricerca resta sempre dentro questo perimetro.'
+                                  : 'Search always stays inside this scope.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
+                                    color: const Color(0xFFBFAE95),
+                                  ),
+                            ),
+                            const SizedBox(height: 10),
+                            buildInfoChipRow(requiredFilterLabels),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
+                    if (requiredFilterLabels.isNotEmpty) ...[
+                      Text(
+                        _additionalFiltersTitle(),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     Text(
                       l10n.cardName,
                       style: Theme.of(context).textTheme.titleSmall,
@@ -304,7 +515,7 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                             tempRarities.remove(value);
                           }
                         },
-                        (value) => _formatRarity(value),
+                        (value) => _formatRarity(context, value),
                       ),
                     ],
                     if (sortedSets.isNotEmpty) ...[

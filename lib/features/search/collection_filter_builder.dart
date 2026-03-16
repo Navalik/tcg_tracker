@@ -546,7 +546,7 @@ class _CollectionFilterBuilderPageState
               }
               _schedulePreviewUpdate();
             },
-            (value) => _formatRarity(value),
+            (value) => _formatRarity(context, value),
           ),
           const SizedBox(height: 16),
           Text(

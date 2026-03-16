@@ -1753,47 +1753,48 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewButtonLabel => 'Novita';
 
   @override
-  String get whatsNewDialogTitle => 'Novita versione 0.5.0';
+  String get whatsNewDialogTitle => 'Novita versione 0.5.1';
 
   @override
-  String get whatsNewFeaturesTitle => 'Aggiornamento catalogo Pokemon';
+  String get whatsNewFeaturesTitle => 'Migliorie smart collection';
 
   @override
-  String get whatsNewBugFixesTitle => 'Correzioni e affidabilita';
+  String get whatsNewBugFixesTitle => 'Correzioni minori';
 
   @override
   String get whatsNewLine1 =>
-      'Pokemon ora viene installato dal bundle GitHub pubblicato, con un flusso catalogo offline piu affidabile.';
+      'La ricerca da smart collection ora rispetta sempre il filtro originale della collection.';
 
   @override
   String get whatsNewLine2 =>
-      'I nomi dei set Pokemon ora seguono la lingua dell\'app, mentre la lingua delle carte resta selezionabile quando aggiungi un set.';
+      'La ricerca mostra subito carte coerenti con il filtro attivo, evitando schermate vuote all\'apertura.';
 
   @override
   String get whatsNewLine3 =>
-      'La ricerca Pokemon ora trova anche nomi localizzati come Kissara e mostra il nome corretto nella lingua disponibile.';
+      'Mentre digiti, i risultati si aggiornano restando dentro il perimetro della smart collection.';
 
   @override
   String get whatsNewLine4 =>
-      'La galleria della ricerca carte e stata riallineata allo stile di All Cards per una navigazione piu coerente.';
+      'Nei filtri avanzati ora compare un riepilogo del filtro originale della collection.';
 
   @override
   String get whatsNewLine5 =>
-      'Il badge di sincronizzazione Pokemon e piu chiaro e mostra fase, avanzamento e stato in un unico chip.';
+      'Le opzioni gia fissate dal filtro originale non vengono piu duplicate tra i filtri aggiuntivi.';
 
   @override
-  String get whatsNewLine6 => '';
+  String get whatsNewLine6 =>
+      'Il banner di sincronizzazione e stato riallineato graficamente tra Magic e Pokemon.';
 
   @override
   String get whatsNewLine7 => '';
 
   @override
   String get whatsNewLine8 =>
-      'Il caricamento immagini Pokemon ora e coerente tra ricerca, home e collezioni, con fallback migliori quando l\'artwork manca.';
+      'Corretta la sovrapposizione tra indicatori di sincronizzazione nella home.';
 
   @override
   String get whatsNewLine9 =>
-      'Sono stati corretti diversi casi limite nell\'import Pokemon, inclusi duplicati localizzazione, conflitti metadata e merge EN/IT incompleti.';
+      'Aggiornata la presentazione dei filtri per ridurre i casi in cui sembrava che una carta non venisse aggiunta correttamente.';
 
   @override
   String get createSmartCollectionTitle => 'Crea una smart collection';

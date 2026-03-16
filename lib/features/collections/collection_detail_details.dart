@@ -319,9 +319,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
     String priceCurrency,
     List<String> legalFormats,
   ) {
-    final setLabel = entry.setName.isNotEmpty
-        ? entry.setName
-        : entry.setCode.toUpperCase();
+    final setLabel = _setLabelForEntry(entry);
     final details = <_CardDetail>[
       _CardDetail(l10n.detailSet, setLabel),
       _CardDetail(l10n.detailCollector, entry.collectorNumber),
@@ -334,8 +332,8 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
       details.add(_CardDetail(label, text));
     }
 
-    add(l10n.detailRarity, entry.rarity);
-    add(l10n.detailSetName, entry.setName);
+    add(l10n.detailRarity, _formatRarity(context, entry.rarity));
+    add(l10n.detailSetName, setLabel);
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
     add(l10n.detailArtist, entry.artist);

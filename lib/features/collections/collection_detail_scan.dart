@@ -4,14 +4,17 @@ enum _AddCardEntryMode { byName, byScan, byFilter }
 
 extension _CollectionDetailScanStateX on _CollectionDetailPageState {
   CollectionFilter? _requiredSearchFilter() {
-    if (!widget.isDeckCollection) {
-      return null;
+    if (widget.isDeckCollection) {
+      final format = widget.filter?.format?.trim().toLowerCase();
+      if (format == null || format.isEmpty) {
+        return null;
+      }
+      return CollectionFilter(format: format);
     }
-    final format = widget.filter?.format?.trim().toLowerCase();
-    if (format == null || format.isEmpty) {
-      return null;
+    if (_isFilterCollection) {
+      return _effectiveFilter();
     }
-    return CollectionFilter(format: format);
+    return null;
   }
 
   Future<void> _addCard(BuildContext context) async {

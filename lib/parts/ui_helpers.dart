@@ -288,15 +288,60 @@ Widget _statusMiniBadge({IconData? icon, String? label, double iconSize = 12}) {
   );
 }
 
-String _formatRarity(String raw) {
+String _formatRarity(BuildContext context, String raw) {
   final value = raw.trim();
   if (value.isEmpty) {
     return '';
   }
+  final normalized = value.toLowerCase();
+  final italian = Localizations.localeOf(
+    context,
+  ).languageCode.toLowerCase().startsWith('it');
+  const localized = <String, ({String en, String it})>{
+    'common': (en: 'Common', it: 'Comune'),
+    'comune': (en: 'Common', it: 'Comune'),
+    'uncommon': (en: 'Uncommon', it: 'Non comune'),
+    'non comune': (en: 'Uncommon', it: 'Non comune'),
+    'rare': (en: 'Rare', it: 'Rara'),
+    'rara': (en: 'Rare', it: 'Rara'),
+    'mythic': (en: 'Mythic', it: 'Mitica'),
+    'mythic rare': (en: 'Mythic', it: 'Mitica'),
+    'mitica': (en: 'Mythic', it: 'Mitica'),
+    'ultra rare': (en: 'Ultra rare', it: 'Ultrarara'),
+    'ultrarare': (en: 'Ultra rare', it: 'Ultrarara'),
+    'ultrarara': (en: 'Ultra rare', it: 'Ultrarara'),
+    'double rare': (en: 'Double rare', it: 'Rara doppia'),
+    'rara doppia': (en: 'Double rare', it: 'Rara doppia'),
+    'hyper rare': (en: 'Hyper rare', it: 'Rara iper'),
+    'rara iper': (en: 'Hyper rare', it: 'Rara iper'),
+    'special illustration rare': (
+      en: 'Special illustration rare',
+      it: 'Rara illustrazione speciale',
+    ),
+    'rara illustrazione speciale': (
+      en: 'Special illustration rare',
+      it: 'Rara illustrazione speciale',
+    ),
+    'illustration rare': (
+      en: 'Illustration rare',
+      it: 'Rara illustrazione',
+    ),
+    'rara illustrazione': (
+      en: 'Illustration rare',
+      it: 'Rara illustrazione',
+    ),
+    'ace spec rare': (en: 'Ace spec rare', it: 'Rara asso tattico'),
+    'rara asso tattico': (en: 'Ace spec rare', it: 'Rara asso tattico'),
+    'promo': (en: 'Promo', it: 'Promo'),
+  };
+  final mapped = localized[normalized];
+  if (mapped != null) {
+    return italian ? mapped.it : mapped.en;
+  }
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.5.0+10-pokemon-refresh';
+const String _latestReleaseNotesId = '0.5.1+11-smart-collection-fixes';
 
 String _whatsNewLabel(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
