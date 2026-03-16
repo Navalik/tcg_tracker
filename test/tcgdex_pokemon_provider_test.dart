@@ -71,6 +71,34 @@ void main() {
     },
   );
 
+  test(
+    'Pokemon canonical import supports full profile from live set index',
+    () async {
+      final provider = TcgdexPokemonProvider(
+        apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+      );
+      final store = CanonicalCatalogStore.openInMemory();
+      addTearDown(store.dispose);
+
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+      final report = await service.importProfile(
+        profile: 'full',
+        languages: const <TcgCardLanguage>[
+          TcgCardLanguage.en,
+          TcgCardLanguage.it,
+        ],
+      );
+
+      expect(report.setsImported, greaterThan(0));
+      expect(report.cardsImported, greaterThan(0));
+      expect(store.countTableRows('catalog_sets'), greaterThan(0));
+      expect(store.countTableRows('catalog_cards'), greaterThan(0));
+    },
+  );
+
   test('Pokemon canonical batch snapshot round-trips through json', () async {
     final provider = TcgdexPokemonProvider(
       apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
@@ -546,7 +574,7 @@ http.Client _fakeTcgdexClient() {
         200,
       );
     }
-    if (uri.contains('/en/sets?pagination:itemsPerPage=')) {
+    if (uri.contains('/en/sets?pagination%3AitemsPerPage=')) {
       return http.Response(jsonEncode(<Object?>[setResponse]), 200);
     }
     if (uri.contains('/en/sets/swsh1')) {
@@ -560,11 +588,11 @@ http.Client _fakeTcgdexClient() {
         200,
       );
     }
-    if (uri.contains('/en/sets/sv1')) {
+    if (uri.contains('/en/sets/sv1') || uri.contains('/en/sets/sv01')) {
       return http.Response(
         jsonEncode(<String, Object?>{
           ...setResponse,
-          'id': 'sv1',
+          'id': 'sv01',
           'name': 'Scarlet & Violet',
           'cards': <Map<String, Object?>>[],
         }),
@@ -582,11 +610,11 @@ http.Client _fakeTcgdexClient() {
         200,
       );
     }
-    if (uri.contains('/it/sets/sv1')) {
+    if (uri.contains('/it/sets/sv1') || uri.contains('/it/sets/sv01')) {
       return http.Response(
         jsonEncode(<String, Object?>{
           ...setResponseIt,
-          'id': 'sv1',
+          'id': 'sv01',
           'name': 'Scarlatto e Violetto',
           'cards': <Map<String, Object?>>[],
         }),

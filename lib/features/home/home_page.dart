@@ -32,8 +32,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   String? _bulkDownloadError;
   bool _bulkImporting = false;
   double _bulkImportProgress = 0;
+  double _pokemonSyncOverallProgress = 0;
   int _bulkImportedCount = 0;
+  String? _mtgSyncStatus;
   String? _pokemonSyncStatus;
+  DateTime? _pokemonSyncStartedAt;
+  DateTime? _pokemonSyncLastStatusAt;
+  Timer? _pokemonSyncUiTimer;
+  int _pokemonSyncElapsedSeconds = 0;
   String? _bulkUpdatedAtRaw;
   bool _cardsMissing = false;
   String _priceCurrency = 'eur';
@@ -298,41 +304,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     final selectedGame = await AppSettings.loadSelectedTcgGame();
-    if (selectedGame == AppTcgGame.pokemon) {
-      await AppSettings.saveCardLanguagesForGame(
-        AppTcgGame.pokemon,
-        const <String>{'en'},
-      );
-      if (!mounted) {
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          final italian = Localizations.localeOf(
-            context,
-          ).languageCode.toLowerCase().startsWith('it');
-          return AlertDialog(
-            title: Text(
-              italian ? 'Pokemon: solo inglese' : 'Pokemon: English only',
-            ),
-            content: Text(
-              italian
-                  ? 'Con la sorgente dati attuale le carte Pokemon sono disponibili solo in inglese. Il supporto italiano arrivera in una futura release.'
-                  : 'With the current data source, Pokemon cards are available in English only. Italian support will arrive in a future release.',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(italian ? 'Avanti' : 'Next'),
-              ),
-            ],
-          );
-        },
-      );
-      return;
-    }
     final current = (await AppSettings.loadCardLanguagesForGame(
       selectedGame,
     )).toSet();
@@ -390,9 +361,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                italian
-                                    ? 'Attenzione: le lingue aggiuntive funzionano offline solo con il database "All Cards". Con database piu piccoli, ricerca e risultati nelle lingue aggiuntive useranno internet.'
-                                    : 'Warning: additional languages work offline only with the "All Cards" database. With smaller databases, search and results in additional languages will use internet.',
+                                selectedGame == AppTcgGame.pokemon
+                                    ? (italian
+                                          ? 'Per Pokemon, attivare anche italiano rende il download iniziale piu lungo e richiede reimport del catalogo.'
+                                          : 'For Pokemon, enabling Italian increases initial download time and requires catalog reimport.')
+                                    : (italian
+                                          ? 'Attenzione: le lingue aggiuntive funzionano offline solo con il database "All Cards". Con database piu piccoli, ricerca e risultati nelle lingue aggiuntive useranno internet.'
+                                          : 'Warning: additional languages work offline only with the "All Cards" database. With smaller databases, search and results in additional languages will use internet.'),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
@@ -568,11 +543,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       unawaited(_repairPokemonColorsInBackground());
       final installed = await PokemonBulkService.instance.isInstalled();
       if (!installed) {
-        final selectedProfile = await _showPokemonProfilePickerForMissingDb();
-        if (selectedProfile == null || !mounted) {
+        final shouldInstall = await _showPokemonProfilePickerForMissingDb();
+        if (shouldInstall != true || !mounted) {
           return;
         }
-        await AppSettings.savePokemonDatasetProfile(selectedProfile);
         await _installPokemonDatasetWithFeedback();
       }
       if (!mounted) {
@@ -662,80 +636,111 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkDownloadTotal = 0;
       _bulkImporting = false;
       _bulkImportProgress = 0;
+      _pokemonSyncOverallProgress = 0;
       _bulkImportedCount = 0;
       _pokemonSyncStatus = null;
+      _pokemonSyncStartedAt = DateTime.now();
+      _pokemonSyncLastStatusAt = DateTime.now();
+      _pokemonSyncElapsedSeconds = 0;
       _bulkDownloadError = null;
     });
+    _startPokemonSyncUiTimer();
 
-    const downloadPhaseLimit = 0.84;
     var lastUiTick = DateTime.fromMillisecondsSinceEpoch(0);
     var lastAcceptedProgress = -1.0;
-    await PokemonBulkService.instance.installDataset(
-      onStatus: (status) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _pokemonSyncStatus = status.trim().isEmpty ? null : status.trim();
-        });
-      },
-      onProgress: (progress) {
-        if (!mounted) {
-          return;
-        }
-        final clamped = progress.clamp(0.0, 1.0);
-        final now = DateTime.now();
-        final progressedEnough = clamped - lastAcceptedProgress >= 0.004;
-        final isTerminal = clamped >= 1.0;
-        if (!isTerminal &&
-            !progressedEnough &&
-            now.difference(lastUiTick) < const Duration(milliseconds: 100)) {
-          return;
-        }
-        lastUiTick = now;
-        if (clamped > lastAcceptedProgress) {
-          lastAcceptedProgress = clamped;
-        }
-        setState(() {
-          if (!_isMtgActiveGame) {
-            _bulkDownloading = true;
-            _bulkImporting = false;
-            _bulkDownloadProgress = clamped;
-            _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
-            _bulkDownloadTotal = 10000;
-            _bulkImportProgress = 0;
-            _bulkImportedCount = 0;
-          } else if (clamped < downloadPhaseLimit) {
-            _bulkDownloading = true;
-            _bulkImporting = false;
-            _bulkDownloadProgress = (clamped / downloadPhaseLimit).clamp(
-              0.0,
-              1.0,
-            );
-            _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
-            _bulkDownloadTotal = 10000;
-          } else {
-            _bulkDownloading = false;
-            _bulkImporting = true;
-            _bulkImportProgress =
-                ((clamped - downloadPhaseLimit) / (1.0 - downloadPhaseLimit))
-                    .clamp(0.0, 1.0);
-            _bulkImportedCount = (_bulkImportProgress * 100).round();
+    try {
+      await PokemonBulkService.instance.installDataset(
+        onStatus: (status) {
+          if (!mounted) {
+            return;
           }
-        });
-      },
-    );
+          setState(() {
+            _pokemonSyncStatus = status.trim().isEmpty ? null : status.trim();
+            _pokemonSyncLastStatusAt = DateTime.now();
+          });
+        },
+        onProgress: (progress) {
+          if (!mounted) {
+            return;
+          }
+          final clamped = progress.clamp(0.0, 1.0);
+          final now = DateTime.now();
+          final progressedEnough = clamped - lastAcceptedProgress >= 0.004;
+          final isTerminal = clamped >= 1.0;
+          if (!isTerminal &&
+              !progressedEnough &&
+              now.difference(lastUiTick) < const Duration(milliseconds: 100)) {
+            return;
+          }
+          lastUiTick = now;
+          if (clamped > lastAcceptedProgress) {
+            lastAcceptedProgress = clamped;
+          }
+          final pokemonPhase = !_isMtgActiveGame
+              ? _pokemonSyncPhaseInfoForProgress(clamped)
+              : null;
+          final pokemonPhaseProgress = pokemonPhase == null
+              ? 0.0
+              : _pokemonSyncPhaseProgress(pokemonPhase, clamped);
+          setState(() {
+            if (!_isMtgActiveGame) {
+              _pokemonSyncOverallProgress = clamped;
+              final isDownloadPhase = pokemonPhase?.index == 1;
+              _bulkDownloading = isDownloadPhase;
+              _bulkImporting = !isDownloadPhase;
+              _bulkDownloadProgress = isDownloadPhase ? pokemonPhaseProgress : 1;
+              _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
+              _bulkDownloadTotal = 10000;
+              _bulkImportProgress = isDownloadPhase ? 0 : pokemonPhaseProgress;
+              _bulkImportedCount = 0;
+            } else if (clamped < 0.55) {
+              _bulkDownloading = true;
+              _bulkImporting = false;
+              _bulkDownloadProgress = (clamped / 0.55).clamp(0.0, 1.0);
+              _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
+              _bulkDownloadTotal = 10000;
+            } else {
+              _bulkDownloading = false;
+              _bulkImporting = true;
+              _bulkImportProgress =
+                  ((clamped - 0.55) / (1.0 - 0.55)).clamp(0.0, 1.0);
+              _bulkImportedCount = (_bulkImportProgress * 100).round();
+            }
+          });
+        },
+      );
 
-    if (!mounted) {
-      return;
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bulkDownloading = false;
+        _bulkDownloadProgress = 1;
+        _bulkImporting = false;
+        _bulkImportProgress = _isMtgActiveGame ? 1 : 0;
+        _pokemonSyncOverallProgress = 1;
+        _pokemonSyncStatus = null;
+        _pokemonSyncStartedAt = null;
+        _pokemonSyncLastStatusAt = null;
+        _pokemonSyncElapsedSeconds = 0;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _bulkDownloading = false;
+          _bulkImporting = false;
+          _pokemonSyncOverallProgress = 0;
+          _pokemonSyncStatus = null;
+          _pokemonSyncStartedAt = null;
+          _pokemonSyncLastStatusAt = null;
+          _pokemonSyncElapsedSeconds = 0;
+          _bulkDownloadError = error.toString();
+        });
+      }
+      rethrow;
+    } finally {
+      _stopPokemonSyncUiTimer();
     }
-    setState(() {
-      _bulkDownloading = false;
-      _bulkDownloadProgress = 1;
-      _bulkImporting = false;
-      _bulkImportProgress = _isMtgActiveGame ? 1 : 0;
-      _pokemonSyncStatus = null;
-    });
   }
 
   Future<void> _retryPokemonDatasetInstall() async {
@@ -750,11 +755,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (await PokemonBulkService.instance.isInstalled() == false) {
-      final selectedProfile = await _showPokemonProfilePickerForMissingDb();
-      if (selectedProfile == null || !mounted) {
+      final shouldInstall = await _showPokemonProfilePickerForMissingDb();
+      if (shouldInstall != true || !mounted) {
         return;
       }
-      await AppSettings.savePokemonDatasetProfile(selectedProfile);
     }
     await _initializePokemonStartup();
     if (!mounted) {
@@ -763,21 +767,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _loadCollections();
   }
 
-  Future<String?> _showPokemonProfilePickerForMissingDb() async {
+  Future<bool?> _showPokemonProfilePickerForMissingDb() async {
     if (!mounted) {
       return null;
     }
-    final current = await AppSettings.loadPokemonDatasetProfile();
-    if (!mounted) {
-      return null;
-    }
-    return _showPokemonDatasetProfilePicker(
-      context,
-      allowCancel: false,
-      selectedProfile: current,
-      requireConfirmation: true,
-      confirmLabel: AppLocalizations.of(context)!.downloadDatabase,
-    );
+    return true;
   }
 
   Future<void> _checkForAppUpdateOnStartup() async {
@@ -802,10 +796,154 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   @override
   void dispose() {
+    _stopPokemonSyncUiTimer();
     _collectionsRefreshNotifier.removeListener(_onCollectionsRefreshRequested);
     _snakeController.dispose();
     _purchaseManager.removeListener(_purchaseListener);
     super.dispose();
+  }
+
+  void _startPokemonSyncUiTimer() {
+    _stopPokemonSyncUiTimer();
+    _pokemonSyncUiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_bulkDownloading && !_bulkImporting) {
+        _stopPokemonSyncUiTimer();
+        return;
+      }
+      final startedAt = _pokemonSyncStartedAt;
+      if (startedAt == null) {
+        return;
+      }
+      final next = DateTime.now().difference(startedAt).inSeconds;
+      if (next == _pokemonSyncElapsedSeconds) {
+        return;
+      }
+      setState(() {
+        _pokemonSyncElapsedSeconds = next;
+      });
+    });
+  }
+
+  void _stopPokemonSyncUiTimer() {
+    _pokemonSyncUiTimer?.cancel();
+    _pokemonSyncUiTimer = null;
+  }
+
+  String _formatPokemonSyncElapsed() {
+    final total = _pokemonSyncElapsedSeconds;
+    final minutes = total ~/ 60;
+    final seconds = total % 60;
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  String _pokemonSyncDetailLabel() {
+    final status = (_pokemonSyncStatus ?? '').trim();
+    if (status.isEmpty) {
+      return _isItalianUi()
+          ? 'Preparazione catalogo in corso...'
+          : 'Preparing catalog...';
+    }
+    final now = DateTime.now();
+    final lastUpdate = _pokemonSyncLastStatusAt;
+    final staleSeconds = lastUpdate == null
+        ? 0
+        : now.difference(lastUpdate).inSeconds;
+    if (staleSeconds < 60) {
+      return status;
+    }
+    return _isItalianUi()
+        ? '$status - In corso (${staleSeconds}s)'
+        : '$status - In progress (${staleSeconds}s)';
+  }
+
+  _PokemonSyncPhaseInfo _pokemonSyncPhaseInfo() {
+    return _pokemonSyncPhaseInfoForProgress(_pokemonSyncOverallProgress);
+  }
+
+  _PokemonSyncPhaseInfo _pokemonSyncPhaseInfoForProgress(double progress) {
+    final status = (_pokemonSyncStatus ?? '').trim().toLowerCase();
+    final italian = _isItalianUi();
+    if (status.contains('finalizing') || status.contains('completed')) {
+      return _PokemonSyncPhaseInfo(
+        index: 4,
+        total: 4,
+        label: italian ? 'Finalizzazione' : 'Finalization',
+        startProgress: 0.93,
+        endProgress: 1.0,
+      );
+    }
+    if (status.contains('building legacy') ||
+        status.contains('rebuilding local pokemon database') ||
+        status.contains('reimporting')) {
+      return _PokemonSyncPhaseInfo(
+        index: 3,
+        total: 4,
+        label: italian ? 'Build database locale' : 'Build local database',
+        startProgress: 0.72,
+        endProgress: 0.93,
+      );
+    }
+    if (status.contains('importing local pokemon catalog') ||
+        status.contains('restoring pokemon canonical catalog')) {
+      return _PokemonSyncPhaseInfo(
+        index: 2,
+        total: 4,
+        label: italian ? 'Import catalogo locale' : 'Import local catalog',
+        startProgress: 0.57,
+        endProgress: 0.72,
+      );
+    }
+    if (progress >= 0.93) {
+      return _PokemonSyncPhaseInfo(
+        index: 4,
+        total: 4,
+        label: italian ? 'Finalizzazione' : 'Finalization',
+        startProgress: 0.93,
+        endProgress: 1.0,
+      );
+    }
+    if (progress >= 0.72) {
+      return _PokemonSyncPhaseInfo(
+        index: 3,
+        total: 4,
+        label: italian ? 'Build database locale' : 'Build local database',
+        startProgress: 0.72,
+        endProgress: 0.93,
+      );
+    }
+    if (progress >= 0.57) {
+      return _PokemonSyncPhaseInfo(
+        index: 2,
+        total: 4,
+        label: italian ? 'Import catalogo locale' : 'Import local catalog',
+        startProgress: 0.57,
+        endProgress: 0.72,
+      );
+    }
+    return _PokemonSyncPhaseInfo(
+      index: 1,
+      total: 4,
+      label: italian ? 'Download catalogo' : 'Catalog download',
+      startProgress: 0.0,
+      endProgress: 0.57,
+    );
+  }
+
+  double _pokemonSyncPhaseProgress(_PokemonSyncPhaseInfo phase, double progress) {
+    final clamped = progress.clamp(0.0, 1.0);
+    final span = (phase.endProgress - phase.startProgress).clamp(0.0001, 1.0);
+    return ((clamped - phase.startProgress) / span).clamp(0.0, 1.0);
+  }
+
+  String _pokemonSyncHeadline(_PokemonSyncPhaseInfo phase, String percentText) {
+    if (_isItalianUi()) {
+      return '${phase.label} ($percentText%)';
+    }
+    return '${phase.label} ($percentText%)';
+  }
+
+  String _pokemonSyncMetaLine() {
+    return '${_pokemonSyncDetailLabel()} - ${_formatPokemonSyncElapsed()}';
   }
 
   bool _isSetCollection(CollectionInfo collection) {
@@ -3860,10 +3998,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             seed.scannerLanguageCode!.trim().isNotEmpty)
         ? <String>[seed.scannerLanguageCode!.trim().toLowerCase()]
         : activeLanguages;
+    final fallbackScanLanguages = _scannerOnlineFallbackLanguages(
+      effectiveScanLanguages,
+      scannerLanguageCode: seed.scannerLanguageCode,
+    );
     final localBeforeSync = await ScryfallDatabase.instance
         .fetchCardsForAdvancedFilters(
           CollectionFilter(name: cardName),
-          languages: effectiveScanLanguages,
+          languages: fallbackScanLanguages,
           limit: 250,
         );
     final normalizedName = _normalizeCardNameForMatch(cardName);
@@ -3878,6 +4020,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       await _syncOnlinePrintsByName(
         cardName,
         timeBudget: const Duration(seconds: 2),
+        preferredLanguages: fallbackScanLanguages,
       );
     }
     if (!mounted) {
@@ -3886,11 +4029,28 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     var picked = await _pickCardPrintingForName(
       context,
       cardName,
-      languages: effectiveScanLanguages,
+      languages: fallbackScanLanguages,
       preferredSetCode: seed.setCode,
       preferredCollectorNumber: seed.collectorNumber,
       localPrintingKeys: localBeforeSyncKeys,
     );
+    if (picked == null) {
+      await _syncOnlinePrintsByName(
+        cardName,
+        timeBudget: const Duration(seconds: 3),
+        preferredLanguages: fallbackScanLanguages,
+      );
+      if (mounted) {
+        picked = await _pickCardPrintingForName(
+          context,
+          cardName,
+          languages: fallbackScanLanguages,
+          preferredSetCode: seed.setCode,
+          preferredCollectorNumber: seed.collectorNumber,
+          localPrintingKeys: localBeforeSyncKeys,
+        );
+      }
+    }
     final preferredSet = seed.setCode?.trim().toLowerCase();
     final missingPreferredSet =
         picked == null && preferredSet != null && preferredSet.isNotEmpty;
@@ -3904,7 +4064,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         picked = await _pickCardPrintingForName(
           context,
           cardName,
-          languages: effectiveScanLanguages,
+          languages: fallbackScanLanguages,
           preferredSetCode: onlineByNameAndSet.setCode,
           preferredCollectorNumber: onlineByNameAndSet.collectorNumber,
           localPrintingKeys: localBeforeSyncKeys,
@@ -4394,47 +4554,76 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (name.isEmpty) {
       return null;
     }
-    try {
-      final uri = Uri.parse(
-        'https://api.scryfall.com/cards/named?exact=${Uri.encodeQueryComponent(name)}',
-      );
-      final response = await ScryfallApiClient.instance.get(
-        uri,
-        timeout: const Duration(seconds: 4),
-        maxRetries: 2,
-      );
-      if (response.statusCode != 200) {
+    Future<_OcrSearchSeed?> fetchNamed(String mode) async {
+      try {
+        final uri = Uri.parse(
+          'https://api.scryfall.com/cards/named?$mode=${Uri.encodeQueryComponent(name)}',
+        );
+        final response = await ScryfallApiClient.instance.get(
+          uri,
+          timeout: const Duration(seconds: 4),
+          maxRetries: 2,
+        );
+        if (response.statusCode != 200) {
+          return null;
+        }
+        final payload = jsonDecode(response.body);
+        if (payload is! Map<String, dynamic>) {
+          return null;
+        }
+        await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
+        final fetchedName = (payload['name'] as String?)?.trim();
+        final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
+        final fetchedCollector = (payload['collector_number'] as String?)
+            ?.trim()
+            .toLowerCase();
+        return _OcrSearchSeed(
+          query: (fetchedName != null && fetchedName.isNotEmpty)
+              ? fetchedName
+              : name,
+          cardName: fetchedName ?? name,
+          setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : null,
+          collectorNumber: fetchedCollector?.isNotEmpty == true
+              ? fetchedCollector
+              : null,
+          isFoil: isFoil,
+        );
+      } catch (_) {
         return null;
       }
-      final payload = jsonDecode(response.body);
-      if (payload is! Map<String, dynamic>) {
-        return null;
-      }
-      await ScryfallDatabase.instance.upsertCardFromScryfall(payload);
-      final fetchedName = (payload['name'] as String?)?.trim();
-      final fetchedSet = (payload['set'] as String?)?.trim().toLowerCase();
-      final fetchedCollector = (payload['collector_number'] as String?)
-          ?.trim()
-          .toLowerCase();
-      return _OcrSearchSeed(
-        query: (fetchedName != null && fetchedName.isNotEmpty)
-            ? fetchedName
-            : name,
-        cardName: fetchedName ?? name,
-        setCode: fetchedSet?.isNotEmpty == true ? fetchedSet : null,
-        collectorNumber: fetchedCollector?.isNotEmpty == true
-            ? fetchedCollector
-            : null,
-        isFoil: isFoil,
-      );
-    } catch (_) {
-      return null;
     }
+
+    final exactSeed = await fetchNamed('exact');
+    if (exactSeed != null) {
+      return exactSeed;
+    }
+    return fetchNamed('fuzzy');
+  }
+
+  List<String> _scannerOnlineFallbackLanguages(
+    List<String> baseLanguages, {
+    String? scannerLanguageCode,
+  }) {
+    final normalized = <String>{};
+    for (final value in baseLanguages) {
+      final language = value.trim().toLowerCase();
+      if (language.isNotEmpty) {
+        normalized.add(language);
+      }
+    }
+    final scanner = scannerLanguageCode?.trim().toLowerCase();
+    if (scanner != null && scanner.isNotEmpty) {
+      normalized.add(scanner);
+    }
+    normalized.add('en');
+    normalized.add('it');
+    return normalized.toList(growable: false);
   }
 
   Future<void> _syncOnlinePrintsByName(
     String cardName, {
     Duration timeBudget = const Duration(seconds: 2),
+    List<String>? preferredLanguages,
   }) async {
     final name = cardName.trim();
     if (name.isEmpty) {
@@ -4461,7 +4650,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         }
       }
       final languageClause = _scryfallLanguageClauseForQuery(
-        await AppSettings.loadCardLanguagesForGame(_activeSettingsGame),
+        preferredLanguages ??
+            await AppSettings.loadCardLanguagesForGame(_activeSettingsGame),
       );
       Uri searchUri;
       if (oracleId != null && oracleId.isNotEmpty) {
@@ -4547,10 +4737,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return null;
     }
     try {
+      var canonicalName = name;
+      final resolvedByName = await _tryOnlineCardFallbackByName(
+        name,
+        isFoil: isFoil,
+      );
+      final resolvedName = resolvedByName?.cardName?.trim();
+      if (resolvedName != null && resolvedName.isNotEmpty) {
+        canonicalName = resolvedName;
+      }
       final languageClause = _scryfallLanguageClauseForQuery(
         await AppSettings.loadCardLanguagesForGame(_activeSettingsGame),
       );
-      final query = '!"$name" set:$set $languageClause unique:prints';
+      final query = '!"$canonicalName" set:$set $languageClause unique:prints';
       final uri = Uri.parse(
         'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent(query)}',
       );
@@ -4582,7 +4781,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final localCandidates = await ScryfallDatabase.instance
           .fetchCardsForAdvancedFilters(
-            CollectionFilter(name: name, sets: {set}),
+            CollectionFilter(name: canonicalName, sets: {set}),
             languages: await AppSettings.loadCardLanguagesForGame(
               _activeSettingsGame,
             ),
@@ -4602,8 +4801,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final selected = bestLocal;
       return _OcrSearchSeed(
-        query: selected?.name ?? name,
-        cardName: selected?.name ?? name,
+        query: selected?.name ?? canonicalName,
+        cardName: selected?.name ?? canonicalName,
         setCode: set,
         collectorNumber: selected != null
             ? _normalizeCollectorForComparison(selected.collectorNumber)
@@ -5486,6 +5685,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkDownloadReceived = 0;
       _bulkDownloadTotal = 0;
       _bulkDownloadError = null;
+      _mtgSyncStatus = _isItalianUi()
+          ? 'Download database in corso...'
+          : 'Downloading database...';
     });
 
     try {
@@ -5552,6 +5754,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           }
           _bulkDownloading = false;
           _bulkDownloadProgress = 1;
+          _mtgSyncStatus = _isItalianUi()
+              ? 'Preparazione import locale...'
+              : 'Preparing local import...';
         });
         await _importBulkFile(
           targetPath,
@@ -5573,6 +5778,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       setState(() {
         _bulkDownloading = false;
         _bulkDownloadError = message;
+        _mtgSyncStatus = null;
       });
       showAppSnackBar(context, message);
     }
@@ -5598,6 +5804,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkImporting = true;
       _bulkImportProgress = 0;
       _bulkImportedCount = 0;
+      _mtgSyncStatus = _isItalianUi()
+          ? 'Analisi file locale in corso...'
+          : 'Analyzing local file...';
     });
 
     try {
@@ -5609,6 +5818,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (preflight.sampledCards >= 5000 && sampleIt < 50) {
           throw const FormatException('bulk_local_missing_it');
         }
+      }
+      if (mounted) {
+        setState(() {
+          _mtgSyncStatus = _isItalianUi()
+              ? 'Import carte in corso...'
+              : 'Importing cards...';
+        });
       }
       await importer.importAllCardsJson(
         filePath,
@@ -5622,6 +5838,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           setState(() {
             _bulkImportedCount = count;
             _bulkImportProgress = progress;
+            _mtgSyncStatus = _isItalianUi()
+                ? 'Import carte: $count'
+                : 'Importing cards: $count';
           });
         },
       );
@@ -5632,11 +5851,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted) {
         return;
       }
+      setState(() {
+        _mtgSyncStatus = _isItalianUi()
+            ? 'Ottimizzazione indice ricerca...'
+            : 'Optimizing search index...';
+      });
       await _rebuildSearchIndex();
 
       if (!mounted) {
         return;
       }
+      setState(() {
+        _mtgSyncStatus = _isItalianUi()
+            ? 'Finalizzazione database...'
+            : 'Finalizing database...';
+      });
       final total = await ScryfallDatabase.instance.countOwnedCards();
       if (!mounted) {
         return;
@@ -5648,6 +5877,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _bulkUpdateAvailable = false;
         _cardsMissing = false;
         _totalCardCount = total;
+        _mtgSyncStatus = null;
       });
       await _loadCollections();
       if (!mounted) {
@@ -5669,6 +5899,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       setState(() {
         _bulkImporting = false;
+        _mtgSyncStatus = null;
       });
       final msg = error.toString().contains('bulk_local_missing_it')
           ? (_isItalianUi()
@@ -5746,6 +5977,73 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     });
   }
 
+  Future<void> _openSettingsAndHandlePostAction() async {
+    final postAction = await Navigator.of(context).push<SettingsPostAction>(
+      MaterialPageRoute(builder: (_) => const SettingsPage()),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (postAction == null) {
+      await _initializeEnvironmentAndData();
+      return;
+    }
+    await _applySettingsPostAction(postAction);
+  }
+
+  Future<void> _applySettingsPostAction(SettingsPostAction action) async {
+    if (!_isGameUnlocked(action.game)) {
+      await _initializeEnvironmentAndData();
+      return;
+    }
+    await TcgEnvironmentController.instance.setGame(action.game);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedHomeGame = action.game;
+      _initialCollectionsLoading = true;
+      _collections.clear();
+      if (action.game == TcgGame.mtg && action.mtgBulkType != null) {
+        _selectedBulkType = action.mtgBulkType;
+      }
+    });
+    await _loadCollections();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _initialCollectionsLoading = false;
+    });
+
+    if (action.game == TcgGame.mtg) {
+      final targetBulkType =
+          action.mtgBulkType ??
+          await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
+      if (targetBulkType == null || targetBulkType.trim().isEmpty) {
+        await _initializeEnvironmentAndData();
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedBulkType = targetBulkType;
+        _bulkDownloadError = null;
+        _cardsMissing = true;
+      });
+      await _checkScryfallBulk(forceDownload: true, restartAfterImport: true);
+      return;
+    }
+
+    await _installPokemonDatasetWithFeedback();
+    if (!mounted) {
+      return;
+    }
+    await _loadCollections();
+    unawaited(_refreshPokemonUpdateStatusInBackground());
+  }
+
   Widget _buildGameSelector() {
     final canSwitchGame =
         _isGameUnlocked(TcgGame.mtg) && _isGameUnlocked(TcgGame.pokemon);
@@ -5768,9 +6066,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           if (!mounted) {
             return;
           }
-          await Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const SettingsPage()));
+          await _openSettingsAndHandlePostAction();
           return;
         }
         await TcgEnvironmentController.instance.setGame(selected);
@@ -5883,16 +6179,45 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       ...?((pinnedAllCardsCard == null) ? null : [pinnedAllCardsCard]),
       ...?((pinnedLatestAddsHeader == null) ? null : [pinnedLatestAddsHeader]),
     ];
+    final blockingChipTopPadding = !_isMtgActiveGame && isBlockingSync
+        ? 146.0
+        : 86.0;
+    final pokemonPhase = (!_isMtgActiveGame && isBlockingSync)
+        ? _pokemonSyncPhaseInfo()
+        : null;
+    final pokemonPercentValue = (!_isMtgActiveGame && pokemonPhase != null)
+        ? (_pokemonSyncPhaseProgress(
+                    pokemonPhase,
+                    _pokemonSyncOverallProgress,
+                  ) *
+                  100)
+              .clamp(0.0, 100.0)
+        : ((_bulkDownloading ? _bulkDownloadProgress : _bulkImportProgress) *
+                  100)
+              .clamp(0.0, 100.0);
+    final pokemonPercentText = pokemonPercentValue >= 99.95
+        ? '100'
+        : pokemonPercentValue.toStringAsFixed(1);
+    final pokemonSyncHeadline = (!_isMtgActiveGame && pokemonPhase != null)
+        ? _pokemonSyncHeadline(pokemonPhase, pokemonPercentText)
+        : null;
+    final pokemonSyncMeta = (!_isMtgActiveGame && isBlockingSync)
+        ? _pokemonSyncMetaLine()
+        : null;
     final blockingLabel = _bulkDownloading
-        ? (_bulkDownloadTotal > 0
-              ? l10n.downloadingWithPercent(
-                  (_bulkDownloadProgress * 100).clamp(0, 100).round(),
-                )
-              : l10n.downloading)
-        : l10n.importingCardsWithCount(
-            (_bulkImportProgress * 100).clamp(0, 100).round(),
-            _bulkImportedCount,
-          );
+        ? (!_isMtgActiveGame && pokemonPhase != null
+              ? '${pokemonPhase.index}/${pokemonPhase.total} - $pokemonPercentText%'
+              : (_bulkDownloadTotal > 0
+                    ? l10n.downloadingWithPercent(
+                        (_bulkDownloadProgress * 100).clamp(0, 100).round(),
+                      )
+                    : l10n.downloading))
+        : (!_isMtgActiveGame && pokemonPhase != null
+              ? '${pokemonPhase.index}/${pokemonPhase.total} - $pokemonPercentText%'
+              : l10n.importingCardsWithCount(
+                  (_bulkImportProgress * 100).clamp(0, 100).round(),
+                  _bulkImportedCount,
+                ));
     final bulkLabel = _bulkTypeLabel(l10n, _selectedBulkType);
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -5944,19 +6269,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               foregroundColor: const Color(0xFFE9C46A),
                             ),
                             icon: const Icon(Icons.settings),
-                            onPressed: () {
-                              Navigator.of(context)
-                                  .push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const SettingsPage(),
-                                    ),
-                                  )
-                                  .then((_) {
-                                    if (mounted) {
-                                      _initializeEnvironmentAndData();
-                                    }
-                                  });
-                            },
+                            onPressed: _openSettingsAndHandlePostAction,
                           ),
                           const SizedBox(width: 4),
                           _buildGameSelector(),
@@ -5993,19 +6306,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                         : l10n.downloadingUpdateNoTotal(
                                             _formatBytes(_bulkDownloadReceived),
                                           ))
-                                  : (_isItalianUi()
-                                        ? 'Download database Pokemon ${(_bulkDownloadProgress * 100).clamp(0, 100).round()}%'
-                                        : 'Downloading Pokemon database ${(_bulkDownloadProgress * 100).clamp(0, 100).round()}%'),
+                                  : (pokemonSyncHeadline ??
+                                        (_isItalianUi()
+                                            ? 'Download database Pokemon $pokemonPercentText%'
+                                            : 'Downloading Pokemon database $pokemonPercentText%')),
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: const Color(0xFFE3B55C)),
                             ),
-                            if (!_isMtgActiveGame &&
-                                _pokemonSyncStatus != null &&
-                                _pokemonSyncStatus!.isNotEmpty) ...[
+                            if (!_isMtgActiveGame) ...[
                               const SizedBox(height: 4),
                               Text(
-                                _pokemonSyncStatus!,
+                                pokemonSyncMeta ?? _pokemonSyncMetaLine(),
                                 textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFFBFAE95)),
                               ),
@@ -6013,19 +6327,48 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           ],
                         )
                       else if (_bulkImporting)
-                        Text(
-                          _isMtgActiveGame
-                              ? l10n.importingCardsWithCount(
-                                  (_bulkImportProgress * 100)
-                                      .clamp(0, 100)
-                                      .round(),
-                                  _bulkImportedCount,
-                                )
-                              : (_isItalianUi()
-                                    ? 'Import carte Pokemon ${(_bulkImportProgress * 100).clamp(0, 100).round()}%'
-                                    : 'Importing Pokemon cards ${(_bulkImportProgress * 100).clamp(0, 100).round()}%'),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFFE3B55C)),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _isMtgActiveGame
+                                  ? l10n.importingCardsWithCount(
+                                      (_bulkImportProgress * 100)
+                                          .clamp(0, 100)
+                                          .round(),
+                                      _bulkImportedCount,
+                                    )
+                                  : (pokemonSyncHeadline ??
+                                        (_isItalianUi()
+                                            ? 'Import carte Pokemon $pokemonPercentText%'
+                                            : 'Importing Pokemon cards $pokemonPercentText%')),
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFE3B55C)),
+                            ),
+                            if (_isMtgActiveGame &&
+                                (_mtgSyncStatus ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                _mtgSyncStatus!,
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFFBFAE95)),
+                              ),
+                            ],
+                            if (!_isMtgActiveGame) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                pokemonSyncMeta ?? _pokemonSyncMetaLine(),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.bodySmall
+                                    ?.copyWith(color: const Color(0xFFBFAE95)),
+                              ),
+                            ],
+                          ],
                         )
                       else if (_bulkDownloadError != null)
                         Text(
@@ -6131,9 +6474,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           padding: const EdgeInsets.only(top: 10),
                           child: _SnakeProgressBar(
                             animation: _snakeController,
-                            value: _bulkDownloading
-                                ? _bulkDownloadProgress
-                                : _bulkImportProgress,
+                            value: _bulkDownloading && !_isMtgActiveGame
+                                ? _pokemonSyncOverallProgress
+                                : (_bulkDownloading
+                                      ? _bulkDownloadProgress
+                                      : (!_isMtgActiveGame
+                                            ? _pokemonSyncOverallProgress
+                                            : _bulkImportProgress)),
                           ),
                         ),
                     ],
@@ -6216,13 +6563,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           ),
                           const SizedBox(height: 12),
                           FilledButton.icon(
-                            onPressed: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const SettingsPage(),
-                                ),
-                              );
-                            },
+                            onPressed: _openSettingsAndHandlePostAction,
                             icon: const Icon(Icons.workspace_premium_outlined),
                             label: Text(l10n.openSettingsLabel),
                           ),
@@ -6239,7 +6580,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               child: Align(
                 alignment: Alignment.topCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(top: 86),
+                  padding: EdgeInsets.only(top: blockingChipTopPadding),
                   child: Chip(
                     avatar: const SizedBox(
                       width: 16,
@@ -6251,12 +6592,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     labelStyle: Theme.of(context).textTheme.labelLarge
                         ?.copyWith(
                           color: const Color(0xFF1C1510),
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.w800,
                         ),
                     side: BorderSide.none,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
+                      horizontal: 12,
+                      vertical: 10,
                     ),
                   ),
                 ),
@@ -7192,6 +7533,22 @@ enum _CollectionAction {
 
 enum _HomeCollectionsMenu { home, set, custom, smart, wish, deck }
 
+class _PokemonSyncPhaseInfo {
+  const _PokemonSyncPhaseInfo({
+    required this.index,
+    required this.total,
+    required this.label,
+    required this.startProgress,
+    required this.endProgress,
+  });
+
+  final int index;
+  final int total;
+  final String label;
+  final double startProgress;
+  final double endProgress;
+}
+
 enum _HomeAddAction {
   addByScan,
   addCards,
@@ -7206,7 +7563,7 @@ class _SnakeProgressBar extends StatelessWidget {
   const _SnakeProgressBar({required this.animation, required this.value});
 
   final Animation<double> animation;
-  final double value;
+  final double? value;
 
   @override
   Widget build(BuildContext context) {
@@ -7219,14 +7576,18 @@ class _SnakeProgressBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final maxWidth = constraints.maxWidth;
-          final clampedValue = value.clamp(0.0, 1.0);
-          final fillWidth = maxWidth * clampedValue;
+          final clampedValue = value?.clamp(0.0, 1.0);
+          final fillWidth = clampedValue == null
+              ? 0.0
+              : maxWidth * clampedValue;
           final snakeWidth = maxWidth * 0.22;
 
           return AnimatedBuilder(
             animation: animation,
             builder: (context, child) {
-              final availableWidth = fillWidth > 0 ? fillWidth : maxWidth;
+              final availableWidth = clampedValue == null
+                  ? maxWidth
+                  : (fillWidth > 0 ? fillWidth : maxWidth);
               final travel = (availableWidth - snakeWidth).clamp(0.0, maxWidth);
               final left = travel * animation.value;
 
@@ -7238,7 +7599,7 @@ class _SnakeProgressBar extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
-                  if (fillWidth > 0)
+                  if (clampedValue != null && fillWidth > 0)
                     FractionallySizedBox(
                       widthFactor: clampedValue,
                       child: Container(

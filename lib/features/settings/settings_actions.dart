@@ -162,35 +162,4 @@ extension _SettingsActionsSection on _SettingsPageState {
     });
   }
 
-  String _pokemonProfileLabel(String profile) {
-    return _pokemonDatasetProfileTitle(context, profile);
-  }
-
-  String _pokemonProfileDescription(String profile) {
-    return _pokemonDatasetProfileDescription(context, profile);
-  }
-
-  Future<void> _changePokemonDatasetProfile() async {
-    final selected = await _showPokemonDatasetProfilePicker(
-      context,
-      allowCancel: true,
-      selectedProfile: _pokemonDatasetProfile,
-      requireConfirmation: true,
-      confirmLabel: AppLocalizations.of(context)!.applyProfileLabel,
-    );
-    if (selected == null || selected == _pokemonDatasetProfile) {
-      return;
-    }
-    await AppSettings.savePokemonDatasetProfile(selected);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _pokemonDatasetProfile = selected;
-    });
-    showAppSnackBar(
-      context,
-      AppLocalizations.of(context)!.pokemonProfileUpdatedTapUpdate,
-    );
-  }
 }

@@ -508,16 +508,58 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     final cardLanguages = await AppSettings.loadCardLanguagesForGame(
       activeGame,
     );
+    final fallbackScanLanguages = _scannerOnlineFallbackLanguagesForCollection(
+      cardLanguages,
+      scannerLanguageCode: seed.scannerLanguageCode,
+    );
+    final localBeforeSync = await ScryfallDatabase.instance
+        .fetchCardsForAdvancedFilters(
+          CollectionFilter(name: cardName),
+          languages: fallbackScanLanguages,
+          limit: 250,
+        );
+    final normalizedName = _normalizeCardNameForMatch(cardName);
+    final localBeforeSyncKeys = localBeforeSync
+        .where(
+          (card) => _normalizeCardNameForMatch(card.name) == normalizedName,
+        )
+        .map(_printingKeyForCard)
+        .toSet();
+    if (localBeforeSyncKeys.length < 4) {
+      await _syncOnlinePrintsByNameForCollectionScan(
+        cardName,
+        preferredLanguages: fallbackScanLanguages,
+        timeBudget: const Duration(seconds: 2),
+      );
+    }
     if (!mounted || !context.mounted) {
       return seed;
     }
-    final picked = await _pickCardPrintingForName(
+    var picked = await _pickCardPrintingForName(
       context,
       cardName,
-      languages: cardLanguages,
+      languages: fallbackScanLanguages,
       preferredSetCode: seed.setCode,
       preferredCollectorNumber: seed.collectorNumber,
+      localPrintingKeys: localBeforeSyncKeys,
     );
+    if (picked == null) {
+      await _syncOnlinePrintsByNameForCollectionScan(
+        cardName,
+        preferredLanguages: fallbackScanLanguages,
+        timeBudget: const Duration(seconds: 3),
+      );
+      if (mounted && context.mounted) {
+        picked = await _pickCardPrintingForName(
+          context,
+          cardName,
+          languages: fallbackScanLanguages,
+          preferredSetCode: seed.setCode,
+          preferredCollectorNumber: seed.collectorNumber,
+          localPrintingKeys: localBeforeSyncKeys,
+        );
+      }
+    }
     if (picked == null) {
       return _OcrSearchSeed(
         query: cardName,
@@ -550,6 +592,146 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         .toSet();
     _cachedKnownSetCodesForScan = known;
     return known;
+  }
+
+  List<String> _scannerOnlineFallbackLanguagesForCollection(
+    List<String> baseLanguages, {
+    String? scannerLanguageCode,
+  }) {
+    final normalized = <String>{};
+    for (final value in baseLanguages) {
+      final language = value.trim().toLowerCase();
+      if (language.isNotEmpty) {
+        normalized.add(language);
+      }
+    }
+    final scanner = scannerLanguageCode?.trim().toLowerCase();
+    if (scanner != null && scanner.isNotEmpty) {
+      normalized.add(scanner);
+    }
+    normalized.add('en');
+    normalized.add('it');
+    return normalized.toList(growable: false);
+  }
+
+  String _scryfallLanguageClauseForCollectionScan(List<String> languages) {
+    final allowed = AppSettings.languageCodes
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    final normalized = languages
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty && allowed.contains(value))
+        .toSet()
+        .toList(growable: false);
+    if (normalized.isEmpty) {
+      return '(lang:en)';
+    }
+    return '(${normalized.map((lang) => 'lang:$lang').join(' or ')})';
+  }
+
+  Future<void> _syncOnlinePrintsByNameForCollectionScan(
+    String cardName, {
+    required List<String> preferredLanguages,
+    Duration timeBudget = const Duration(seconds: 2),
+  }) async {
+    final name = cardName.trim();
+    if (name.isEmpty) {
+      return;
+    }
+    final deadline = DateTime.now().add(timeBudget);
+    try {
+      final namedUri = Uri.parse(
+        'https://api.scryfall.com/cards/named?fuzzy=${Uri.encodeQueryComponent(name)}',
+      );
+      final namedResponse = await ScryfallApiClient.instance.get(
+        namedUri,
+        timeout: const Duration(seconds: 2),
+        maxRetries: 2,
+      );
+      String? oracleId;
+      if (namedResponse.statusCode == 200) {
+        final namedPayload = jsonDecode(namedResponse.body);
+        if (namedPayload is Map<String, dynamic>) {
+          await ScryfallDatabase.instance.upsertCardFromScryfall(namedPayload);
+          oracleId = (namedPayload['oracle_id'] as String?)
+              ?.trim()
+              .toLowerCase();
+        }
+      }
+      final languageClause = _scryfallLanguageClauseForCollectionScan(
+        preferredLanguages,
+      );
+      Uri searchUri;
+      if (oracleId != null && oracleId.isNotEmpty) {
+        searchUri = Uri.parse(
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('oracleid:$oracleId $languageClause unique:prints')}&order=released&dir=desc',
+        );
+      } else {
+        searchUri = Uri.parse(
+          'https://api.scryfall.com/cards/search?q=${Uri.encodeQueryComponent('!"$name" $languageClause unique:prints')}&order=released&dir=desc',
+        );
+      }
+      await _importScryfallSearchPagesForCollectionScan(
+        searchUri,
+        deadline: deadline,
+        maxPages: 2,
+        maxImported: 120,
+      );
+    } catch (_) {
+      // Best effort only.
+    }
+  }
+
+  Future<void> _importScryfallSearchPagesForCollectionScan(
+    Uri firstPageUri, {
+    required DateTime deadline,
+    int maxPages = 2,
+    int maxImported = 120,
+  }) async {
+    var nextUri = firstPageUri;
+    var page = 0;
+    var imported = 0;
+    while (page < maxPages && imported < maxImported) {
+      if (DateTime.now().isAfter(deadline)) {
+        return;
+      }
+      final response = await ScryfallApiClient.instance.get(
+        nextUri,
+        timeout: const Duration(seconds: 2),
+        maxRetries: 2,
+      );
+      if (response.statusCode != 200) {
+        return;
+      }
+      final payload = jsonDecode(response.body);
+      if (payload is! Map<String, dynamic>) {
+        return;
+      }
+      final data = payload['data'];
+      if (data is List) {
+        for (final item in data) {
+          if (DateTime.now().isAfter(deadline)) {
+            return;
+          }
+          if (item is! Map<String, dynamic>) {
+            continue;
+          }
+          await ScryfallDatabase.instance.upsertCardFromScryfall(item);
+          imported += 1;
+          if (imported >= maxImported) {
+            break;
+          }
+        }
+      }
+      final hasMore = payload['has_more'] == true;
+      final nextPage = payload['next_page'];
+      if (!hasMore || nextPage is! String || nextPage.isEmpty) {
+        return;
+      }
+      nextUri = Uri.parse(nextPage);
+      page += 1;
+    }
   }
 
   _OcrSearchSeed? _buildOcrSearchSeedForScan(

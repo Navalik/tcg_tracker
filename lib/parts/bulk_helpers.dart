@@ -19,13 +19,6 @@ const List<_BulkOption> _bulkOptions = [
   _BulkOption(type: 'unique_artwork'),
 ];
 
-const List<String> _pokemonDatasetProfiles = [
-  'starter',
-  'standard',
-  'expanded',
-  'full',
-];
-
 String _bulkTypeLabel(AppLocalizations l10n, String? type) {
   if (type == null) {
     return l10n.notSelected;
@@ -106,173 +99,6 @@ bool _isLimitedPrintCoverage(String? bulkType) {
       bulkType.trim().toLowerCase() != 'all_cards';
 }
 
-String _pokemonDatasetProfileTitle(BuildContext context, String profile) {
-  final l10n = AppLocalizations.of(context)!;
-  switch (profile.trim().toLowerCase()) {
-    case 'full':
-      return l10n.pokemonDbProfileFullTitle;
-    case 'expanded':
-      return l10n.pokemonDbProfileExpandedTitle;
-    case 'standard':
-      return l10n.pokemonDbProfileStandardTitle;
-    case 'starter':
-    default:
-      return l10n.pokemonDbProfileStarterTitle;
-  }
-}
-
-String _pokemonDatasetProfileDescription(BuildContext context, String profile) {
-  final l10n = AppLocalizations.of(context)!;
-  switch (profile.trim().toLowerCase()) {
-    case 'full':
-      return l10n.pokemonDbProfileFullDescription;
-    case 'expanded':
-      return l10n.pokemonDbProfileExpandedDescription;
-    case 'standard':
-      return l10n.pokemonDbProfileStandardDescription;
-    case 'starter':
-    default:
-      return l10n.pokemonDbProfileStarterDescription;
-  }
-}
-
-Future<String?> _showPokemonDatasetProfilePicker(
-  BuildContext context, {
-  required bool allowCancel,
-  String? selectedProfile,
-  bool requireConfirmation = true,
-  String? confirmLabel,
-}) {
-  return showDialog<String>(
-    context: context,
-    barrierDismissible: allowCancel,
-    builder: (context) {
-      final l10n = AppLocalizations.of(context)!;
-      final theme = Theme.of(context);
-      final validInitial = _pokemonDatasetProfiles.contains(selectedProfile);
-      String currentSelection = validInitial
-          ? selectedProfile!
-          : _pokemonDatasetProfiles.first;
-      return StatefulBuilder(
-        builder: (context, setModalState) {
-          return Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.symmetric(
-              horizontal: 20,
-              vertical: 24,
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF171411),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF3A2F24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    blurRadius: 22,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.storage_rounded,
-                        color: Color(0xFFE9C46A),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          l10n.pokemonDbPickerTitle,
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    l10n.pokemonDbPickerSubtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFFBFAE95),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: _pokemonDatasetProfiles
-                            .map(
-                              (profile) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: _buildSelectableInfoTile(
-                                  context: context,
-                                  title: _pokemonDatasetProfileTitle(
-                                    context,
-                                    profile,
-                                  ),
-                                  description:
-                                      _pokemonDatasetProfileDescription(
-                                        context,
-                                        profile,
-                                      ),
-                                  selected: profile == currentSelection,
-                                  onTap: () {
-                                    setModalState(() {
-                                      currentSelection = profile;
-                                    });
-                                    if (!requireConfirmation) {
-                                      Navigator.of(context).pop(profile);
-                                    }
-                                  },
-                                ),
-                              ),
-                            )
-                            .toList(growable: false),
-                      ),
-                    ),
-                  ),
-                  if (requireConfirmation) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFE9C46A),
-                          foregroundColor: const Color(0xFF1C1510),
-                        ),
-                        onPressed: currentSelection.isEmpty
-                            ? null
-                            : () => Navigator.of(context).pop(currentSelection),
-                        icon: const Icon(Icons.download_rounded, size: 18),
-                        label: Text(confirmLabel ?? l10n.downloadUpdate),
-                      ),
-                    ),
-                  ],
-                  if (allowCancel) ...[
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: Text(l10n.cancel),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    },
-  );
-}
-
 Future<String?> _showBulkTypePicker(
   BuildContext context, {
   required bool allowCancel,
@@ -295,8 +121,8 @@ Future<String?> _showBulkTypePicker(
           TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
       final subtitle = isPokemonActive
           ? (isItalian
-                ? 'Database Pokemon: scegli quale versione scaricare da Scryfall.'
-                : 'Pokemon database: choose which version to download from Scryfall.')
+                ? 'Catalogo Pokemon: scegli la copertura da importare da TCGdex (piu copertura = piu tempo/spazio).'
+                : 'Pokemon catalog: choose TCGdex coverage to import (more coverage = more time/storage).')
           : (isItalian
                 ? 'Database Magic: scegli il dataset Scryfall. Per ricerca locale multilingua usa All Cards.'
                 : 'Magic database: choose the Scryfall dataset. For multilingual local search, use All Cards.');

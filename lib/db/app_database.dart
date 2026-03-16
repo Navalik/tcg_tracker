@@ -702,8 +702,10 @@ class ScryfallDatabase {
   Future<void> _rebuildPrintedNameSearchIndex(AppDatabase db) async {
     const displayExpr =
         "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.printed_name')), ''), name)";
+    const aliasesExpr =
+        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.search_aliases_flat')), ''), '')";
     const foldedExpr =
-        "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER($displayExpr), ',', ''), ' ', ''), '-', ''), CHAR(39), ''), CHAR(8217), ''), CHAR(34), '')";
+        "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER($displayExpr || ' ' || $aliasesExpr), ',', ''), ' ', ''), '-', ''), CHAR(39), ''), CHAR(8217), ''), CHAR(34), '')";
     await db.customStatement('DELETE FROM cards_printed_search');
     await db.customStatement('''
       INSERT OR REPLACE INTO cards_printed_search(card_id, lang, display_name, folded_name)
@@ -4557,7 +4559,11 @@ class ScryfallDatabase {
       power: const Value(''),
       toughness: const Value(''),
       loyalty: const Value(''),
-      lang: const Value('en'),
+      lang: Value(
+        ((card['lang'] as String?)?.trim().toLowerCase().isNotEmpty ?? false)
+            ? (card['lang'] as String?)!.trim().toLowerCase()
+            : 'en',
+      ),
       releasedAt: Value(releasedAt),
       imageUris: Value(imageUris.isEmpty ? null : jsonEncode(imageUris)),
       cardFaces: const Value(null),

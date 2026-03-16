@@ -39,15 +39,9 @@ class PokemonCanonicalImportService {
     List<TcgCardLanguage> languages = TcgdexPokemonProvider.supportedLanguages,
     void Function(double progress)? onProgress,
     void Function(CanonicalCatalogImportBatch batch)? onBatchBuilt,
+    void Function(String status)? onStatus,
   }) async {
-    final setSpecs = PokemonDatasetManifest.setsForProfile(profile);
-    if (setSpecs.isEmpty) {
-      throw ArgumentError.value(
-        profile,
-        'profile',
-        'No manifest sets configured',
-      );
-    }
+    final setCodes = await _resolveSetCodes(profile, onStatus: onStatus);
     final cardsById = <String, CatalogCard>{};
     final setsById = <String, CatalogSet>{};
     final printingsById = <String, CardPrintingRef>{};
@@ -56,13 +50,16 @@ class PokemonCanonicalImportService {
     final providerMappings = <String, ProviderMappingRecord>{};
     final priceSnapshotsByKey = <String, PriceSnapshot>{};
 
-    final totalSets = setSpecs.length;
+    final totalSets = setCodes.length;
     for (var index = 0; index < totalSets; index += 1) {
-      final setSpec = setSpecs[index];
+      final setCode = setCodes[index];
+      onStatus?.call(
+        'Downloading set ${setCode.toUpperCase()} (${index + 1}/$totalSets)',
+      );
       final localizedSets = <TcgCardLanguage, CatalogSet>{};
       for (final language in languages) {
         final localizedSet = await _provider.fetchSetByCodeLocalized(
-          setSpec.setCode,
+          setCode,
           language: language,
         );
         if (localizedSet != null) {
@@ -86,10 +83,29 @@ class PokemonCanonicalImportService {
           }
         }
       }
-      final bundles = await _provider.fetchSetPrintings(
-        setSpec.setCode,
-        languages: languages,
-      );
+      final setBaseProgress = index / totalSets;
+      final setRange = 1 / totalSets;
+      List<ProviderPrintingBundle> bundles;
+      try {
+        bundles = await _provider.fetchSetPrintings(
+          setCode,
+          languages: languages,
+          onProgress: (completed, total) {
+            final cardFraction = total <= 0 ? 1.0 : (completed / total);
+            final progress = setBaseProgress + (cardFraction * setRange);
+            onProgress?.call(progress.clamp(0.0, 1.0));
+          },
+        );
+      } catch (error) {
+        if (_isTcgdexNotFound(error)) {
+          onStatus?.call(
+            'Skipping set ${setCode.toUpperCase()} (missing resource on TCGdex)',
+          );
+          onProgress?.call((setBaseProgress + setRange).clamp(0.0, 1.0));
+          continue;
+        }
+        rethrow;
+      }
       for (final bundle in bundles) {
         cardsById[bundle.card.cardId] = bundle.card;
         setsById[bundle.set.setId] = _mergeSet(
@@ -114,17 +130,7 @@ class PokemonCanonicalImportService {
             setId: bundle.set.setId,
           );
         }
-        final primaryMapping = bundle.printing.providerMappings.isEmpty
-            ? null
-            : bundle.printing.providerMappings.first;
-        final snapshots = await _provider.fetchLatestPrices(
-          PriceQuoteRequest(
-            gameId: TcgGameId.pokemon,
-            printingId: bundle.printing.printingId,
-            catalogProviderId: primaryMapping?.providerId,
-            providerObjectId: primaryMapping?.providerObjectId,
-          ),
-        );
+        final snapshots = _provider.extractPriceSnapshotsFromBundle(bundle);
         for (final snapshot in snapshots) {
           priceSnapshotsByKey[_priceSnapshotKey(snapshot)] = snapshot;
         }
@@ -154,6 +160,45 @@ class PokemonCanonicalImportService {
       localizedSetsImported: batch.setLocalizations.length,
       priceSnapshotsImported: batch.priceSnapshots.length,
     );
+  }
+
+  Future<List<String>> _resolveSetCodes(
+    String profile, {
+    void Function(String status)? onStatus,
+  }) async {
+    final normalized = profile.trim().toLowerCase();
+    if (normalized != 'full') {
+      final setSpecs = PokemonDatasetManifest.setsForProfile(normalized);
+      if (setSpecs.isEmpty) {
+        throw ArgumentError.value(
+          profile,
+          'profile',
+          'No manifest sets configured',
+        );
+      }
+      return setSpecs
+          .map((spec) => spec.setCode.trim().toLowerCase())
+          .where((code) => code.isNotEmpty)
+          .toList(growable: false);
+    }
+
+    onStatus?.call('Loading full set list from TCGdex');
+    final sets = await _provider.fetchSets(limit: 2000);
+    final codes =
+        sets
+            .map((set) => set.code.trim().toLowerCase())
+            .where((code) => code.isNotEmpty)
+            .toSet()
+            .toList(growable: false)
+          ..sort();
+    if (codes.isEmpty) {
+      throw ArgumentError.value(
+        profile,
+        'profile',
+        'TCGdex returned no sets for full profile',
+      );
+    }
+    return codes;
   }
 
   CatalogSet _mergeSet(CatalogSet? existing, CatalogSet next) {
@@ -195,4 +240,8 @@ class PokemonCanonicalImportService {
 
   String _priceSnapshotKey(PriceSnapshot snapshot) =>
       '${snapshot.printingId}:${snapshot.sourceId.value}:${snapshot.currencyCode}:${snapshot.finishKey ?? 'default'}';
+
+  bool _isTcgdexNotFound(Object error) {
+    return error.toString().toLowerCase().contains('tcgdex_http_404');
+  }
 }

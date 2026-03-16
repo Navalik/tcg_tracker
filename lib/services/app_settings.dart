@@ -30,7 +30,6 @@ class AppSettings {
   static const _prefsKeyPrimaryTcg = 'primary_tcg';
   static const _prefsKeyPokemonUnlocked = 'pokemon_unlocked';
   static const _prefsKeyExtraTcgSlots = 'extra_tcg_slots';
-  static const _prefsKeyPokemonDatasetProfile = 'pokemon_dataset_profile';
   static const _prefsKeyAppFirstOpenFlag = 'app_first_open_flag';
   static const _prefsKeyCardLanguageOnboardingDone =
       'card_language_onboarding_done';
@@ -447,7 +446,6 @@ class AppSettings {
     await prefs.remove(_prefsKeyPrimaryTcg);
     await prefs.remove(_prefsKeyPokemonUnlocked);
     await prefs.remove(_prefsKeyExtraTcgSlots);
-    await prefs.remove(_prefsKeyPokemonDatasetProfile);
     await prefs.remove(_prefsKeyAppFirstOpenFlag);
     await prefs.remove(_prefsKeyCardLanguageOnboardingDone);
     await prefs.remove(
@@ -572,36 +570,6 @@ class AppSettings {
       return;
     }
     await savePrimaryTcgGame(fallback);
-  }
-
-  static Future<String> loadPokemonDatasetProfile() async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = prefs
-        .getString(_prefsKeyPokemonDatasetProfile)
-        ?.trim()
-        .toLowerCase();
-    if (value == 'starter' ||
-        value == 'standard' ||
-        value == 'expanded' ||
-        value == 'full') {
-      return value!;
-    }
-    const fallback = 'starter';
-    await prefs.setString(_prefsKeyPokemonDatasetProfile, fallback);
-    return fallback;
-  }
-
-  static Future<void> savePokemonDatasetProfile(String profile) async {
-    final prefs = await SharedPreferences.getInstance();
-    final value = profile.trim().toLowerCase();
-    final normalized =
-        (value == 'starter' ||
-            value == 'standard' ||
-            value == 'expanded' ||
-            value == 'full')
-        ? value
-        : 'starter';
-    await prefs.setString(_prefsKeyPokemonDatasetProfile, normalized);
   }
 
   static Future<void> resetPrimaryGameSelectionFlow() async {

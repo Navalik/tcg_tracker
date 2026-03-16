@@ -191,6 +191,21 @@ class PokemonScannerResolver {
 
     if (setCode != null && setCode.isNotEmpty && hasUsableCollector) {
       await addCandidates(
+        'collector+set',
+        () => searchRepository.fetchCardsForAdvancedFilters(
+          CollectionFilter(
+            sets: {setCode},
+            collectorNumber: hasUsableCollector ? collectorNumber : null,
+          ),
+          gameId: TcgGameId.pokemon,
+          languages: preferredLanguages,
+          limit: limit,
+        ),
+      );
+    }
+
+    if (setCode != null && setCode.isNotEmpty && hasUsableCollector) {
+      await addCandidates(
         'name+set+collector',
         () => searchRepository.fetchCardsForAdvancedFilters(
           exactFilter,
@@ -222,21 +237,6 @@ class PokemonScannerResolver {
         limit: limit,
       ),
     );
-
-    if (results.isEmpty && setCode != null && setCode.isNotEmpty) {
-      await addCandidates(
-        'collector+set',
-        () => searchRepository.fetchCardsForAdvancedFilters(
-          CollectionFilter(
-            sets: {setCode},
-            collectorNumber: hasUsableCollector ? collectorNumber : null,
-          ),
-          gameId: TcgGameId.pokemon,
-          languages: preferredLanguages,
-          limit: limit,
-        ),
-      );
-    }
 
     final deduped = <String, CardSearchResult>{};
     for (final card in results) {
@@ -282,12 +282,20 @@ class PokemonScannerResolver {
   static List<String> _preferredLanguages(String? scannerLanguageCode) {
     final normalized = scannerLanguageCode?.trim().toLowerCase();
     if (normalized == null || normalized.isEmpty) {
-      return const <String>['en'];
+      return const <String>['en', 'it'];
     }
-    if (normalized == 'en') {
-      return const <String>['en'];
+    final ordered = <String>[normalized, 'en', 'it'];
+    final unique = <String>{};
+    final result = <String>[];
+    for (final code in ordered) {
+      final value = code.trim().toLowerCase();
+      if (value.isEmpty || unique.contains(value)) {
+        continue;
+      }
+      unique.add(value);
+      result.add(value);
     }
-    return <String>[normalized, 'en'];
+    return result;
   }
 
   static int _scoreCandidate(

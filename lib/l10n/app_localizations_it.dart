@@ -108,7 +108,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get cardDatabaseSubtitle =>
-      'Scegli quale database scaricare da Scryfall.';
+      'Configura i database locali: Magic da Scryfall, Pokemon da TCGdex.';
 
   @override
   String get selectedType => 'Tipo selezionato';
@@ -370,7 +370,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get chooseCollection => 'Scegli collezione';
 
   @override
-  String get chooseCardDatabaseTitle => 'Scegli database carte';
+  String get chooseCardDatabaseTitle => 'Scegli profilo database';
 
   @override
   String get chooseYourGameTitle => 'Scegli il tuo gioco';
@@ -1554,38 +1554,39 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get pokemonDbProfileFullTitle => 'Full (tutte le carte)';
+  String get pokemonDbProfileFullTitle => 'Catalogo completo (tutti i set)';
 
   @override
-  String get pokemonDbProfileExpandedTitle => 'Expanded (10 set)';
+  String get pokemonDbProfileExpandedTitle => 'Copertura media (10 set fissi)';
 
   @override
-  String get pokemonDbProfileStandardTitle => 'Standard (6 set)';
+  String get pokemonDbProfileStandardTitle => 'Copertura base (6 set fissi)';
 
   @override
-  String get pokemonDbProfileStarterTitle => 'Starter (3 set)';
+  String get pokemonDbProfileStarterTitle => 'Copertura minima (3 set fissi)';
 
   @override
-  String get pokemonDbProfileFullDescription => 'Catalogo completo Pokemon.';
+  String get pokemonDbProfileFullDescription =>
+      'Importa tutto il catalogo Pokemon da TCGdex. Migliore copertura (anche espansioni recenti), download piu lungo e database piu grande.';
 
   @override
   String get pokemonDbProfileExpandedDescription =>
-      'Copertura ampia per ricerca e scansione.';
+      'Importa 10 set predefiniti: base1, swsh1-5, sv1-4. Non include tutte le espansioni recenti.';
 
   @override
   String get pokemonDbProfileStandardDescription =>
-      'Set recenti, buon compromesso dimensione/copertura.';
+      'Importa 6 set predefiniti: base1, swsh1, sv1-4. Compromesso tra velocita e copertura.';
 
   @override
   String get pokemonDbProfileStarterDescription =>
-      'Avvio rapido con set essenziali.';
+      'Importa 3 set predefiniti: base1, swsh1, sv1. Il piu veloce, ma con copertura limitata.';
 
   @override
-  String get pokemonDbPickerTitle => 'Scegli database Pokemon';
+  String get pokemonDbPickerTitle => 'Scegli copertura catalogo Pokemon';
 
   @override
   String get pokemonDbPickerSubtitle =>
-      'Database Pokemon: scegli quale versione scaricare.';
+      'Ogni profilo importa una porzione diversa del catalogo TCGdex: piu copertura = piu tempo e spazio.';
 
   @override
   String get primaryGameFixedMessage => 'Il gioco primario e fisso.';
@@ -1737,7 +1738,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get configureBothDatabasesSubtitle =>
-      'Configura separatamente i database di Magic e Pokemon.';
+      'Magic e Pokemon hanno profili separati: scegli copertura, tempo download e spazio locale.';
 
   @override
   String get toolsAndDiagnosticsTitle => 'Tool e diagnostica';

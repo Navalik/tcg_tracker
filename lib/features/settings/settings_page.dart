@@ -1,5 +1,15 @@
 part of 'package:tcg_tracker/main.dart';
 
+class SettingsPostAction {
+  const SettingsPostAction._({required this.game, this.mtgBulkType});
+
+  final TcgGame game;
+  final String? mtgBulkType;
+
+  factory SettingsPostAction.startMtgDownload({required String bulkType}) =>
+      SettingsPostAction._(game: TcgGame.mtg, mtgBulkType: bulkType);
+}
+
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
@@ -15,7 +25,6 @@ class _SettingsPageState extends State<SettingsPage> {
   static const Duration _storeOperationTimeout = Duration(seconds: 20);
   bool _loading = true;
   String? _bulkType;
-  String _pokemonDatasetProfile = 'starter';
   String _priceSource = 'scryfall';
   String _priceCurrency = 'eur';
   bool _showPrices = true;
@@ -241,7 +250,6 @@ class _SettingsPageState extends State<SettingsPage> {
     final appThemeCode = await AppSettings.loadVisualTheme();
     final ownedTcgs = await AppSettings.loadOwnedTcgs();
     final pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
-    final pokemonDatasetProfile = await AppSettings.loadPokemonDatasetProfile();
     final mtgCardLanguages = await AppSettings.loadCardLanguagesForGame(
       AppTcgGame.mtg,
     );
@@ -252,13 +260,6 @@ class _SettingsPageState extends State<SettingsPage> {
         .map((value) => value.trim().toLowerCase())
         .where((value) => value.isNotEmpty)
         .toSet();
-    if (pokemonCardLanguages.length != 1 ||
-        !pokemonCardLanguages.contains('en')) {
-      await AppSettings.saveCardLanguagesForGame(
-        AppTcgGame.pokemon,
-        const <String>{'en'},
-      );
-    }
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -274,7 +275,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _priceCurrency = priceCurrency;
       _showPrices = showPrices;
       _mtgItalianCardsEnabled = mtgCardLanguages.contains('it');
-      _pokemonItalianCardsEnabled = false;
+      _pokemonItalianCardsEnabled = pokemonCardLanguages.contains('it');
       _appLocaleCode = appLocaleCode;
       _appThemeCode = appThemeCode;
       _appVersion = appVersion;
@@ -291,35 +292,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _gamesBusy =
           _purchaseManager.purchasePending ||
           _purchaseManager.restoringPurchases;
-      _pokemonDatasetProfile = pokemonDatasetProfile;
       _loading = false;
     });
-  }
-
-  Future<void> _showPokemonItalianComingSoonDialog() async {
-    if (!mounted) {
-      return;
-    }
-    final l10n = AppLocalizations.of(context)!;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          _isItalianUi ? 'Pokemon: solo inglese' : 'Pokemon: English only',
-        ),
-        content: Text(
-          _isItalianUi
-              ? 'Le carte Pokemon sono disponibili solo in inglese con la sorgente attuale. Il supporto italiano e in arrivo in una futura release.'
-              : 'Pokemon cards are currently available in English only with the current data source. Italian support is planned for a future release.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(l10n.continueLabel),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _changePrimaryGame(TcgGame selected) async {
@@ -837,14 +811,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _pokemonProfileLabel(_pokemonDatasetProfile),
+                      AppLocalizations.of(context)!.pokemonDbProfileFullTitle,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFFBFAE95),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _pokemonProfileDescription(_pokemonDatasetProfile),
+                      AppLocalizations.of(
+                        context,
+                      )!.pokemonDbProfileFullDescription,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFF8F816B),
                       ),
@@ -870,13 +846,6 @@ class _SettingsPageState extends State<SettingsPage> {
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
                             child: Text(_reimportLabel()),
-                          ),
-                          OutlinedButton(
-                            onPressed: _changePokemonDatasetProfile,
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF5D4731)),
-                            ),
-                            child: Text(l10n.change),
                           ),
                         ],
                       ),
@@ -990,8 +959,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       subtitle: Text(
                         _isItalianUi
-                            ? 'Sorgente attuale: solo inglese. Italiano in arrivo.'
-                            : 'Current source: English only. Italian coming soon.',
+                            ? 'Inglese sempre incluso. Italiano opzionale (download piu lungo).'
+                            : 'English always included. Italian optional (longer download).',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFBFAE95),
                         ),

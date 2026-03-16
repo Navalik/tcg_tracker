@@ -75,6 +75,30 @@ void main() {
       expect(repository.lastLanguages, const <String>['it', 'en']);
       expect(repository.lastGameId, TcgGameId.pokemon);
     });
+
+    test(
+      'uses english and italian fallback when scanner language is missing',
+      () async {
+        final repository = _FakeSearchRepository(
+          advancedFilterResults: <CardSearchResult>[
+            _card(name: 'Kissara', setCode: 'sv3', collectorNumber: '182'),
+          ],
+        );
+
+        await PokemonScannerResolver.resolve(
+          seed: const ScannerOcrSeed(
+            query: 'Kissara',
+            cardName: 'Kissara',
+            setCode: 'sv3',
+            collectorNumber: '182',
+          ),
+          searchRepository: repository,
+        );
+
+        expect(repository.lastLanguages, const <String>['en', 'it']);
+        expect(repository.lastGameId, TcgGameId.pokemon);
+      },
+    );
   });
 }
 

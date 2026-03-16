@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import '../domain/domain_models.dart';
 import '../services/tcgdex_api_client.dart';
 import 'provider_contracts.dart';
@@ -17,8 +19,12 @@ class TcgdexPokemonProvider
     TcgCardLanguage.en,
     TcgCardLanguage.it,
   ];
+  static const int _setFetchConcurrency = 32;
+  static final RegExp _providerObjectIdPattern = RegExp(r'^[a-z0-9-]+$');
 
   final TcgdexApiClient _apiClient;
+  final Map<String, Future<Map<String, dynamic>?>> _setPayloadCache =
+      <String, Future<Map<String, dynamic>?>>{};
 
   @override
   CatalogProviderId get providerId => CatalogProviderId.tcgdex;
@@ -155,14 +161,8 @@ class TcgdexPokemonProvider
     String setCode, {
     required TcgCardLanguage language,
   }) async {
-    final normalized = setCode.trim();
-    if (normalized.isEmpty) {
-      return null;
-    }
-    final payload = await _apiClient.getJson(
-      _buildUri(language, 'sets/$normalized'),
-    );
-    if (payload is! Map<String, dynamic>) {
+    final payload = await _fetchSetPayload(setCode, language: language);
+    if (payload == null) {
       return null;
     }
     return _mapSet(payload, language);
@@ -172,14 +172,8 @@ class TcgdexPokemonProvider
     String setCode, {
     TcgCardLanguage language = canonicalLanguage,
   }) async {
-    final normalized = setCode.trim();
-    if (normalized.isEmpty) {
-      return const <String>[];
-    }
-    final payload = await _apiClient.getJson(
-      _buildUri(language, 'sets/$normalized'),
-    );
-    if (payload is! Map<String, dynamic>) {
+    final payload = await _fetchSetPayload(setCode, language: language);
+    if (payload == null) {
       return const <String>[];
     }
     final cards = payload['cards'];
@@ -202,11 +196,45 @@ class TcgdexPokemonProvider
   Future<List<ProviderPrintingBundle>> fetchSetPrintings(
     String setCode, {
     List<TcgCardLanguage> languages = supportedLanguages,
+    void Function(int completed, int total)? onProgress,
   }) async {
     final ids = await fetchSetCardIds(setCode);
+    if (ids.isEmpty) {
+      return const <ProviderPrintingBundle>[];
+    }
+    final bundlesByIndex = List<ProviderPrintingBundle?>.filled(
+      ids.length,
+      null,
+      growable: false,
+    );
+    final workerCount = ids.length < _setFetchConcurrency
+        ? ids.length
+        : _setFetchConcurrency;
+    var nextIndex = 0;
+    var completed = 0;
+
+    Future<void> worker() async {
+      while (true) {
+        final currentIndex = nextIndex;
+        if (currentIndex >= ids.length) {
+          return;
+        }
+        nextIndex += 1;
+        final bundle = await fetchPrintingBundle(
+          ids[currentIndex],
+          languages: languages,
+        );
+        bundlesByIndex[currentIndex] = bundle;
+        completed += 1;
+        onProgress?.call(completed, ids.length);
+      }
+    }
+
+    await Future.wait(
+      List<Future<void>>.generate(workerCount, (_) => worker()),
+    );
     final bundles = <ProviderPrintingBundle>[];
-    for (final id in ids) {
-      final bundle = await fetchPrintingBundle(id, languages: languages);
+    for (final bundle in bundlesByIndex) {
       if (bundle != null) {
         bundles.add(bundle);
       }
@@ -218,34 +246,36 @@ class TcgdexPokemonProvider
     String providerObjectId, {
     List<TcgCardLanguage> languages = supportedLanguages,
   }) async {
-    final normalizedId = providerObjectId.trim();
-    if (normalizedId.isEmpty) {
+    final normalizedId = _normalizeProviderObjectId(providerObjectId);
+    if (normalizedId == null) {
       return null;
     }
     final resolvedLanguages = _resolveLanguages(
       languages.map((language) => language.code).toList(growable: false),
     );
-    final canonicalPayload = await _fetchCardPayload(
-      normalizedId,
-      language: canonicalLanguage,
-    );
+    final localizedPayloads = <TcgCardLanguage, Map<String, dynamic>>{};
+    for (final language in resolvedLanguages) {
+      try {
+        final payload = await _fetchCardPayload(
+          normalizedId,
+          language: language,
+        );
+        if (payload != null) {
+          localizedPayloads[language] = payload;
+        }
+      } catch (error) {
+        final isCanonical = language == canonicalLanguage;
+        if (isCanonical) {
+          rethrow;
+        }
+        if (error.toString().toLowerCase().contains('tcgdex_http_404')) {
+          continue;
+        }
+      }
+    }
+    final canonicalPayload = localizedPayloads[canonicalLanguage];
     if (canonicalPayload == null) {
       return null;
-    }
-    final localizedPayloads = <TcgCardLanguage, Map<String, dynamic>>{
-      canonicalLanguage: canonicalPayload,
-    };
-    for (final language in resolvedLanguages) {
-      if (language == canonicalLanguage) {
-        continue;
-      }
-      final localized = await _fetchCardPayload(
-        normalizedId,
-        language: language,
-      );
-      if (localized != null) {
-        localizedPayloads[language] = localized;
-      }
     }
     return _mapPrintingBundle(canonicalPayload, localizedPayloads);
   }
@@ -264,8 +294,10 @@ class TcgdexPokemonProvider
   Future<List<PriceSnapshot>> fetchLatestPrices(
     PriceQuoteRequest request,
   ) async {
-    final providerObjectId = request.providerObjectId?.trim() ?? '';
-    if (providerObjectId.isEmpty) {
+    final providerObjectId = _normalizeProviderObjectId(
+      request.providerObjectId ?? '',
+    );
+    if (providerObjectId == null) {
       return const <PriceSnapshot>[];
     }
     final payload = await _fetchCardPayload(
@@ -278,17 +310,131 @@ class TcgdexPokemonProvider
     return _extractPriceSnapshots(payload, request.printingId.trim());
   }
 
+  List<PriceSnapshot> extractPriceSnapshotsFromBundle(
+    ProviderPrintingBundle bundle,
+  ) {
+    final rawPricing = bundle.printing.metadata['raw_pricing'];
+    if (rawPricing is! Map) {
+      return const <PriceSnapshot>[];
+    }
+    final payload = <String, dynamic>{
+      'pricing': Map<String, dynamic>.from(rawPricing),
+    };
+    return _extractPriceSnapshots(payload, bundle.printing.printingId);
+  }
+
+  CatalogSet? mapSetPayload(
+    Map<String, dynamic> payload, {
+    required TcgCardLanguage language,
+  }) {
+    return _mapSet(payload, language);
+  }
+
+  ProviderPrintingBundle? mapPrintingBundleFromPayloads(
+    Map<String, dynamic> canonicalPayload,
+    Map<TcgCardLanguage, Map<String, dynamic>> localizedPayloads,
+  ) {
+    return _mapPrintingBundle(canonicalPayload, localizedPayloads);
+  }
+
   Future<Map<String, dynamic>?> _fetchCardPayload(
     String providerObjectId, {
     required TcgCardLanguage language,
   }) async {
-    final payload = await _apiClient.getJson(
-      _buildUri(language, 'cards/$providerObjectId'),
-    );
-    if (payload is! Map<String, dynamic>) {
+    try {
+      final payload = await _apiClient.getJson(
+        _buildUri(language, 'cards/$providerObjectId'),
+      );
+      if (payload is! Map<String, dynamic>) {
+        return null;
+      }
+      return payload;
+    } catch (error) {
+      final message = error.toString().toLowerCase();
+      if (message.contains('tcgdex_http_400')) {
+        // Ignore malformed/unsupported ids to avoid aborting bulk sync.
+        return null;
+      }
+      if (language != canonicalLanguage) {
+        return null;
+      }
+      if (message.contains('tcgdex_http_404')) {
+        // Some printings are not available in all localized catalogs.
+        // Treat missing localization as optional and continue with
+        // canonical/available languages instead of aborting the sync.
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  String? _normalizeProviderObjectId(String rawValue) {
+    final normalized = rawValue.trim().toLowerCase();
+    if (normalized.isEmpty) {
       return null;
     }
-    return payload;
+    if (!_providerObjectIdPattern.hasMatch(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
+
+  Future<Map<String, dynamic>?> _fetchSetPayload(
+    String setCode, {
+    required TcgCardLanguage language,
+  }) {
+    final normalized = setCode.trim();
+    if (normalized.isEmpty) {
+      return Future<Map<String, dynamic>?>.value(null);
+    }
+    final resolvedCode = _normalizeTcgdexSetCode(normalized);
+    final cacheKey = '${language.code}:$resolvedCode';
+    return _setPayloadCache.putIfAbsent(cacheKey, () async {
+      for (final candidate in _setEndpointCandidates(resolvedCode)) {
+        try {
+          final payload = await _apiClient.getJson(
+            _buildUri(language, 'sets/$candidate'),
+          );
+          if (payload is Map<String, dynamic>) {
+            return payload;
+          }
+        } on HttpException catch (error) {
+          if (!_isHttp404(error)) {
+            rethrow;
+          }
+        }
+      }
+      return null;
+    });
+  }
+
+  Iterable<String> _setEndpointCandidates(String normalized) sync* {
+    final emitted = <String>{};
+    if (emitted.add(normalized)) {
+      yield normalized;
+    }
+    final zeroPadded = _zeroPadSeriesCode(normalized);
+    if (zeroPadded != null && emitted.add(zeroPadded)) {
+      yield zeroPadded;
+    }
+  }
+
+  String _normalizeTcgdexSetCode(String setCode) {
+    final normalized = setCode.trim().toLowerCase();
+    return _zeroPadSeriesCode(normalized) ?? normalized;
+  }
+
+  String? _zeroPadSeriesCode(String setCode) {
+    final match = RegExp(r'^(sv)(\d)$').firstMatch(setCode);
+    if (match == null) {
+      return null;
+    }
+    return '${match.group(1)}0${match.group(2)}';
+  }
+
+  bool _isHttp404(HttpException error) {
+    final message = error.message.toLowerCase();
+    return message.contains('tcgdex_http_404');
   }
 
   ProviderPrintingBundle? _mapPrintingBundle(
@@ -424,6 +570,10 @@ class TcgdexPokemonProvider
         'local_id': canonicalPayload['localId'],
         'updated_at': updatedAt?.toIso8601String(),
         'legalities': canonicalPayload['legal'],
+        if (canonicalPayload['pricing'] is Map)
+          'raw_pricing': Map<String, dynamic>.from(
+            canonicalPayload['pricing'] as Map,
+          ),
       },
     );
 

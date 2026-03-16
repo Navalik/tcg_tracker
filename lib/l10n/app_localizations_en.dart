@@ -108,7 +108,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cardDatabaseSubtitle =>
-      'Choose which database to download from Scryfall.';
+      'Configure local databases: Magic from Scryfall, Pokemon from TCGdex.';
 
   @override
   String get selectedType => 'Selected type';
@@ -366,7 +366,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chooseCollection => 'Choose collection';
 
   @override
-  String get chooseCardDatabaseTitle => 'Choose card database';
+  String get chooseCardDatabaseTitle => 'Choose database profile';
 
   @override
   String get chooseYourGameTitle => 'Choose your game';
@@ -1531,38 +1531,39 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get pokemonDbProfileFullTitle => 'Full (all cards)';
+  String get pokemonDbProfileFullTitle => 'Complete catalog (all sets)';
 
   @override
-  String get pokemonDbProfileExpandedTitle => 'Expanded (10 sets)';
+  String get pokemonDbProfileExpandedTitle => 'Medium coverage (fixed 10 sets)';
 
   @override
-  String get pokemonDbProfileStandardTitle => 'Standard (6 sets)';
+  String get pokemonDbProfileStandardTitle => 'Base coverage (fixed 6 sets)';
 
   @override
-  String get pokemonDbProfileStarterTitle => 'Starter (3 sets)';
+  String get pokemonDbProfileStarterTitle => 'Minimal coverage (fixed 3 sets)';
 
   @override
-  String get pokemonDbProfileFullDescription => 'Complete Pokemon catalog.';
+  String get pokemonDbProfileFullDescription =>
+      'Imports the full Pokemon catalog from TCGdex. Best coverage (including recent expansions), with longer download and larger local DB.';
 
   @override
   String get pokemonDbProfileExpandedDescription =>
-      'Wide coverage for search and scanning.';
+      'Imports 10 predefined sets: base1, swsh1-5, sv1-4. Does not include all recent expansions.';
 
   @override
   String get pokemonDbProfileStandardDescription =>
-      'Recent sets, balanced size/coverage.';
+      'Imports 6 predefined sets: base1, swsh1, sv1-4. Balanced speed and coverage.';
 
   @override
   String get pokemonDbProfileStarterDescription =>
-      'Quick start with essential sets.';
+      'Imports 3 predefined sets: base1, swsh1, sv1. Fastest, with limited coverage.';
 
   @override
-  String get pokemonDbPickerTitle => 'Choose Pokemon database';
+  String get pokemonDbPickerTitle => 'Choose Pokemon catalog coverage';
 
   @override
   String get pokemonDbPickerSubtitle =>
-      'Pokemon database: choose which version to download.';
+      'Each profile imports a different slice of TCGdex: more coverage = more time and storage.';
 
   @override
   String get primaryGameFixedMessage => 'Primary game is fixed.';
@@ -1716,7 +1717,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get configureBothDatabasesSubtitle =>
-      'Configure Magic and Pokemon databases separately.';
+      'Magic and Pokemon have separate profiles: choose coverage, download time, and local storage.';
 
   @override
   String get toolsAndDiagnosticsTitle => 'Tools & diagnostics';

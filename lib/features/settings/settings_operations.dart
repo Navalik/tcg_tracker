@@ -167,22 +167,6 @@ extension _SettingsOperationsSection on _SettingsPageState {
   }
 
   Future<void> _setItalianCardsEnabled(TcgGame game, bool enabled) async {
-    if (game == TcgGame.pokemon) {
-      await AppSettings.saveCardLanguagesForGame(
-        AppTcgGame.pokemon,
-        const <String>{'en'},
-      );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _pokemonItalianCardsEnabled = false;
-      });
-      if (enabled) {
-        await _showPokemonItalianComingSoonDialog();
-      }
-      return;
-    }
     final target = game == TcgGame.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;
@@ -204,7 +188,8 @@ extension _SettingsOperationsSection on _SettingsPageState {
     });
     final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
     final normalizedBulk = (bulkType ?? '').trim().toLowerCase();
-    final requiresAllCards = enabled && normalizedBulk != 'all_cards';
+    final requiresAllCards =
+        game == TcgGame.mtg && enabled && normalizedBulk != 'all_cards';
     final canReimportNow = !requiresAllCards;
     final shouldReimportNow = await showDialog<bool>(
       context: context,
@@ -269,29 +254,6 @@ extension _SettingsOperationsSection on _SettingsPageState {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.changeDatabaseTitle),
-          content: Text(l10n.changeDatabaseBody),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(l10n.confirm),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirmed != true || !mounted) {
-      return;
-    }
 
     showDialog<void>(
       context: context,
@@ -333,7 +295,9 @@ extension _SettingsOperationsSection on _SettingsPageState {
       _bulkType = selected;
     });
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
-    Navigator.of(context).pop();
+    Navigator.of(
+      context,
+    ).pop(SettingsPostAction.startMtgDownload(bulkType: selected));
   }
 
   Future<void> _resetDatabaseForGame(TcgGame game) async {
@@ -593,11 +557,12 @@ extension _SettingsOperationsSection on _SettingsPageState {
           );
           await _cleanupMtgBulkFilesKeepingType(bulkType);
         } else {
-          await PokemonBulkService.instance.reimportFromLocalCache(
-            onProgress: (value) =>
-                updateProgress(value, _reimportProgressLabel(gameLabel)),
-            onStatus: (value) => updateProgress(progress, value),
-          );
+          await PokemonBulkService.instance
+              .reimportOrInstallForCurrentSelection(
+                onProgress: (value) =>
+                    updateProgress(value, _reimportProgressLabel(gameLabel)),
+                onStatus: (value) => updateProgress(progress, value),
+              );
         }
       } finally {
         await ScryfallDatabase.instance.setDatabaseFileName(

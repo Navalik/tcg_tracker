@@ -169,9 +169,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (!mounted) {
       return;
     }
+    final isPokemonRuntime = runtimeGame == AppTcgGame.pokemon;
     setState(() {
       _activeSearchGame = runtimeGame;
-      _limitedPrintCoverage = _isLimitedPrintCoverage(bulkType);
+      _limitedPrintCoverage = isPokemonRuntime
+          ? false
+          : _isLimitedPrintCoverage(bulkType);
       _searchLanguages = cardLanguages;
     });
     if (_query.trim().isNotEmpty) {
@@ -1546,22 +1549,23 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           spacing: 10,
                           runSpacing: 8,
                           children: [
-                            FilterChip(
-                              selected: _artworkSearchEnabled,
-                              onSelected: (value) async {
-                                setState(() {
-                                  _artworkSearchEnabled = value;
-                                });
-                                if (_query.trim().isNotEmpty) {
-                                  await _runSearch(forceRefresh: true);
-                                }
-                              },
-                              avatar: const Icon(
-                                Icons.star_outline_rounded,
-                                size: 18,
+                            if (!_isPokemonSearch)
+                              FilterChip(
+                                selected: _artworkSearchEnabled,
+                                onSelected: (value) async {
+                                  setState(() {
+                                    _artworkSearchEnabled = value;
+                                  });
+                                  if (_query.trim().isNotEmpty) {
+                                    await _runSearch(forceRefresh: true);
+                                  }
+                                },
+                                avatar: const Icon(
+                                  Icons.star_outline_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(l10n.allArtworks),
                               ),
-                              label: Text(l10n.allArtworks),
-                            ),
                             if (widget.ownershipCollectionId != null)
                               FilterChip(
                                 selected: _ownedOnlyFilter,

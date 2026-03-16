@@ -269,7 +269,7 @@ abstract class AppLocalizations {
   /// No description provided for @cardDatabaseSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Choose which database to download from Scryfall.'**
+  /// **'Configure local databases: Magic from Scryfall, Pokemon from TCGdex.'**
   String get cardDatabaseSubtitle;
 
   /// No description provided for @selectedType.
@@ -725,7 +725,7 @@ abstract class AppLocalizations {
   /// No description provided for @chooseCardDatabaseTitle.
   ///
   /// In en, this message translates to:
-  /// **'Choose card database'**
+  /// **'Choose database profile'**
   String get chooseCardDatabaseTitle;
 
   /// No description provided for @chooseYourGameTitle.
@@ -2789,61 +2789,61 @@ abstract class AppLocalizations {
   /// No description provided for @pokemonDbProfileFullTitle.
   ///
   /// In en, this message translates to:
-  /// **'Full (all cards)'**
+  /// **'Complete catalog (all sets)'**
   String get pokemonDbProfileFullTitle;
 
   /// No description provided for @pokemonDbProfileExpandedTitle.
   ///
   /// In en, this message translates to:
-  /// **'Expanded (10 sets)'**
+  /// **'Medium coverage (fixed 10 sets)'**
   String get pokemonDbProfileExpandedTitle;
 
   /// No description provided for @pokemonDbProfileStandardTitle.
   ///
   /// In en, this message translates to:
-  /// **'Standard (6 sets)'**
+  /// **'Base coverage (fixed 6 sets)'**
   String get pokemonDbProfileStandardTitle;
 
   /// No description provided for @pokemonDbProfileStarterTitle.
   ///
   /// In en, this message translates to:
-  /// **'Starter (3 sets)'**
+  /// **'Minimal coverage (fixed 3 sets)'**
   String get pokemonDbProfileStarterTitle;
 
   /// No description provided for @pokemonDbProfileFullDescription.
   ///
   /// In en, this message translates to:
-  /// **'Complete Pokemon catalog.'**
+  /// **'Imports the full Pokemon catalog from TCGdex. Best coverage (including recent expansions), with longer download and larger local DB.'**
   String get pokemonDbProfileFullDescription;
 
   /// No description provided for @pokemonDbProfileExpandedDescription.
   ///
   /// In en, this message translates to:
-  /// **'Wide coverage for search and scanning.'**
+  /// **'Imports 10 predefined sets: base1, swsh1-5, sv1-4. Does not include all recent expansions.'**
   String get pokemonDbProfileExpandedDescription;
 
   /// No description provided for @pokemonDbProfileStandardDescription.
   ///
   /// In en, this message translates to:
-  /// **'Recent sets, balanced size/coverage.'**
+  /// **'Imports 6 predefined sets: base1, swsh1, sv1-4. Balanced speed and coverage.'**
   String get pokemonDbProfileStandardDescription;
 
   /// No description provided for @pokemonDbProfileStarterDescription.
   ///
   /// In en, this message translates to:
-  /// **'Quick start with essential sets.'**
+  /// **'Imports 3 predefined sets: base1, swsh1, sv1. Fastest, with limited coverage.'**
   String get pokemonDbProfileStarterDescription;
 
   /// No description provided for @pokemonDbPickerTitle.
   ///
   /// In en, this message translates to:
-  /// **'Choose Pokemon database'**
+  /// **'Choose Pokemon catalog coverage'**
   String get pokemonDbPickerTitle;
 
   /// No description provided for @pokemonDbPickerSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Pokemon database: choose which version to download.'**
+  /// **'Each profile imports a different slice of TCGdex: more coverage = more time and storage.'**
   String get pokemonDbPickerSubtitle;
 
   /// No description provided for @primaryGameFixedMessage.
@@ -3101,7 +3101,7 @@ abstract class AppLocalizations {
   /// No description provided for @configureBothDatabasesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Configure Magic and Pokemon databases separately.'**
+  /// **'Magic and Pokemon have separate profiles: choose coverage, download time, and local storage.'**
   String get configureBothDatabasesSubtitle;
 
   /// No description provided for @toolsAndDiagnosticsTitle.

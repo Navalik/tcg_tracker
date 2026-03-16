@@ -1428,15 +1428,19 @@ class CanonicalCatalogStore {
       final localizedExistsSql = _localizedCardNameExistsSql(
         preferredLanguages.length,
       );
+      final localizedExistsAnyLanguageSql =
+          _localizedCardNameExistsAnyLanguageSql();
       whereClauses.add('''
         (
           LOWER(cc.canonical_name) LIKE ?
           OR $localizedExistsSql
+          OR $localizedExistsAnyLanguageSql
           OR LOWER(cp.collector_number) LIKE ?
         )
         ''');
       params.add('%$token%');
       params.addAll(preferredLanguages);
+      params.add('%$token%');
       params.add('%$token%');
       params.add('%$token%');
     }
@@ -1683,6 +1687,17 @@ class CanonicalCatalogStore {
         FROM catalog_card_localizations ccl
         WHERE ccl.card_id = cc.id
           AND ccl.language_code IN (${_inClause(languageCount)})
+          AND LOWER(ccl.name) LIKE ?
+      )
+    ''';
+  }
+
+  String _localizedCardNameExistsAnyLanguageSql() {
+    return '''
+      EXISTS (
+        SELECT 1
+        FROM catalog_card_localizations ccl
+        WHERE ccl.card_id = cc.id
           AND LOWER(ccl.name) LIKE ?
       )
     ''';
