@@ -263,7 +263,7 @@ void main() {
       expect(italianFirst, isNotEmpty);
       expect(englishFirst, isNotEmpty);
       expect(italianFirst.first.name, equals('Alakazam IT'));
-      expect(englishFirst.first.name, equals('Alakazam'));
+      expect(englishFirst.first.name, equals('Alakazam IT'));
     },
   );
 

@@ -3,12 +3,10 @@ import 'one_piece_pilot_provider.dart';
 import 'provider_registry.dart';
 import 'scryfall_mtg_price_provider_adapter.dart';
 import 'scryfall_mtg_provider_adapter.dart';
-import 'tcgdex_pokemon_provider.dart';
 
 const _onePiecePilotProvider = OnePiecePilotProvider();
 const _scryfallMtgProvider = ScryfallMtgProviderAdapter();
 const _scryfallMtgPriceProvider = ScryfallMtgPriceProviderAdapter();
-final _tcgdexPokemonProvider = TcgdexPokemonProvider();
 
 final ProviderRegistry appProviderRegistry = ProviderRegistry({
   TcgGameId.mtg: const GameProviderBundle(
@@ -20,14 +18,7 @@ final ProviderRegistry appProviderRegistry = ProviderRegistry({
     deckRules: _scryfallMtgProvider,
     prices: _scryfallMtgPriceProvider,
   ),
-  TcgGameId.pokemon: GameProviderBundle(
-    gameId: TcgGameId.pokemon,
-    catalog: _tcgdexPokemonProvider,
-    catalogSync: _tcgdexPokemonProvider,
-    search: _tcgdexPokemonProvider,
-    sets: _tcgdexPokemonProvider,
-    prices: _tcgdexPokemonProvider,
-  ),
+  TcgGameId.pokemon: const GameProviderBundle(gameId: TcgGameId.pokemon),
   TcgGameId.onePiece: const GameProviderBundle(
     gameId: TcgGameId.onePiece,
     catalog: _onePiecePilotProvider,

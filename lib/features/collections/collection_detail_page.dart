@@ -1022,25 +1022,16 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Widget _cardImageOrPlaceholder(String? rawImageUri) {
-    final imageUrl = (rawImageUri ?? '').trim();
+    final imageUrl = _normalizeCardImageUrlForDisplay(rawImageUri);
     if (imageUrl.isEmpty) {
-      return Container(
-        color: const Color(0xFF201A14),
-        child: const Icon(Icons.image_not_supported, color: Color(0xFFBFAE95)),
-      );
+      return _missingCardArtPlaceholder('', compact: true);
     }
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
       errorBuilder: (context, error, stackTrace) {
-        return Container(
-          color: const Color(0xFF201A14),
-          child: const Icon(
-            Icons.image_not_supported,
-            color: Color(0xFFBFAE95),
-          ),
-        );
+        return _missingCardArtPlaceholder('', compact: true);
       },
     );
   }

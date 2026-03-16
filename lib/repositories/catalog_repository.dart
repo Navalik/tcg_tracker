@@ -6,10 +6,12 @@ abstract class CatalogRepository {
 
   Future<List<SetInfo>> fetchAvailableSets({
     TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
   });
 
   Future<Map<String, String>> fetchSetNamesForCodes(
     List<String> setCodes, {
     TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
   });
 }

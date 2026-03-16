@@ -43,7 +43,25 @@ String _normalizeCardImageUrlForDisplay(String? rawImageUri) {
   }
   final isPokemonGame =
       TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
-  if (!isPokemonGame || uri.host.toLowerCase() != 'images.pokemontcg.io') {
+  if (!isPokemonGame) {
+    return imageUrl;
+  }
+  final host = uri.host.toLowerCase();
+  if (host == 'assets.tcgdex.net') {
+    final path = uri.path.trim();
+    final lowerPath = path.toLowerCase();
+    final hasKnownImageExtension =
+        lowerPath.endsWith('.png') ||
+        lowerPath.endsWith('.jpg') ||
+        lowerPath.endsWith('.jpeg') ||
+        lowerPath.endsWith('.webp');
+    if (!hasKnownImageExtension) {
+      final nextPath = path.endsWith('/') ? '${path}low.webp' : '$path/low.webp';
+      return uri.replace(path: nextPath).toString();
+    }
+    return imageUrl;
+  }
+  if (host != 'images.pokemontcg.io') {
     return imageUrl;
   }
   if (uri.pathSegments.isEmpty) {
@@ -145,6 +163,82 @@ Widget _emptySetIcon(double size) {
   );
 }
 
+Widget _missingCardArtPlaceholder(
+  String setCode, {
+  String? label,
+  bool compact = false,
+}) {
+  final iconSize = compact ? 38.0 : 54.0;
+  final title = (label ?? '').trim().isEmpty
+      ? 'Image unavailable'
+      : label!.trim();
+  return Container(
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        colors: [
+          Color(0xFF241C15),
+          Color(0xFF1A1510),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      border: Border.all(color: const Color(0xFF3A2F24)),
+    ),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Positioned(
+          top: -18,
+          right: -12,
+          child: Container(
+            width: compact ? 56 : 72,
+            height: compact ? 56 : 72,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0x10E9C46A),
+              border: Border.all(color: const Color(0x18E9C46A)),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -16,
+          left: -8,
+          child: Container(
+            width: compact ? 46 : 60,
+            height: compact ? 46 : 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0x0CE9C46A),
+              border: Border.all(color: const Color(0x14E9C46A)),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _buildSetIcon(setCode, size: iconSize),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                maxLines: compact ? 1 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: compact ? 10 : 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFFBFAE95),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 Widget _buildBadge(String label, {bool inverted = false}) {
   final background = inverted
       ? const Color(0xFFE9C46A)
@@ -202,7 +296,7 @@ String _formatRarity(String raw) {
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.4.7+9';
+const String _latestReleaseNotesId = '0.5.0+10-pokemon-refresh';
 
 String _whatsNewLabel(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;

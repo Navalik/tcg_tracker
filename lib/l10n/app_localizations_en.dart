@@ -108,7 +108,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cardDatabaseSubtitle =>
-      'Configure local databases: Magic from Scryfall, Pokemon from TCGdex.';
+      'Configure local databases: Magic from Scryfall, Pokemon from the hosted bundle.';
 
   @override
   String get selectedType => 'Selected type';
@@ -1544,7 +1544,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pokemonDbProfileFullDescription =>
-      'Imports the full Pokemon catalog from TCGdex. Best coverage (including recent expansions), with longer download and larger local DB.';
+      'Installs the full hosted Pokemon catalog for the most complete offline coverage, with longer download and larger local DB.';
 
   @override
   String get pokemonDbProfileExpandedDescription =>
@@ -1563,7 +1563,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pokemonDbPickerSubtitle =>
-      'Each profile imports a different slice of TCGdex: more coverage = more time and storage.';
+      'Choose how much of the hosted Pokemon catalog to keep offline: more coverage = more time and storage.';
 
   @override
   String get primaryGameFixedMessage => 'Primary game is fixed.';
@@ -1732,32 +1732,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.4.7';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.0';
 
   @override
-  String get whatsNewFeaturesTitle => 'Interface improvements';
+  String get whatsNewFeaturesTitle => 'Pokemon catalog update';
 
   @override
-  String get whatsNewBugFixesTitle => 'Bug fixes';
+  String get whatsNewBugFixesTitle => 'Fixes and reliability';
 
   @override
   String get whatsNewLine1 =>
-      'Deck updates are now saved correctly only inside the deck, without affecting All Cards.';
+      'Pokemon now installs from the hosted GitHub bundle, with a more reliable offline catalog flow.';
 
   @override
   String get whatsNewLine2 =>
-      'Secondary game access now refreshes correctly after purchase revoke or entitlement changes.';
+      'Pokemon set names now follow the app language, while card language stays selectable when you add a set.';
 
   @override
   String get whatsNewLine3 =>
-      'BinderVault Plus screens are clearer, with improved pricing readability and purchase disclosures.';
+      'Pokemon search now matches localized names such as Kissara while keeping the correct localized card name in results.';
 
   @override
   String get whatsNewLine4 =>
-      'Several interface details were refined for better clarity in collection and upgrade flows.';
+      'Search gallery cards were aligned with the All Cards layout for a more consistent browsing flow.';
 
   @override
-  String get whatsNewLine5 => '';
+  String get whatsNewLine5 =>
+      'The Pokemon sync badge is clearer and now shows phase, progress, and status in a single chip.';
 
   @override
   String get whatsNewLine6 => '';
@@ -1766,10 +1767,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewLine7 => '';
 
   @override
-  String get whatsNewLine8 => '';
+  String get whatsNewLine8 =>
+      'Pokemon image loading is now consistent across search, home, and collection views, with better fallbacks for missing art.';
 
   @override
-  String get whatsNewLine9 => '';
+  String get whatsNewLine9 =>
+      'Several Pokemon import edge cases were fixed, including duplicate localizations, metadata conflicts, and incomplete EN/IT merges.';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

@@ -881,6 +881,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     List<CardSearchResult> input,
     String query,
   ) {
+    if (_isPokemonSearch) {
+      return input;
+    }
     final queryTokens = _tokenizeSearch(query);
     if (queryTokens.isEmpty) {
       return input;
@@ -1327,12 +1330,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final readableLangs = langs.map((lang) => lang.toUpperCase()).join(', ');
     if (isItalian) {
       return 'Copertura locale limitata ($readableLangs). '
-          'Per ricerca offline multilingua usa database All Cards, '
-          'oppure tocca "Search online".';
+          'Per Pokemon, aggiorna o reimporta il catalogo locale per completare le lingue attive.';
     }
     return 'Limited local coverage ($readableLangs). '
-        'For multilingual offline search use the All Cards database, '
-        'or tap "Search online".';
+        'For Pokemon, refresh or reimport the local catalog to complete the active languages.';
   }
 
   bool _isMissingCard(CardSearchResult card) {

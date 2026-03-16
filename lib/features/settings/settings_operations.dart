@@ -197,8 +197,8 @@ extension _SettingsOperationsSection on _SettingsPageState {
         final l10n = AppLocalizations.of(context)!;
         final body = requiresAllCards
             ? (_isItalianUi
-                  ? 'Lingue $gameLabel aggiornate. Con il database corrente le carte italiane saranno visibili solo online. Per averle in locale devi usare il database "All Cards".'
-                  : '$gameLabel languages updated. With the current database, Italian cards will be visible online only. To have them locally, switch to the "All Cards" database.')
+                  ? 'Lingue $gameLabel aggiornate. Con il database corrente il catalogo locale non copre ancora tutte le lingue attive. Per applicarle offline serve un reimport completo.'
+                  : '$gameLabel languages updated. With the current database, the local catalog does not yet cover all active languages. A full reimport is required for offline support.')
             : (_isItalianUi
                   ? 'Lingue $gameLabel aggiornate. Per applicare la modifica devi reimportare il database locale.'
                   : '$gameLabel languages updated. Reimport the local database to apply this change.');

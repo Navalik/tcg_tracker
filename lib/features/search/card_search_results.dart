@@ -409,24 +409,18 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                         fit: StackFit.expand,
                         children: [
                           imageUrl.isEmpty
-                              ? Container(
-                                  color: const Color(0xFF201A14),
-                                  child: const Icon(
-                                    Icons.image_not_supported,
-                                    color: Color(0xFFBFAE95),
-                                  ),
+                              ? _missingCardArtPlaceholder(
+                                  card.setCode,
+                                  compact: true,
                                 )
                               : Image.network(
                                   imageUrl,
                                   fit: BoxFit.cover,
                                   alignment: Alignment.topCenter,
                                   errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                        color: const Color(0xFF201A14),
-                                        child: const Icon(
-                                          Icons.image_not_supported,
-                                          color: Color(0xFFBFAE95),
-                                        ),
+                                      _missingCardArtPlaceholder(
+                                        card.setCode,
+                                        compact: true,
                                       ),
                                 ),
                           if (showMissingQuickAdd)
@@ -453,30 +447,40 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                                       ),
                               ),
                             ),
+                          if (hasStatusBadge)
+                            Positioned(
+                              bottom: 8,
+                              right: 8,
+                              child: _buildBadge(
+                                statusBadge,
+                                inverted: true,
+                              ),
+                            ),
                         ],
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+                    padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SizedBox(
-                          height: 38,
+                          height: 22,
                           child: Text(
                             card.name,
-                            maxLines: 2,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.bodyMedium,
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(color: const Color(0xFFF3E8D0)),
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 2),
                         Row(
                           children: [
-                            _buildSetIcon(card.setCode, size: 22),
-                            const SizedBox(width: 8),
+                            _buildSetIcon(card.setCode, size: 20),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 setLabel,
@@ -498,14 +502,6 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                 ],
               ),
             ),
-          ),
-        ),
-        if (hasStatusBadge)
-          Align(
-            alignment: const Alignment(1, 0.0),
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _buildBadge(statusBadge, inverted: true),
             ),
           ),
       ],

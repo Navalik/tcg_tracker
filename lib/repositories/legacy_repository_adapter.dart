@@ -65,7 +65,10 @@ class LegacyScryfallRepositoryAdapter
   }
 
   @override
-  Future<List<SetInfo>> fetchAvailableSets({TcgGameId? gameId}) {
+  Future<List<SetInfo>> fetchAvailableSets({
+    TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
+  }) {
     return _runForGame(gameId, () => _database.fetchAvailableSets());
   }
 
@@ -73,6 +76,7 @@ class LegacyScryfallRepositoryAdapter
   Future<Map<String, String>> fetchSetNamesForCodes(
     List<String> setCodes, {
     TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
   }) {
     return _runForGame(gameId, () => _database.fetchSetNamesForCodes(setCodes));
   }

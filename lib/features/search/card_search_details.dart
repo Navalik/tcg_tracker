@@ -212,11 +212,13 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      if (entry.imageUri != null)
+                      if (_normalizeCardImageUrlForDisplay(
+                            entry.imageUri,
+                          ).trim().isNotEmpty)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
                           child: Image.network(
-                            entry.imageUri!,
+                            _normalizeCardImageUrlForDisplay(entry.imageUri),
                             fit: BoxFit.contain,
                           ),
                         ),

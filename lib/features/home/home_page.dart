@@ -70,9 +70,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted) {
         return;
       }
+      final nextIsPro = _purchaseManager.isPro;
+      final changed = nextIsPro != _isProUnlocked;
       setState(() {
-        _isProUnlocked = _purchaseManager.isPro;
+        _isProUnlocked = nextIsPro;
       });
+      if (changed) {
+        unawaited(_loadCollections());
+      }
     };
     _purchaseManager.addListener(_purchaseListener);
     _isProUnlocked = _purchaseManager.isPro;
@@ -132,7 +137,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             () => AppSettings.loadCardLanguageOnboardingDone(),
           ) ??
           false;
-      final shouldRunCardLanguageOnboarding = !cardLanguageOnboardingDone;
+      var shouldRunCardLanguageOnboarding = !cardLanguageOnboardingDone;
       if (mounted) {
         setState(() {
           _priceCurrency = priceCurrency;
@@ -148,9 +153,22 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
       await runStep(
         'ensure_primary_game',
-        () => _ensurePrimaryGameSelectionOnFirstLaunch(),
+        () => _ensurePrimaryGameSelectionOnFirstLaunch(
+          cardLanguageOnboardingDone: cardLanguageOnboardingDone,
+        ),
         nonBlocking: true,
       );
+      final selectedGameAfterPrimaryChoice =
+          await AppSettings.loadSelectedTcgGame();
+      if (selectedGameAfterPrimaryChoice == AppTcgGame.pokemon) {
+        final updatedCardLanguageOnboardingDone =
+            await runStep<bool>(
+              'reload_card_language_onboarding_done',
+              () => AppSettings.loadCardLanguageOnboardingDone(),
+            ) ??
+            false;
+        shouldRunCardLanguageOnboarding = !updatedCardLanguageOnboardingDone;
+      }
       if (shouldRunCardLanguageOnboarding) {
         await runStep(
           'card_language_onboarding',
@@ -267,13 +285,31 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
-  Future<void> _ensurePrimaryGameSelectionOnFirstLaunch() async {
+  Future<void> _ensurePrimaryGameSelectionOnFirstLaunch({
+    required bool cardLanguageOnboardingDone,
+  }) async {
     final alreadySelected = await AppSettings.hasPrimaryGameSelection();
     if (alreadySelected || !mounted) {
       return;
     }
     final selected = await _showPrimaryGamePickerDialog();
-    await _applyPrimaryGameSelection(selected ?? TcgGame.mtg);
+    final resolved = selected ?? TcgGame.mtg;
+    await _applyPrimaryGameSelection(resolved);
+    if (resolved == TcgGame.pokemon && !cardLanguageOnboardingDone) {
+      await _showCardLanguagesOnboardingStep(
+        selectedGameOverride: AppTcgGame.pokemon,
+        titleOverride: _isItalianUi()
+            ? 'Configura il catalogo Pokemon'
+            : 'Set up the Pokemon catalog',
+        bodyOverride: _isItalianUi()
+            ? 'Inglese e sempre incluso. Puoi attivare anche italiano per avere nomi carta e ricerca localizzati offline gia dalla prima installazione.'
+            : 'English is always included. You can also enable Italian to get localized card names and offline search from the first install.',
+        confirmLabelOverride: _isItalianUi()
+            ? 'Inizia installazione'
+            : 'Start install',
+      );
+      await AppSettings.saveCardLanguageOnboardingDone(true);
+    }
   }
 
   Future<void> _applyPrimaryGameSelection(TcgGame selected) async {
@@ -299,11 +335,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     await _showCardLanguagesOnboardingStep();
   }
 
-  Future<void> _showCardLanguagesOnboardingStep() async {
+  Future<void> _showCardLanguagesOnboardingStep({
+    AppTcgGame? selectedGameOverride,
+    String? titleOverride,
+    String? bodyOverride,
+    String? confirmLabelOverride,
+  }) async {
     if (!mounted) {
       return;
     }
-    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    final selectedGame =
+        selectedGameOverride ?? await AppSettings.loadSelectedTcgGame();
     final current = (await AppSettings.loadCardLanguagesForGame(
       selectedGame,
     )).toSet();
@@ -327,7 +369,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return StatefulBuilder(
           builder: (context, setModalState) {
             return AlertDialog(
-              title: Text(italian ? 'Lingue carte' : 'Card languages'),
+              title: Text(
+                titleOverride ?? (italian ? 'Lingue carte' : 'Card languages'),
+              ),
               content: SizedBox(
                 width: 360,
                 child: SingleChildScrollView(
@@ -336,9 +380,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        italian
-                            ? 'Inglese sempre incluso. Seleziona eventuali lingue aggiuntive.'
-                            : 'English is always included. Select any additional languages.',
+                        bodyOverride ??
+                            (italian
+                                ? 'Inglese sempre incluso. Seleziona eventuali lingue aggiuntive.'
+                                : 'English is always included. Select any additional languages.'),
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 8),
@@ -363,8 +408,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                               child: Text(
                                 selectedGame == AppTcgGame.pokemon
                                     ? (italian
-                                          ? 'Per Pokemon, attivare anche italiano rende il download iniziale piu lungo e richiede reimport del catalogo.'
-                                          : 'For Pokemon, enabling Italian increases initial download time and requires catalog reimport.')
+                                          ? 'Se attivi anche italiano, il download iniziale sara piu lungo e il database locale occupera piu spazio. Potrai comunque cambiare questa scelta in seguito.'
+                                          : 'If you also enable Italian, the initial download will take longer and the local database will use more storage. You can change this later.')
                                     : (italian
                                           ? 'Attenzione: le lingue aggiuntive funzionano offline solo con il database "All Cards". Con database piu piccoli, ricerca e risultati nelle lingue aggiuntive useranno internet.'
                                           : 'Warning: additional languages work offline only with the "All Cards" database. With smaller databases, search and results in additional languages will use internet.'),
@@ -404,7 +449,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 FilledButton(
                   onPressed: () =>
                       Navigator.of(context).pop(<String>{...mutable}),
-                  child: Text(italian ? 'Avanti' : 'Next'),
+                  child: Text(
+                    confirmLabelOverride ?? (italian ? 'Avanti' : 'Next'),
+                  ),
                 ),
               ],
             );
@@ -935,15 +982,159 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return ((clamped - phase.startProgress) / span).clamp(0.0, 1.0);
   }
 
-  String _pokemonSyncHeadline(_PokemonSyncPhaseInfo phase, String percentText) {
-    if (_isItalianUi()) {
-      return '${phase.label} ($percentText%)';
-    }
-    return '${phase.label} ($percentText%)';
-  }
-
   String _pokemonSyncMetaLine() {
     return '${_pokemonSyncDetailLabel()} - ${_formatPokemonSyncElapsed()}';
+  }
+
+  Widget _buildPokemonSyncChip({
+    required _PokemonSyncPhaseInfo phase,
+    required String percentText,
+    required String metaLine,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9C46A),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF5DEA0), width: 1),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55000000),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.sync_rounded,
+                size: 15,
+                color: Color(0xFF1C1510),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '${phase.index}/${phase.total}',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: const Color(0xFF1C1510),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0x1A1C1510),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$percentText%',
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: const Color(0xFF1C1510),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            phase.label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF1C1510),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            metaLine,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: const Color(0xFF4A3720),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _pokemonDownloadErrorLabel(String raw) {
+    final value = raw.trim().toLowerCase();
+    final italian = _isItalianUi();
+    if (value.contains('pokemon_hosted_bundle_timeout')) {
+      return italian
+          ? 'Timeout durante il download del bundle Pokemon da GitHub.'
+          : 'Timed out while downloading the Pokemon bundle from GitHub.';
+    }
+    if (value.contains('pokemon_hosted_bundle_unreachable')) {
+      return italian
+          ? 'GitHub non raggiungibile durante il download del bundle Pokemon.'
+          : 'GitHub was unreachable while downloading the Pokemon bundle.';
+    }
+    if (value.contains('pokemon_api_http_404') ||
+        value.contains('pokemon_hosted_bundle_http_404')) {
+      return italian
+          ? 'Asset del bundle Pokemon non trovato su GitHub.'
+          : 'Pokemon bundle asset was not found on GitHub.';
+    }
+    if (value.contains('pokemon_hosted_bundle_missing_languages')) {
+      return italian
+          ? 'Il release bundle GitHub non contiene tutte le lingue richieste.'
+          : 'The GitHub release bundle does not contain all required languages.';
+    }
+    if (value.contains('pokemon_hosted_bundle_unavailable')) {
+      return italian
+          ? 'Bundle Pokemon GitHub non disponibile per la selezione corrente.'
+          : 'The GitHub Pokemon bundle is unavailable for the current selection.';
+    }
+    if (value.contains('pokemon_hosted_bundle_incomplete')) {
+      return italian
+          ? 'Bundle Pokemon GitHub scaricato ma incompleto.'
+          : 'The GitHub Pokemon bundle was downloaded but is incomplete.';
+    }
+    if (value.contains('pokemon_hosted_bundle_invalid_payload')) {
+      return italian
+          ? 'Bundle Pokemon GitHub non valido o corrotto.'
+          : 'The GitHub Pokemon bundle is invalid or corrupted.';
+    }
+    if (value.contains('pokemon_hosted_bundle_failed')) {
+      return italian
+          ? 'Errore durante il caricamento del bundle Pokemon da GitHub.'
+          : 'Failed while loading the Pokemon bundle from GitHub.';
+    }
+    return raw;
+  }
+
+  String? _pokemonDownloadErrorDetail(String raw) {
+    final match = RegExp(r'\|\|stage=([^|]+)\|\|detail=(.+)$').firstMatch(raw);
+    if (match == null) {
+      return null;
+    }
+    final stage = match.group(1)?.trim();
+    final detail = match.group(2)?.trim();
+    if ((stage == null || stage.isEmpty) && (detail == null || detail.isEmpty)) {
+      return null;
+    }
+    final parts = <String>[];
+    if (stage != null && stage.isNotEmpty) {
+      parts.add('stage=$stage');
+    }
+    if (detail != null && detail.isNotEmpty) {
+      parts.add(detail);
+    }
+    return parts.join(' | ');
   }
 
   bool _isSetCollection(CollectionInfo collection) {
@@ -1218,7 +1409,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           setCodes.add(setCode);
         }
       }
-      final setNames = await ScryfallDatabase.instance
+      final setNames = await appRepositories.sets
           .fetchSetNamesForCodes(setCodes)
           .timeout(const Duration(seconds: 8), onTimeout: () => const {});
       final deckSideCounts = <int, int>{};
@@ -1404,6 +1595,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       required VoidCallback onCreate,
       bool includeCountLabel = false,
     }) {
+      if (items.isEmpty && !canCreate) {
+        return [
+          _buildLockedCollectionsPreview(
+            context,
+            section: _activeCollectionsMenu,
+            introTitle: _isItalianUi()
+                ? 'Funzione premium'
+                : 'Premium feature',
+            introBody: AppLocalizations.of(context)!.unlockProRemoveLimit,
+          ),
+        ];
+      }
       final sectionWidgets = <Widget>[
         const SizedBox(height: 6),
         _SectionDivider(label: label),
@@ -2207,6 +2410,159 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           ],
         ),
       ),
+    );
+  }
+
+  List<String> _lockedPokemonPreviewNames(_HomeCollectionsMenu section) {
+    final italian = _isItalianUi();
+    switch (section) {
+      case _HomeCollectionsMenu.set:
+        return italian
+            ? const ['Avventure Insieme', 'Destino di Paldea']
+            : const ['Journey Together', 'Paldea Evolved'];
+      case _HomeCollectionsMenu.custom:
+        return italian
+            ? const ['Preferite competitive', 'Promo da cercare']
+            : const ['Competitive picks', 'Promos to chase'];
+      case _HomeCollectionsMenu.smart:
+        return italian
+            ? const ['Carte possedute rare', 'Carte mancanti supporto']
+            : const ['Owned rare cards', 'Missing support cards'];
+      case _HomeCollectionsMenu.wish:
+        return italian
+            ? const ['Wishlist esposizioni', 'Carte da scambiare']
+            : const ['Showcase wishlist', 'Cards to trade for'];
+      case _HomeCollectionsMenu.deck:
+        return italian
+            ? const ['Mazzo torneo', 'Lista test ladder']
+            : const ['Tournament deck', 'Ladder test list'];
+      case _HomeCollectionsMenu.home:
+        return italian
+            ? const ['Avventure Insieme', 'Destino di Paldea']
+            : const ['Journey Together', 'Paldea Evolved'];
+    }
+  }
+
+  Widget _buildLockedCollectionsPreview(
+    BuildContext context, {
+    required _HomeCollectionsMenu section,
+    String? introTitle,
+    String? introBody,
+    VoidCallback? cta,
+  }) {
+    final l10n = AppLocalizations.of(context)!;
+    final effectiveSection = section == _HomeCollectionsMenu.home
+        ? _HomeCollectionsMenu.set
+        : section;
+    final previewNames = _lockedPokemonPreviewNames(effectiveSection);
+    final createTitle = switch (effectiveSection) {
+      _HomeCollectionsMenu.set => l10n.createYourSetCollectionTitle,
+      _HomeCollectionsMenu.custom => l10n.createYourCustomCollectionTitle,
+      _HomeCollectionsMenu.smart => _isItalianUi()
+          ? 'Crea una smart collection'
+          : 'Create your smart collection',
+      _HomeCollectionsMenu.wish => l10n.createYourWishlistTitle,
+      _HomeCollectionsMenu.deck => l10n.createYourDeckTitle,
+      _HomeCollectionsMenu.home => l10n.createYourSetCollectionTitle,
+    };
+    final createIcon = switch (effectiveSection) {
+      _HomeCollectionsMenu.set => Icons.auto_awesome_mosaic,
+      _HomeCollectionsMenu.custom => Icons.tune,
+      _HomeCollectionsMenu.smart => Icons.auto_fix_high_rounded,
+      _HomeCollectionsMenu.wish => Icons.favorite_border_rounded,
+      _HomeCollectionsMenu.deck => Icons.view_carousel_rounded,
+      _HomeCollectionsMenu.home => Icons.auto_awesome_mosaic,
+    };
+    final sectionTitle = switch (effectiveSection) {
+      _HomeCollectionsMenu.set => l10n.createYourSetCollectionTitle,
+      _HomeCollectionsMenu.custom => l10n.createYourCustomCollectionTitle,
+      _HomeCollectionsMenu.smart => l10n.createSmartCollectionTitle,
+      _HomeCollectionsMenu.wish => l10n.createYourWishlistTitle,
+      _HomeCollectionsMenu.deck => l10n.deckCollectionTitle,
+      _HomeCollectionsMenu.home => l10n.createYourSetCollectionTitle,
+    };
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+      children: [
+        if ((introTitle ?? '').trim().isNotEmpty ||
+            (introBody ?? '').trim().isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+            decoration: BoxDecoration(
+              color: const Color(0x221D1712),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF5D4731)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.workspace_premium_outlined,
+                    color: Color(0xFFE9C46A),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if ((introTitle ?? '').trim().isNotEmpty)
+                        Text(
+                          introTitle!,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      if ((introTitle ?? '').trim().isNotEmpty &&
+                          (introBody ?? '').trim().isNotEmpty)
+                        const SizedBox(height: 4),
+                      if ((introBody ?? '').trim().isNotEmpty)
+                        Text(
+                          introBody!,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: const Color(0xFFBFAE95),
+                                height: 1.35,
+                              ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 6),
+        _SectionDivider(label: sectionTitle),
+        const SizedBox(height: 12),
+        _CollectionCard(
+          name: previewNames.first,
+          count: 0,
+          icon: createIcon,
+          enabled: true,
+        ),
+        const SizedBox(height: 12),
+        _CollectionCard(
+          name: previewNames.length > 1 ? previewNames[1] : previewNames.first,
+          count: 2,
+          icon: createIcon,
+          enabled: false,
+          disabledTag: 'PRO',
+        ),
+        _buildCreateCollectionCard(
+          context,
+          icon: createIcon,
+          title: createTitle,
+          enabled: false,
+          onTap: cta ?? () {},
+        ),
+        const SizedBox(height: 2),
+        const _DividerGlow(),
+        const SizedBox(height: 10),
+        _buildSectionHintCard(_sectionHelpText(effectiveSection)),
+      ],
     );
   }
 
@@ -4148,10 +4504,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(14),
                       child:
-                          card.imageUri != null &&
-                              card.imageUri!.trim().isNotEmpty
+                          _normalizeCardImageUrlForDisplay(
+                                card.imageUri,
+                              ).trim().isNotEmpty
                           ? Image.network(
-                              card.imageUri!.trim(),
+                              _normalizeCardImageUrlForDisplay(card.imageUri),
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) => Container(
                                 color: const Color(0x221C1713),
@@ -5653,6 +6010,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     setState(() {
       _collections.removeWhere((item) => item.id == collection.id);
     });
+    await _loadCollections();
+    if (!mounted) {
+      return;
+    }
     showAppSnackBar(context, AppLocalizations.of(context)!.collectionDeleted);
   }
 
@@ -6198,11 +6559,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final pokemonPercentText = pokemonPercentValue >= 99.95
         ? '100'
         : pokemonPercentValue.toStringAsFixed(1);
-    final pokemonSyncHeadline = (!_isMtgActiveGame && pokemonPhase != null)
-        ? _pokemonSyncHeadline(pokemonPhase, pokemonPercentText)
-        : null;
     final pokemonSyncMeta = (!_isMtgActiveGame && isBlockingSync)
         ? _pokemonSyncMetaLine()
+        : null;
+    final pokemonSyncChip = (!_isMtgActiveGame &&
+            isBlockingSync &&
+            pokemonPhase != null &&
+            pokemonSyncMeta != null)
+        ? _buildPokemonSyncChip(
+            phase: pokemonPhase,
+            percentText: pokemonPercentText,
+            metaLine: pokemonSyncMeta,
+          )
         : null;
     final blockingLabel = _bulkDownloading
         ? (!_isMtgActiveGame && pokemonPhase != null
@@ -6290,95 +6658,98 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                           ],
                         )
                       else if (_bulkDownloading)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _isMtgActiveGame
-                                  ? (_bulkDownloadTotal > 0
-                                        ? l10n.downloadingUpdateWithTotal(
-                                            (_bulkDownloadProgress * 100)
-                                                .clamp(0, 100)
-                                                .round(),
-                                            _formatBytes(_bulkDownloadReceived),
-                                            _formatBytes(_bulkDownloadTotal),
-                                          )
-                                        : l10n.downloadingUpdateNoTotal(
-                                            _formatBytes(_bulkDownloadReceived),
-                                          ))
-                                  : (pokemonSyncHeadline ??
-                                        (_isItalianUi()
-                                            ? 'Download database Pokemon $pokemonPercentText%'
-                                            : 'Downloading Pokemon database $pokemonPercentText%')),
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFE3B55C)),
-                            ),
-                            if (!_isMtgActiveGame) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                pokemonSyncMeta ?? _pokemonSyncMetaLine(),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                        _isMtgActiveGame
+                            ? Text(
+                                _bulkDownloadTotal > 0
+                                    ? l10n.downloadingUpdateWithTotal(
+                                        (_bulkDownloadProgress * 100)
+                                            .clamp(0, 100)
+                                            .round(),
+                                        _formatBytes(_bulkDownloadReceived),
+                                        _formatBytes(_bulkDownloadTotal),
+                                      )
+                                    : l10n.downloadingUpdateNoTotal(
+                                        _formatBytes(_bulkDownloadReceived),
+                                      ),
                                 style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: const Color(0xFFBFAE95)),
-                              ),
-                            ],
-                          ],
-                        )
+                                    ?.copyWith(color: const Color(0xFFE3B55C)),
+                              )
+                            : (pokemonSyncChip ??
+                                  const SizedBox.shrink())
                       else if (_bulkImporting)
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _isMtgActiveGame
-                                  ? l10n.importingCardsWithCount(
+                        _isMtgActiveGame
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    l10n.importingCardsWithCount(
                                       (_bulkImportProgress * 100)
                                           .clamp(0, 100)
                                           .round(),
                                       _bulkImportedCount,
-                                    )
-                                  : (pokemonSyncHeadline ??
-                                        (_isItalianUi()
-                                            ? 'Import carte Pokemon $pokemonPercentText%'
-                                            : 'Importing Pokemon cards $pokemonPercentText%')),
+                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
+                                          color: const Color(0xFFE3B55C),
+                                        ),
+                                  ),
+                                  if ((_mtgSyncStatus ?? '')
+                                      .trim()
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _mtgSyncStatus!,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodySmall
+                                          ?.copyWith(
+                                            color: const Color(0xFFBFAE95),
+                                          ),
+                                    ),
+                                  ],
+                                ],
+                              )
+                            : (pokemonSyncChip ??
+                                  const SizedBox.shrink())
+                      else if (_bulkDownloadError != null)
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _isMtgActiveGame
+                                  ? l10n.downloadFailedTapUpdate
+                                  : (_bulkDownloadError!.trim().isEmpty
+                                        ? l10n.downloadFailedGeneric
+                                        : _pokemonDownloadErrorLabel(
+                                            _bulkDownloadError!,
+                                          )),
+                              textAlign: TextAlign.center,
                               style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFE3B55C)),
+                                  ?.copyWith(color: const Color(0xFFE38B5C)),
                             ),
-                            if (_isMtgActiveGame &&
-                                (_mtgSyncStatus ?? '').trim().isNotEmpty) ...[
+                            if (!_isMtgActiveGame &&
+                                _pokemonDownloadErrorDetail(
+                                      _bulkDownloadError!,
+                                    ) !=
+                                    null) ...[
                               const SizedBox(height: 4),
                               Text(
-                                _mtgSyncStatus!,
+                                _pokemonDownloadErrorDetail(
+                                  _bulkDownloadError!,
+                                )!,
                                 textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall
-                                    ?.copyWith(color: const Color(0xFFBFAE95)),
-                              ),
-                            ],
-                            if (!_isMtgActiveGame) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                pokemonSyncMeta ?? _pokemonSyncMetaLine(),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(color: const Color(0xFFBFAE95)),
                               ),
                             ],
                           ],
-                        )
-                      else if (_bulkDownloadError != null)
-                        Text(
-                          _isMtgActiveGame
-                              ? l10n.downloadFailedTapUpdate
-                              : (_bulkDownloadError!.trim().isEmpty
-                                    ? l10n.downloadFailedGeneric
-                                    : _bulkDownloadError!),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: const Color(0xFFE38B5C)),
                         )
                       else if (_cardsMissing)
                         Text(
@@ -6489,6 +6860,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                 Expanded(
                   child: _initialCollectionsLoading
                       ? const Center(child: CircularProgressIndicator())
+                      : pokemonLocked
+                      ? _buildLockedCollectionsPreview(
+                          context,
+                          section: _activeCollectionsMenu,
+                          introTitle: l10n.pokemonInProTitle,
+                          introBody: l10n.pokemonInProBody,
+                          cta: _openSettingsAndHandlePostAction,
+                        )
                       : (_activeCollectionsMenu == _HomeCollectionsMenu.home
                             ? Column(
                                 children: [
@@ -6526,54 +6905,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               ],
             ),
           ),
-          if (pokemonLocked)
-            Positioned.fill(
-              child: Container(
-                color: const Color(0xC20E0A08),
-                alignment: Alignment.center,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1B1511),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFF5D4731)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.lock_outline_rounded,
-                            color: Color(0xFFE9C46A),
-                            size: 30,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            l10n.pokemonInProTitle,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            l10n.pokemonInProBody,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed: _openSettingsAndHandlePostAction,
-                            icon: const Icon(Icons.workspace_premium_outlined),
-                            label: Text(l10n.openSettingsLabel),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
           if (isBlockingSync) ...[
             const ModalBarrier(dismissible: false, color: Color(0x880E0A08)),
             SafeArea(
@@ -7093,23 +7424,9 @@ class _RecentAddedCardTile extends StatelessWidget {
                               fit: BoxFit.cover,
                               alignment: Alignment.topCenter,
                               errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                    color: const Color(0x221D1712),
-                                    alignment: Alignment.center,
-                                    child: const Icon(
-                                      Icons.image_not_supported,
-                                      color: Color(0xFFBFAE95),
-                                    ),
-                                  ),
+                                  _missingCardArtPlaceholder(card.setCode),
                             )
-                          : Container(
-                              color: const Color(0x221D1712),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.image_not_supported,
-                                color: Color(0xFFBFAE95),
-                              ),
-                            ),
+                          : _missingCardArtPlaceholder(card.setCode),
                     ),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 4, 8, 5),

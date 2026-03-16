@@ -195,11 +195,13 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      if ((entry.imageUri ?? '').trim().isNotEmpty)
+                      if (_normalizeCardImageUrlForDisplay(
+                            entry.imageUri,
+                          ).trim().isNotEmpty)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
                           child: Image.network(
-                            entry.imageUri!.trim(),
+                            _normalizeCardImageUrlForDisplay(entry.imageUri),
                             fit: BoxFit.contain,
                           ),
                         ),

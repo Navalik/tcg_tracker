@@ -32,7 +32,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _pokemonItalianCardsEnabled = false;
   String _appLocaleCode = 'en';
   String _appThemeCode = 'magic';
-  String _appVersion = '0.4.7';
+  String _appVersion = '0.5.0';
   bool _backupBusy = false;
   bool _gamesBusy = false;
   bool _coherenceCheckBusy = false;

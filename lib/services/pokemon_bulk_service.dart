@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -14,9 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../db/app_database.dart';
 import '../db/canonical_catalog_store.dart';
 import '../domain/domain_models.dart';
-import '../providers/tcgdex_pokemon_provider.dart';
 import 'pokemon_dataset_manifest.dart';
-import 'pokemon_canonical_import_service.dart';
 
 class PokemonBulkService {
   PokemonBulkService._();
@@ -24,10 +20,6 @@ class PokemonBulkService {
   static final PokemonBulkService instance = PokemonBulkService._();
 
   static const String datasetVersion = PokemonDatasetManifest.version;
-  static const String _cardsEndpoint = 'https://api.pokemontcg.io/v2/cards';
-  static const String _setsIndexEndpoint =
-      'https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/sets/en.json';
-  static const int _pageSize = 250;
   static const String _prefsKeyInstalledVersion = 'pokemon_dataset_version';
   static const String _prefsKeyInstalledSource = 'pokemon_dataset_source';
   static const String _prefsKeyInstalledAt = 'pokemon_dataset_installed_at';
@@ -37,23 +29,20 @@ class PokemonBulkService {
       'pokemon_dataset_profile_installed';
   static const String _prefsKeyInstalledLanguages =
       'pokemon_dataset_languages_installed';
+  static const String _prefsKeyLastError = 'pokemon_dataset_last_error';
+  static const String _prefsKeyLastErrorStage =
+      'pokemon_dataset_last_error_stage';
+  static const String _prefsKeyLastErrorDetail =
+      'pokemon_dataset_last_error_detail';
   static const int _maxAttemptsPerPage = 4;
   static const String _canonicalSnapshotFileName =
       'canonical_catalog_snapshot.json';
-  static const String _tcgdexDistributionZipUrl =
-      'https://codeload.github.com/tcgdex/distribution/zip/refs/heads/master';
-  static const String _tcgdexDistributionZipFileName =
-      'tcgdex_distribution_master.zip';
   static const String _hostedBundleManifestUrl =
       'https://github.com/Navalik/tcg_tracker/releases/latest/download/manifest.json';
   static const String _hostedCanonicalSnapshotAssetName =
       'canonical_catalog_snapshot.json.gz';
   static const String _fixedProfile = 'full';
   static const int _minFullProfileCards = 10000;
-  static const String _apiKey = String.fromEnvironment(
-    'POKEMON_TCG_API_KEY',
-    defaultValue: '',
-  );
 
   void _logPhaseDuration(String label, Stopwatch stopwatch) {
     final elapsed = stopwatch.elapsed;
@@ -103,8 +92,7 @@ class PokemonBulkService {
         updateAvailable: false,
       );
     }
-    final remoteTotal = await _fetchApiTotalCount();
-    final remoteFingerprint = remoteTotal?.toString();
+    final remoteFingerprint = await _fetchHostedManifestFingerprint();
     if (remoteFingerprint == null || remoteFingerprint.isEmpty) {
       return PokemonDatasetUpdateStatus(
         installed: true,
@@ -142,6 +130,7 @@ class PokemonBulkService {
     await prefs.remove(_prefsKeyManifestFingerprint);
     await prefs.remove(_prefsKeyInstalledProfile);
     await prefs.remove(_prefsKeyInstalledLanguages);
+    await _clearHostedBundleDiagnostic();
     final appDir = await getApplicationDocumentsDirectory();
     final datasetDir = Directory(p.join(appDir.path, 'pokemon', 'datasets'));
     if (await datasetDir.exists()) {
@@ -160,6 +149,7 @@ class PokemonBulkService {
     void Function(String status)? onStatus,
     bool allowLanguageDeltaFromCache = false,
   }) async {
+    await _clearHostedBundleDiagnostic();
     final selectedCanonicalLanguages =
         await _selectedPokemonCanonicalLanguages();
     final selectedLanguageSignature = await _selectedPokemonLanguageSignature();
@@ -171,7 +161,7 @@ class PokemonBulkService {
     final totalStopwatch = Stopwatch()..start();
     final canonicalDownloadStopwatch = Stopwatch()..start();
     onStatus?.call(
-      'Downloading Pokemon catalog (TCGdex, profile=${_fixedProfile.toUpperCase()}, lang=${languageLabel.join(",")})',
+      'Downloading Pokemon bundle (GitHub, profile=${_fixedProfile.toUpperCase()}, lang=${languageLabel.join(",")})',
     );
     onProgress(0.01);
     final canonicalBatch = await _downloadCanonicalCatalogSnapshot(
@@ -210,103 +200,23 @@ class PokemonBulkService {
 
     final database = await ScryfallDatabase.instance.open();
     onProgress(0.70);
-    var inserted = 0;
-    String? manifestFingerprint;
-    String source = '';
+    late final int inserted;
     final datasetDir = await _ensureDatasetDirectory();
     await _clearDatasetJsonCacheDirectory(datasetDir);
     onStatus?.call('Building legacy compatibility dataset');
     onProgress(0.72);
     final legacyBuildStopwatch = Stopwatch()..start();
-    Object? canonicalLegacyError;
-    Object? manifestError;
-    Object? apiError;
-    final client = http.Client();
-    try {
-      try {
-        inserted = await _installFromCanonicalBatch(
-          database: database,
-          batch: canonicalBatch,
-          languages: selectedCanonicalLanguages,
-          onProgress: onProgress,
-          progressStart: 0.74,
-          progressEnd: 0.90,
-        );
-        source = 'tcgdex_canonical_snapshot';
-        if (inserted < _minFullProfileCards) {
-          canonicalLegacyError = StateError(
-            'pokemon_full_dataset_too_small:$inserted',
-          );
-          inserted = 0;
-          source = '';
-        }
-      } catch (error) {
-        canonicalLegacyError = error;
-      }
-      if (inserted <= 0) {
-        try {
-          onStatus?.call('Downloading sets index (GitHub)');
-          onProgress(0.46);
-          inserted = await _installFromFullManifest(
-            database: database,
-            client: client,
-            onProgress: onProgress,
-            progressStart: 0.74,
-            progressEnd: 0.90,
-          );
-          onStatus?.call('Downloaded from GitHub dataset');
-          manifestFingerprint = await _fetchManifestFingerprint(client: client);
-          source = 'github_manifest_full';
-          if (inserted < _minFullProfileCards) {
-            manifestError = StateError(
-              'pokemon_full_dataset_too_small:$inserted',
-            );
-            inserted = 0;
-            source = '';
-          }
-        } catch (error) {
-          manifestError = error;
-        }
-        if (inserted <= 0) {
-          try {
-            onStatus?.call('GitHub failed, switching to Pokemon API');
-            inserted = await _installFromApi(
-              database: database,
-              client: client,
-              onProgress: onProgress,
-              progressStart: 0.76,
-              progressEnd: 0.90,
-            );
-            source = 'api_v2_full_fallback';
-            onStatus?.call('Downloading from Pokemon API');
-            if (inserted < _minFullProfileCards) {
-              apiError = StateError('pokemon_full_dataset_too_small:$inserted');
-              inserted = 0;
-              source = '';
-            }
-          } catch (error) {
-            apiError = error;
-          }
-        }
-      }
-    } finally {
-      client.close();
-    }
-
-    if (inserted <= 0) {
-      final details = [
-        if (canonicalLegacyError != null)
-          'canonical=${canonicalLegacyError.toString()}',
-        if (manifestError != null) 'manifest=${manifestError.toString()}',
-        if (apiError != null) 'api=${apiError.toString()}',
-      ].join(';');
-      throw HttpException(
-        'pokemon_dataset_install_failed${details.isEmpty ? '' : ':$details'}',
-      );
-    }
+    inserted = await _installFromCanonicalBatch(
+      database: database,
+      batch: canonicalBatch,
+      languages: selectedCanonicalLanguages,
+      onProgress: onProgress,
+      progressStart: 0.74,
+      progressEnd: 0.90,
+    );
     if (inserted < _minFullProfileCards) {
       throw HttpException(
-        'pokemon_dataset_install_failed:full_too_small:$inserted',
+        'pokemon_hosted_bundle_incomplete:$inserted',
       );
     }
     legacyBuildStopwatch.stop();
@@ -322,11 +232,10 @@ class PokemonBulkService {
     onProgress(0.95);
     await database.rebuildFts();
     onProgress(0.97);
-    await backfillSetNames();
     onProgress(0.99);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyInstalledVersion, datasetVersion);
-    await prefs.setString(_prefsKeyInstalledSource, 'tcgdex+$source');
+    await prefs.setString(_prefsKeyInstalledSource, 'github_hosted_bundle');
     await prefs.setInt(
       _prefsKeyInstalledAt,
       DateTime.now().toUtc().millisecondsSinceEpoch,
@@ -336,10 +245,11 @@ class PokemonBulkService {
       _prefsKeyInstalledLanguages,
       selectedLanguageSignature,
     );
-    final fingerprint = manifestFingerprint;
-    if (fingerprint != null && fingerprint.isNotEmpty) {
-      await prefs.setString(_prefsKeyManifestFingerprint, fingerprint);
+    final remoteFingerprint = await _fetchHostedManifestFingerprint();
+    if (remoteFingerprint != null && remoteFingerprint.isNotEmpty) {
+      await prefs.setString(_prefsKeyManifestFingerprint, remoteFingerprint);
     }
+    await _clearHostedBundleDiagnostic();
     finalizeStopwatch.stop();
     _logPhaseDuration('finalize local database', finalizeStopwatch);
     totalStopwatch.stop();
@@ -409,39 +319,9 @@ class PokemonBulkService {
         if (hostedDeltaBatch != null) {
           return hostedDeltaBatch;
         }
-        onStatus?.call(
-          'Downloading Pokemon language delta: ${missingCodes.join(', ').toUpperCase()}',
+        throw HttpException(
+          'pokemon_hosted_bundle_missing_languages:${missingCodes.join(",")}',
         );
-        CanonicalCatalogImportBatch deltaBatch;
-        try {
-          deltaBatch = await _importCanonicalProfileBatchFromDistribution(
-            profile: normalizedProfile,
-            languages: missingLanguages,
-            onProgress: onProgress,
-            onStatus: onStatus,
-          );
-        } catch (_) {
-          deltaBatch = await _importCanonicalProfileBatch(
-            profile: normalizedProfile,
-            languages: missingLanguages,
-            onProgress: onProgress,
-            onStatus: onStatus,
-          );
-        }
-        final merged = _mergeCanonicalCatalogBatches(
-          snapshot.batch,
-          deltaBatch,
-        );
-        await _writeCanonicalCatalogSnapshot(
-          merged,
-          profile: normalizedProfile,
-          languageSignature: _normalizeLanguageSignature({
-            ...existingLanguageCodes,
-            ...missingCodes,
-          }),
-        );
-        onProgress(1);
-        return merged;
       }
     }
 
@@ -454,32 +334,9 @@ class PokemonBulkService {
     if (hostedBatch != null) {
       return hostedBatch;
     }
-    if (requestedLanguageCodes.contains('it')) {
-      throw const HttpException('pokemon_hosted_bundle_required_for_it');
-    }
-
-    CanonicalCatalogImportBatch batch;
-    try {
-      batch = await _importCanonicalProfileBatchFromDistribution(
-        profile: normalizedProfile,
-        languages: languages,
-        onProgress: onProgress,
-        onStatus: onStatus,
-      );
-    } catch (_) {
-      batch = await _importCanonicalProfileBatch(
-        profile: normalizedProfile,
-        languages: languages,
-        onProgress: onProgress,
-        onStatus: onStatus,
-      );
-    }
-    await _writeCanonicalCatalogSnapshot(
-      batch,
-      profile: normalizedProfile,
-      languageSignature: languageSignature,
+    throw HttpException(
+      'pokemon_hosted_bundle_unavailable:$languageSignature',
     );
-    return batch;
   }
 
   Future<CanonicalCatalogImportBatch?> _tryDownloadHostedCanonicalSnapshot({
@@ -492,6 +349,7 @@ class PokemonBulkService {
       return null;
     }
     final client = http.Client();
+    var stage = 'manifest_fetch';
     try {
       onStatus?.call('Checking hosted Pokemon bundle');
       onProgress(0.05);
@@ -501,6 +359,7 @@ class PokemonBulkService {
         retryAttempts: 2,
         requestTimeout: const Duration(seconds: 20),
       );
+      stage = 'manifest_parse';
       final manifestParsed = jsonDecode(manifestRaw);
       if (manifestParsed is! Map<String, dynamic>) {
         return null;
@@ -533,6 +392,11 @@ class PokemonBulkService {
         final downloadedLanguages = <String>{};
         for (var i = 0; i < selectedBundles.length; i++) {
           final bundle = selectedBundles[i];
+          final bundleId = ((bundle['id'] as String?)?.trim().toLowerCase() ??
+                  '')
+              .isEmpty
+              ? 'bundle_$i'
+              : (bundle['id'] as String).trim().toLowerCase();
           final assetPath = _resolveCanonicalSnapshotAssetPathFromBundle(bundle);
           if (assetPath == null || assetPath.trim().isEmpty) {
             return null;
@@ -543,6 +407,7 @@ class PokemonBulkService {
           if (!_isAllowedDownloadUri(assetUri.toString())) {
             return null;
           }
+          stage = 'asset_download:$bundleId';
           onStatus?.call('Downloading hosted Pokemon snapshot');
           final gzipBytes = await _fetchBytesWithRetry(
             client: client,
@@ -551,13 +416,17 @@ class PokemonBulkService {
               ((i + value) / selectedBundles.length).clamp(0.08, 0.98),
             ),
           );
+          stage = 'gzip_decode:$bundleId';
           onStatus?.call('Preparing hosted Pokemon snapshot');
           final jsonBytes = GZipDecoder().decodeBytes(gzipBytes);
+          stage = 'utf8_decode:$bundleId';
           final jsonText = utf8.decode(jsonBytes, allowMalformed: true);
+          stage = 'json_decode:$bundleId';
           final parsed = jsonDecode(jsonText);
           if (parsed is! Map<String, dynamic>) {
             return null;
           }
+          stage = 'validate_payload:$bundleId';
           final downloadedProfile =
               (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
           if (downloadedProfile.isNotEmpty && downloadedProfile != profile) {
@@ -579,12 +448,14 @@ class PokemonBulkService {
           if (batchJson is! Map) {
             return null;
           }
+          stage = 'batch_parse:$bundleId';
           final batch = canonicalCatalogBatchFromJson(
             Map<String, dynamic>.from(batchJson),
           );
           if (batch.cards.isEmpty || batch.printings.isEmpty) {
             return null;
           }
+          stage = 'batch_merge:$bundleId';
           mergedBatch = mergedBatch == null
               ? batch
               : _mergeCanonicalCatalogBatches(mergedBatch, batch);
@@ -596,11 +467,13 @@ class PokemonBulkService {
           ...existingLanguages,
           ...downloadedLanguages,
         });
+        stage = 'snapshot_write';
         await _writeCanonicalCatalogSnapshot(
           mergedBatch,
           profile: profile.trim().toLowerCase(),
           languageSignature: mergedSignature,
         );
+        await _clearHostedBundleDiagnostic();
         onStatus?.call('Using hosted Pokemon snapshot');
         onProgress(1);
         return mergedBatch;
@@ -648,19 +521,24 @@ class PokemonBulkService {
       if (!_isAllowedDownloadUri(assetUri.toString())) {
         return null;
       }
+      stage = 'asset_download:canonical_catalog_snapshot';
       onStatus?.call('Downloading hosted Pokemon snapshot');
       final gzipBytes = await _fetchBytesWithRetry(
         client: client,
         uri: assetUri,
         onProgress: (value) => onProgress((0.08 + (value * 0.90)).clamp(0, 1)),
       );
+      stage = 'gzip_decode:canonical_catalog_snapshot';
       onStatus?.call('Preparing hosted Pokemon snapshot');
       final jsonBytes = GZipDecoder().decodeBytes(gzipBytes);
+      stage = 'utf8_decode:canonical_catalog_snapshot';
       final jsonText = utf8.decode(jsonBytes, allowMalformed: true);
+      stage = 'json_decode:canonical_catalog_snapshot';
       final parsed = jsonDecode(jsonText);
       if (parsed is! Map<String, dynamic>) {
         return null;
       }
+      stage = 'validate_payload:canonical_catalog_snapshot';
       final downloadedProfile =
           (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
       if (downloadedProfile.isNotEmpty && downloadedProfile != profile) {
@@ -680,426 +558,32 @@ class PokemonBulkService {
       if (batchJson is! Map) {
         return null;
       }
+      stage = 'batch_parse:canonical_catalog_snapshot';
       final batch = canonicalCatalogBatchFromJson(
         Map<String, dynamic>.from(batchJson),
       );
       if (batch.cards.isEmpty || batch.printings.isEmpty) {
         return null;
       }
+      stage = 'snapshot_write';
       final snapshotFile = await _canonicalSnapshotFile();
       await snapshotFile.writeAsString(jsonText);
+      await _clearHostedBundleDiagnostic();
       onStatus?.call('Using hosted Pokemon snapshot');
       onProgress(1);
       return batch;
-    } catch (_) {
-      return null;
+    } catch (error) {
+      final code = _describeHostedBundleError(error);
+      final detail = _sanitizeHostedBundleErrorDetail(error);
+      await _persistHostedBundleDiagnostic(
+        code: code,
+        stage: stage,
+        detail: detail,
+      );
+      throw HttpException('$code||stage=$stage||detail=$detail');
     } finally {
       client.close();
     }
-  }
-
-  Future<CanonicalCatalogImportBatch> _importCanonicalProfileBatch({
-    required String profile,
-    required List<TcgCardLanguage> languages,
-    required void Function(double progress) onProgress,
-    void Function(String status)? onStatus,
-  }) async {
-    final service = PokemonCanonicalImportService();
-    CanonicalCatalogImportBatch? batch;
-    await service.importProfile(
-      profile: profile,
-      languages: languages,
-      onProgress: onProgress,
-      onStatus: onStatus,
-      onBatchBuilt: (value) {
-        batch = value;
-      },
-    );
-    if (batch == null) {
-      throw const FormatException('pokemon_canonical_snapshot_empty');
-    }
-    return batch!;
-  }
-
-  Future<CanonicalCatalogImportBatch>
-  _importCanonicalProfileBatchFromDistribution({
-    required String profile,
-    required List<TcgCardLanguage> languages,
-    required void Function(double progress) onProgress,
-    void Function(String status)? onStatus,
-  }) async {
-    final archive = await _decodeTcgdexDistributionArchive(
-      onProgress: (value) => onProgress((value * 0.35).clamp(0.0, 0.35)),
-      onStatus: onStatus,
-    );
-
-    final fileByPath = <String, ArchiveFile>{};
-    for (final file in archive.files) {
-      if (file.isFile) {
-        fileByPath[file.name.toLowerCase()] = file;
-      }
-    }
-
-    final setIndexPattern = RegExp(
-      r'^[^/]+/v2/([a-z]{2})/sets/[^/]+/index\.json$',
-      caseSensitive: false,
-    );
-    final setEntriesByLanguage = <String, Map<String, _ArchiveSetEntry>>{};
-    var scannedSetIndexes = 0;
-    final indexCandidates = archive.files
-        .where((file) => file.isFile && file.name.endsWith('/index.json'))
-        .toList(growable: false);
-    for (final file in indexCandidates) {
-      final lowerPath = file.name.toLowerCase();
-      final match = setIndexPattern.firstMatch(lowerPath);
-      if (match == null) {
-        continue;
-      }
-      final languageCode = match.group(1)?.trim().toLowerCase() ?? '';
-      final payload = _readArchiveJsonMap(file);
-      final setId = (payload?['id'] as String?)?.trim().toLowerCase() ?? '';
-      if (languageCode.isEmpty || setId.isEmpty || payload == null) {
-        continue;
-      }
-      final dirPath = file.name.substring(
-        0,
-        file.name.length - '/index.json'.length,
-      );
-      setEntriesByLanguage.putIfAbsent(
-        languageCode,
-        () => <String, _ArchiveSetEntry>{},
-      )[setId] = _ArchiveSetEntry(
-        setId: setId,
-        indexPath: file.name,
-        dirPath: dirPath,
-        payload: payload,
-      );
-      scannedSetIndexes += 1;
-      if (scannedSetIndexes % 64 == 0) {
-        onProgress(
-          (0.35 + ((scannedSetIndexes / (indexCandidates.length + 1)) * 0.10))
-              .clamp(0.0, 0.45),
-        );
-      }
-    }
-
-    final selectedSetCodes = _resolveProfileSetCodesFromDistribution(
-      setEntriesByLanguage: setEntriesByLanguage,
-    );
-    if (selectedSetCodes.isEmpty) {
-      throw const FormatException('pokemon_canonical_snapshot_empty');
-    }
-
-    final provider = TcgdexPokemonProvider();
-    final canonicalLanguage = TcgdexPokemonProvider.canonicalLanguage;
-    final canonicalSetEntries = setEntriesByLanguage[canonicalLanguage.code];
-    if (canonicalSetEntries == null || canonicalSetEntries.isEmpty) {
-      throw const FormatException('pokemon_canonical_snapshot_empty');
-    }
-
-    final cardsById = <String, CatalogCard>{};
-    final setsById = <String, CatalogSet>{};
-    final printingsById = <String, CardPrintingRef>{};
-    final cardLocalizationsByKey = <String, LocalizedCardData>{};
-    final setLocalizationsByKey = <String, LocalizedSetData>{};
-    final providerMappings = <String, ProviderMappingRecord>{};
-    final priceSnapshotsByKey = <String, PriceSnapshot>{};
-
-    var totalCards = 0;
-    for (final setCode in selectedSetCodes) {
-      final entry = canonicalSetEntries[setCode];
-      if (entry == null) {
-        continue;
-      }
-      final cards = entry.payload['cards'];
-      if (cards is List) {
-        totalCards += cards.length;
-      }
-    }
-    if (totalCards <= 0) {
-      throw const FormatException('pokemon_canonical_snapshot_empty');
-    }
-
-    var processedCards = 0;
-    var processedSets = 0;
-    for (final setCode in selectedSetCodes) {
-      final canonicalSetEntry = canonicalSetEntries[setCode];
-      if (canonicalSetEntry == null) {
-        continue;
-      }
-      onStatus?.call(
-        'Importing set ${setCode.toUpperCase()} (${processedSets + 1}/${selectedSetCodes.length})',
-      );
-      final localizedSetEntries = <TcgCardLanguage, _ArchiveSetEntry>{
-        canonicalLanguage: canonicalSetEntry,
-      };
-      for (final language in languages) {
-        if (language == canonicalLanguage) {
-          continue;
-        }
-        final byLanguage = setEntriesByLanguage[language.code];
-        final localized = byLanguage?[setCode];
-        if (localized != null) {
-          localizedSetEntries[language] = localized;
-        }
-      }
-
-      for (final entry in localizedSetEntries.entries) {
-        final mappedSet = provider.mapSetPayload(
-          Map<String, dynamic>.from(entry.value.payload),
-          language: entry.key,
-        );
-        if (mappedSet == null) {
-          continue;
-        }
-        setsById[mappedSet.setId] = mappedSet;
-        for (final localized in mappedSet.localizedData) {
-          setLocalizationsByKey['${localized.setId}:${localized.language.code}'] =
-              localized;
-        }
-      }
-
-      final rawCards = canonicalSetEntry.payload['cards'];
-      if (rawCards is! List) {
-        processedSets += 1;
-        continue;
-      }
-
-      for (final card in rawCards) {
-        if (card is! Map) {
-          continue;
-        }
-        final cardMap = Map<String, dynamic>.from(card);
-        final localId = (cardMap['localId'] as String?)?.trim();
-        final fallbackId = (cardMap['id'] as String?)?.trim().toLowerCase();
-        if ((localId == null || localId.isEmpty) &&
-            (fallbackId == null || fallbackId.isEmpty)) {
-          continue;
-        }
-        final cardFolder = localId?.isNotEmpty == true ? localId! : fallbackId!;
-        final canonicalCardPath =
-            '${canonicalSetEntry.dirPath}/$cardFolder/index.json';
-        final canonicalCardFile = fileByPath[canonicalCardPath.toLowerCase()];
-        if (canonicalCardFile == null) {
-          continue;
-        }
-        final canonicalRaw = _readArchiveJsonMap(canonicalCardFile);
-        if (canonicalRaw == null) {
-          continue;
-        }
-        final canonicalPayload = _mergeCardWithSetPayload(
-          canonicalRaw,
-          canonicalSetEntry.payload,
-        );
-        final localizedPayloads = <TcgCardLanguage, Map<String, dynamic>>{
-          canonicalLanguage: canonicalPayload,
-        };
-        for (final entry in localizedSetEntries.entries) {
-          if (entry.key == canonicalLanguage) {
-            continue;
-          }
-          final localizedCardPath =
-              '${entry.value.dirPath}/$cardFolder/index.json';
-          final localizedCardFile = fileByPath[localizedCardPath.toLowerCase()];
-          if (localizedCardFile == null) {
-            continue;
-          }
-          final localizedRaw = _readArchiveJsonMap(localizedCardFile);
-          if (localizedRaw == null) {
-            continue;
-          }
-          localizedPayloads[entry.key] = _mergeCardWithSetPayload(
-            localizedRaw,
-            entry.value.payload,
-          );
-        }
-
-        final bundle = provider.mapPrintingBundleFromPayloads(
-          canonicalPayload,
-          localizedPayloads,
-        );
-        if (bundle == null) {
-          continue;
-        }
-        cardsById[bundle.card.cardId] = bundle.card;
-        setsById[bundle.set.setId] = bundle.set;
-        printingsById[bundle.printing.printingId] = bundle.printing;
-        for (final localized in bundle.card.localizedData) {
-          cardLocalizationsByKey['${localized.cardId}:${localized.language.code}'] =
-              localized;
-        }
-        for (final localized in bundle.set.localizedData) {
-          setLocalizationsByKey['${localized.setId}:${localized.language.code}'] =
-              localized;
-        }
-        for (final mapping in bundle.printing.providerMappings) {
-          providerMappings['${mapping.providerId.value}:${mapping.objectType}:${mapping.providerObjectId}:${bundle.printing.printingId}'] =
-              ProviderMappingRecord(
-                mapping: mapping,
-                cardId: bundle.card.cardId,
-                printingId: bundle.printing.printingId,
-                setId: bundle.set.setId,
-              );
-        }
-        final snapshots = provider.extractPriceSnapshotsFromBundle(bundle);
-        for (final snapshot in snapshots) {
-          priceSnapshotsByKey['${snapshot.printingId}:${snapshot.sourceId.value}:${snapshot.currencyCode}:${snapshot.finishKey ?? 'default'}'] =
-              snapshot;
-        }
-        processedCards += 1;
-        if (processedCards % 32 == 0) {
-          final cardProgress = processedCards / totalCards;
-          onProgress((0.45 + (cardProgress * 0.55)).clamp(0.0, 1.0));
-        }
-      }
-      processedSets += 1;
-    }
-
-    onProgress(1);
-    return CanonicalCatalogImportBatch(
-      cards: cardsById.values.toList(growable: false),
-      sets: setsById.values.toList(growable: false),
-      printings: printingsById.values.toList(growable: false),
-      cardLocalizations: cardLocalizationsByKey.values.toList(growable: false),
-      setLocalizations: setLocalizationsByKey.values.toList(growable: false),
-      providerMappings: providerMappings.values.toList(growable: false),
-      priceSnapshots: priceSnapshotsByKey.values.toList(growable: false),
-    );
-  }
-
-  Future<Archive> _decodeTcgdexDistributionArchive({
-    required void Function(double progress) onProgress,
-    void Function(String status)? onStatus,
-  }) async {
-    onStatus?.call('Downloading Pokemon catalog snapshot');
-    final archiveFile = await _downloadTcgdexDistributionZip(
-      onProgress: onProgress,
-    );
-    onStatus?.call('Preparing Pokemon catalog snapshot');
-    onProgress(1);
-    final input = InputFileStream(archiveFile.path);
-    try {
-      return ZipDecoder().decodeStream(input, verify: false);
-    } finally {
-      input.close();
-    }
-  }
-
-  Future<File> _downloadTcgdexDistributionZip({
-    required void Function(double progress) onProgress,
-  }) async {
-    final datasetDir = await _ensureDatasetDirectory();
-    final targetFile = File(
-      p.join(datasetDir.path, _tcgdexDistributionZipFileName),
-    );
-    if (await targetFile.exists()) {
-      final size = await targetFile.length();
-      if (size > 10 * 1024 * 1024) {
-        onProgress(1);
-        return targetFile;
-      }
-    }
-    final tempFile = File('${targetFile.path}.part');
-    final client = http.Client();
-    try {
-      await _downloadFileWithProgress(
-        client: client,
-        uri: Uri.parse(_tcgdexDistributionZipUrl),
-        targetFile: tempFile,
-        onProgress: onProgress,
-      );
-      if (await targetFile.exists()) {
-        await targetFile.delete();
-      }
-      await tempFile.rename(targetFile.path);
-      return targetFile;
-    } finally {
-      client.close();
-      if (await tempFile.exists()) {
-        try {
-          await tempFile.delete();
-        } catch (_) {}
-      }
-    }
-  }
-
-  Future<void> _downloadFileWithProgress({
-    required http.Client client,
-    required Uri uri,
-    required File targetFile,
-    required void Function(double fraction) onProgress,
-  }) async {
-    const assumedStreamLengthBytes = 600 * 1024 * 1024;
-    Object? lastError;
-    for (var attempt = 1; attempt <= _maxAttemptsPerPage; attempt++) {
-      IOSink? sink;
-      try {
-        final request = http.Request('GET', uri)
-          ..headers.addAll(const <String, String>{
-            'user-agent': 'bindervault/1.0',
-          });
-        final streamed = await client
-            .send(request)
-            .timeout(const Duration(seconds: 90));
-        if (streamed.statusCode != 200) {
-          final retryable =
-              streamed.statusCode == 429 || streamed.statusCode >= 500;
-          if (!retryable || attempt == _maxAttemptsPerPage) {
-            throw HttpException('pokemon_api_http_${streamed.statusCode}');
-          }
-          lastError = HttpException('pokemon_api_http_${streamed.statusCode}');
-        } else {
-          if (await targetFile.exists()) {
-            await targetFile.delete();
-          }
-          sink = targetFile.openWrite();
-          final expected = streamed.contentLength ?? 0;
-          var received = 0;
-          await for (final chunk in streamed.stream) {
-            sink.add(chunk);
-            received += chunk.length;
-            if (expected > 0) {
-              onProgress((received / expected).clamp(0.0, 1.0));
-            } else {
-              // Some hosts don't provide Content-Length; keep progress moving.
-              final estimated = (received / assumedStreamLengthBytes).clamp(
-                0.0,
-                0.98,
-              );
-              onProgress(estimated);
-            }
-          }
-          await sink.flush();
-          await sink.close();
-          onProgress(1);
-          return;
-        }
-      } on TimeoutException catch (error) {
-        lastError = error;
-      } on SocketException catch (error) {
-        lastError = error;
-      } on http.ClientException catch (error) {
-        lastError = error;
-      } finally {
-        await sink?.close();
-      }
-      if (attempt < _maxAttemptsPerPage) {
-        await Future<void>.delayed(_retryDelay(attempt));
-      }
-    }
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
   }
 
   Future<Uint8List> _fetchBytesWithRetry({
@@ -1169,53 +653,6 @@ class PokemonBulkService {
       throw HttpException('pokemon_api_client_error');
     }
     throw const HttpException('pokemon_api_failed');
-  }
-
-  List<String> _resolveProfileSetCodesFromDistribution({
-    required Map<String, Map<String, _ArchiveSetEntry>> setEntriesByLanguage,
-  }) {
-    final allSetCodes = (setEntriesByLanguage['en'] ?? const {}).keys.toList()
-      ..sort();
-    return allSetCodes;
-  }
-
-  Map<String, dynamic>? _readArchiveJsonMap(ArchiveFile file) {
-    try {
-      final content = file.readBytes();
-      if (content == null) {
-        return null;
-      }
-      final raw = utf8.decode(content, allowMalformed: true);
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return decoded;
-      }
-      if (decoded is Map) {
-        return Map<String, dynamic>.from(decoded);
-      }
-    } catch (_) {
-      return null;
-    }
-    return null;
-  }
-
-  Map<String, dynamic> _mergeCardWithSetPayload(
-    Map<String, dynamic> cardPayload,
-    Map<String, dynamic> setPayload,
-  ) {
-    final merged = Map<String, dynamic>.from(cardPayload);
-    final cardSet = merged['set'];
-    final mergedSet = <String, dynamic>{};
-    if (setPayload.isNotEmpty) {
-      mergedSet.addAll(setPayload);
-    }
-    if (cardSet is Map) {
-      mergedSet.addAll(Map<String, dynamic>.from(cardSet));
-    }
-    if (mergedSet.isNotEmpty) {
-      merged['set'] = mergedSet;
-    }
-    return merged;
   }
 
   Future<void> _importCanonicalCatalogBatch(
@@ -1759,8 +1196,13 @@ class PokemonBulkService {
     };
     final printings = <String, CardPrintingRef>{
       for (final value in base.printings) value.printingId: value,
-      for (final value in delta.printings) value.printingId: value,
     };
+    for (final value in delta.printings) {
+      final existing = printings[value.printingId];
+      printings[value.printingId] = existing == null
+          ? value
+          : _mergeCardPrintingRefs(existing, value);
+    }
     final cardLocalizations = <String, LocalizedCardData>{
       for (final value in base.cardLocalizations)
         '${value.cardId}:${value.language.code}': value,
@@ -1792,6 +1234,48 @@ class PokemonBulkService {
       providerMappings: providerMappings.values.toList(growable: false),
       priceSnapshots: priceSnapshots.values.toList(growable: false),
     );
+  }
+
+  CardPrintingRef _mergeCardPrintingRefs(
+    CardPrintingRef base,
+    CardPrintingRef delta,
+  ) {
+    final providerMappings = <String, ProviderMapping>{
+      for (final mapping in base.providerMappings)
+        _providerMappingKey(mapping): mapping,
+      for (final mapping in delta.providerMappings)
+        _providerMappingKey(mapping): mapping,
+    };
+    return CardPrintingRef(
+      printingId: delta.printingId,
+      cardId: delta.cardId,
+      setId: delta.setId,
+      gameId: delta.gameId,
+      collectorNumber: delta.collectorNumber.trim().isNotEmpty
+          ? delta.collectorNumber
+          : base.collectorNumber,
+      providerMappings: providerMappings.values.toList(growable: false),
+      rarity: (delta.rarity ?? '').trim().isNotEmpty ? delta.rarity : base.rarity,
+      releaseDate: delta.releaseDate ?? base.releaseDate,
+      imageUris: delta.imageUris.isNotEmpty ? delta.imageUris : base.imageUris,
+      finishKeys: {
+        ...base.finishKeys,
+        ...delta.finishKeys,
+      },
+      metadata: <String, Object?>{
+        ...base.metadata,
+        ...delta.metadata,
+      },
+    );
+  }
+
+  String _providerMappingKey(ProviderMapping value) {
+    return [
+      value.providerId.value,
+      value.objectType.trim().toLowerCase(),
+      value.providerObjectId.trim().toLowerCase(),
+      (value.providerObjectVersion ?? '').trim().toLowerCase(),
+    ].join('|');
   }
 
   String _providerMappingRecordKey(ProviderMappingRecord value) {
@@ -1860,47 +1344,7 @@ class PokemonBulkService {
   }
 
   Future<int> backfillSetNames({http.Client? client}) async {
-    final managedClient = client ?? http.Client();
-    final ownClient = client == null;
-    try {
-      final names = await _fetchSetNamesIndex(client: managedClient);
-      if (names.isEmpty) {
-        return 0;
-      }
-      return ScryfallDatabase.instance.backfillSetNames(names);
-    } catch (_) {
-      return 0;
-    } finally {
-      if (ownClient) {
-        managedClient.close();
-      }
-    }
-  }
-
-  Future<int?> _fetchApiTotalCount({http.Client? client}) async {
-    final managedClient = client ?? http.Client();
-    final ownClient = client == null;
-    try {
-      final uri = Uri.parse(_cardsEndpoint).replace(
-        queryParameters: const <String, String>{'page': '1', 'pageSize': '1'},
-      );
-      final payload = await _fetchJsonWithRetry(
-        client: managedClient,
-        uri: uri,
-      );
-      final decoded = jsonDecode(payload);
-      if (decoded is Map<String, dynamic>) {
-        final total = (decoded['totalCount'] as num?)?.toInt();
-        return total;
-      }
-      return null;
-    } catch (_) {
-      return null;
-    } finally {
-      if (ownClient) {
-        managedClient.close();
-      }
-    }
+    return 0;
   }
 
   Future<int> _installFromCanonicalBatch({
@@ -2319,274 +1763,6 @@ class PokemonBulkService {
     };
   }
 
-  Future<int> _installFromApi({
-    required AppDatabase database,
-    required http.Client client,
-    required void Function(double progress) onProgress,
-    required double progressStart,
-    required double progressEnd,
-  }) async {
-    if (!_isAllowedDownloadUri(_cardsEndpoint)) {
-      throw const FormatException('pokemon_dataset_url_not_allowed');
-    }
-    var inserted = 0;
-    await database.transaction(() async {
-      await ScryfallDatabase.instance.deleteAllCards(database);
-      var page = 1;
-      var totalCount = 0;
-      final range = (progressEnd - progressStart).clamp(0.05, 0.95);
-      while (true) {
-        final pageProgress = progressStart + (page * (range / 120));
-        onProgress(pageProgress.clamp(progressStart, progressEnd));
-        final payload = await _fetchCardsPage(
-          client: client,
-          page: page,
-          pageSize: _pageSize,
-        );
-        final responseTotal = (payload['totalCount'] as num?)?.toInt() ?? 0;
-        if (totalCount == 0 && responseTotal > 0) {
-          totalCount = responseTotal;
-        }
-        final data = payload['data'];
-        if (data is! List || data.isEmpty) {
-          break;
-        }
-        final mapped = <Map<String, dynamic>>[];
-        for (final row in data) {
-          if (row is! Map) {
-            continue;
-          }
-          final normalized = _mapPokemonCardPayload(
-            Map<String, dynamic>.from(row),
-          );
-          if (normalized != null) {
-            mapped.add(normalized);
-          }
-        }
-        if (mapped.isNotEmpty) {
-          await ScryfallDatabase.instance.insertPokemonCardsBatch(
-            database,
-            mapped,
-          );
-          inserted += mapped.length;
-        }
-        if (totalCount > 0) {
-          final progress = progressStart + ((inserted / totalCount) * range);
-          onProgress(progress.clamp(progressStart, progressEnd));
-        }
-        page += 1;
-      }
-    });
-    if (inserted <= 0) {
-      throw const FormatException('pokemon_dataset_empty');
-    }
-    return inserted;
-  }
-
-  Future<int> _installFromFullManifest({
-    required AppDatabase database,
-    required http.Client client,
-    required void Function(double progress) onProgress,
-    required double progressStart,
-    required double progressEnd,
-  }) async {
-    if (!_isAllowedDownloadUri(_setsIndexEndpoint)) {
-      throw const FormatException('pokemon_dataset_url_not_allowed');
-    }
-    final indexPayload = await _fetchJsonWithRetry(
-      client: client,
-      uri: Uri.parse(_setsIndexEndpoint),
-      retryAttempts: 2,
-      requestTimeout: const Duration(seconds: 12),
-    );
-    final parsed = jsonDecode(indexPayload);
-    if (parsed is! List) {
-      throw const FormatException('pokemon_sets_index_invalid_payload');
-    }
-    final setSpecs = <PokemonDatasetSet>[];
-    for (final row in parsed) {
-      if (row is! Map) {
-        continue;
-      }
-      final map = Map<String, dynamic>.from(row);
-      final id = ((map['id'] as String?) ?? '').trim().toLowerCase();
-      if (id.isEmpty) {
-        continue;
-      }
-      setSpecs.add(
-        PokemonDatasetSet(
-          setCode: id,
-          language: 'en',
-          url:
-              'https://raw.githubusercontent.com/PokemonTCG/pokemon-tcg-data/master/cards/en/$id.json',
-        ),
-      );
-    }
-    if (setSpecs.isEmpty) {
-      throw const FormatException('pokemon_sets_index_empty');
-    }
-
-    final datasetDir = await _ensureDatasetDirectory();
-    var inserted = 0;
-    await database.transaction(() async {
-      await ScryfallDatabase.instance.deleteAllCards(database);
-      for (var i = 0; i < setSpecs.length; i++) {
-        final range = (progressEnd - progressStart).clamp(0.05, 0.95);
-        final setStart = progressStart + ((i / setSpecs.length) * range);
-        final setAfterDownload = setStart + (range / setSpecs.length) * 0.35;
-        onProgress(setStart.clamp(progressStart, progressEnd));
-        final spec = setSpecs[i];
-        final cards = await _downloadManifestSet(
-          client: client,
-          setSpec: spec,
-          datasetDir: datasetDir,
-          onDownloadProgress: (fraction) {
-            final clamped = fraction.clamp(0.0, 1.0);
-            final value = setStart + ((setAfterDownload - setStart) * clamped);
-            onProgress(value.clamp(progressStart, progressEnd));
-          },
-        );
-        onProgress(setAfterDownload.clamp(progressStart, progressEnd));
-        final mapped = <Map<String, dynamic>>[];
-        for (final row in cards) {
-          if (row is! Map) {
-            continue;
-          }
-          final normalized = _mapPokemonCardPayload(
-            Map<String, dynamic>.from(row),
-          );
-          if (normalized != null) {
-            mapped.add(normalized);
-          }
-        }
-        if (mapped.isNotEmpty) {
-          for (var offset = 0; offset < mapped.length; offset += 400) {
-            final end = (offset + 400 < mapped.length)
-                ? offset + 400
-                : mapped.length;
-            await ScryfallDatabase.instance.insertPokemonCardsBatch(
-              database,
-              mapped.sublist(offset, end),
-            );
-          }
-          inserted += mapped.length;
-        }
-        final progress = progressStart + (((i + 1) / setSpecs.length) * range);
-        onProgress(progress.clamp(progressStart, progressEnd));
-      }
-    });
-    if (inserted <= 0) {
-      throw const FormatException('pokemon_dataset_empty');
-    }
-    return inserted;
-  }
-
-  Future<List<dynamic>> _downloadManifestSet({
-    required http.Client client,
-    required PokemonDatasetSet setSpec,
-    required Directory datasetDir,
-    void Function(double fraction)? onDownloadProgress,
-  }) async {
-    if (!_isAllowedDownloadUri(setSpec.url)) {
-      throw const FormatException('pokemon_dataset_url_not_allowed');
-    }
-    final uri = Uri.parse(setSpec.url);
-    final payload = await _fetchJsonWithProgress(
-      client: client,
-      uri: uri,
-      onProgress: onDownloadProgress,
-    );
-    final targetFile = File(
-      p.join(
-        datasetDir.path,
-        '${setSpec.language.toLowerCase()}_${setSpec.setCode.toLowerCase()}.json',
-      ),
-    );
-    await targetFile.writeAsString(payload, flush: true);
-    final parsed = jsonDecode(payload);
-    if (parsed is List) {
-      return parsed;
-    }
-    if (parsed is Map<String, dynamic>) {
-      final data = parsed['data'];
-      if (data is List) {
-        return data;
-      }
-    }
-    throw const FormatException('pokemon_dataset_invalid_payload');
-  }
-
-  Future<String> _fetchJsonWithProgress({
-    required http.Client client,
-    required Uri uri,
-    void Function(double fraction)? onProgress,
-  }) async {
-    final headers = <String, String>{
-      'accept': 'application/json',
-      'user-agent': 'bindervault/1.0',
-    };
-    if (_apiKey.trim().isNotEmpty &&
-        uri.host.toLowerCase() == 'api.pokemontcg.io') {
-      headers['x-api-key'] = _apiKey.trim();
-    }
-    Object? lastError;
-    for (var attempt = 1; attempt <= _maxAttemptsPerPage; attempt++) {
-      try {
-        final request = http.Request('GET', uri)..headers.addAll(headers);
-        final streamed = await client
-            .send(request)
-            .timeout(const Duration(seconds: 35));
-        if (streamed.statusCode != 200) {
-          final retryable =
-              streamed.statusCode == 404 ||
-              streamed.statusCode == 429 ||
-              streamed.statusCode >= 500;
-          if (!retryable || attempt == _maxAttemptsPerPage) {
-            throw HttpException('pokemon_api_http_${streamed.statusCode}');
-          }
-          lastError = HttpException('pokemon_api_http_${streamed.statusCode}');
-        } else {
-          final expected = streamed.contentLength ?? 0;
-          var received = 0;
-          final sink = BytesBuilder(copy: false);
-          await for (final chunk in streamed.stream) {
-            sink.add(chunk);
-            received += chunk.length;
-            if (expected > 0) {
-              onProgress?.call((received / expected).clamp(0.0, 1.0));
-            }
-          }
-          if (expected <= 0) {
-            onProgress?.call(1);
-          }
-          return utf8.decode(sink.takeBytes(), allowMalformed: true);
-        }
-      } on TimeoutException catch (error) {
-        lastError = error;
-      } on SocketException catch (error) {
-        lastError = error;
-      } on http.ClientException catch (error) {
-        lastError = error;
-      }
-      if (attempt < _maxAttemptsPerPage) {
-        await Future<void>.delayed(_retryDelay(attempt));
-      }
-    }
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
-  }
-
   Future<Directory> _ensureDatasetDirectory() async {
     final appDir = await getApplicationDocumentsDirectory();
     final datasetDir = Directory(p.join(appDir.path, 'pokemon', 'datasets'));
@@ -2643,95 +1819,6 @@ class PokemonBulkService {
     return false;
   }
 
-  Future<Map<String, dynamic>> _fetchCardsPage({
-    required http.Client client,
-    required int page,
-    required int pageSize,
-  }) async {
-    final requestUris = <Uri>[
-      Uri.parse(_cardsEndpoint).replace(
-        queryParameters: <String, String>{
-          'page': '$page',
-          'pageSize': '$pageSize',
-          'select':
-              'id,name,number,rarity,supertype,types,subtypes,set.id,set.name,set.releaseDate,images.small,images.large',
-        },
-      ),
-      Uri.parse(_cardsEndpoint).replace(
-        queryParameters: <String, String>{
-          'page': '$page',
-          'pageSize': '$pageSize',
-        },
-      ),
-      Uri.parse(_cardsEndpoint).replace(
-        queryParameters: <String, String>{
-          'q': '*',
-          'page': '$page',
-          'pageSize': '$pageSize',
-        },
-      ),
-      Uri.parse('$_cardsEndpoint/').replace(
-        queryParameters: <String, String>{
-          'q': '*',
-          'page': '$page',
-          'pageSize': '$pageSize',
-        },
-      ),
-    ];
-    Object? lastError;
-    for (var attempt = 1; attempt <= _maxAttemptsPerPage; attempt++) {
-      for (final uri in requestUris) {
-        try {
-          final payload = await _fetchJsonWithRetry(
-            client: client,
-            uri: uri,
-            retryAttempts: 1,
-          );
-          final decoded = jsonDecode(payload);
-          if (decoded is Map<String, dynamic>) {
-            return decoded;
-          }
-          throw const FormatException('pokemon_api_invalid_payload');
-        } on HttpException catch (error) {
-          final status = _parsePokemonHttpStatus(error.message);
-          if (status == 404 && page > 1) {
-            return const <String, dynamic>{'data': <dynamic>[]};
-          }
-          lastError = error;
-        } on FormatException catch (error) {
-          lastError = error;
-        } on TimeoutException catch (error) {
-          lastError = error;
-        } on SocketException catch (error) {
-          lastError = error;
-        } on http.ClientException catch (error) {
-          lastError = error;
-        }
-      }
-      if (attempt == _maxAttemptsPerPage) {
-        break;
-      }
-      await Future<void>.delayed(_retryDelay(attempt));
-    }
-
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is FormatException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
-  }
-
   Future<String> _fetchJsonWithRetry({
     required http.Client client,
     required Uri uri,
@@ -2742,10 +1829,6 @@ class PokemonBulkService {
       'accept': 'application/json',
       'user-agent': 'bindervault/1.0',
     };
-    if (_apiKey.trim().isNotEmpty &&
-        uri.host.toLowerCase() == 'api.pokemontcg.io') {
-      headers['x-api-key'] = _apiKey.trim();
-    }
     Object? lastError;
     for (var attempt = 1; attempt <= retryAttempts; attempt++) {
       try {
@@ -2789,128 +1872,71 @@ class PokemonBulkService {
     throw const HttpException('pokemon_api_failed');
   }
 
-  Future<String?> _fetchManifestFingerprint({
-    http.Client? client,
-  }) async {
-    final managedClient = client ?? http.Client();
-    final ownClient = client == null;
+  Future<String?> _fetchHostedManifestFingerprint() async {
+    final client = http.Client();
     try {
-      final response = await _fetchHeadOrGetWithRetry(
-        client: managedClient,
-        uri: Uri.parse(_setsIndexEndpoint),
+      final payload = await _fetchJsonWithRetry(
+        client: client,
+        uri: Uri.parse(_hostedBundleManifestUrl),
+        retryAttempts: 2,
+        requestTimeout: const Duration(seconds: 20),
       );
-      final etag = (response.headers['etag'] ?? '').trim();
-      final lastModified = (response.headers['last-modified'] ?? '').trim();
-      final contentLength = (response.headers['content-length'] ?? '').trim();
-      if (etag.isNotEmpty) {
-        return 'sets-index:$etag';
+      var hash = 0;
+      for (final unit in payload.codeUnits) {
+        hash = ((hash * 31) + unit) & 0x7fffffff;
       }
-      if (lastModified.isNotEmpty) {
-        return 'sets-index:$lastModified';
-      }
-      if (contentLength.isNotEmpty) {
-        return 'sets-index:$contentLength';
-      }
-      return null;
+      return 'hosted:$hash';
     } catch (_) {
       return null;
     } finally {
-      if (ownClient) {
-        managedClient.close();
-      }
+      client.close();
     }
   }
 
-  Future<Map<String, String>> _fetchSetNamesIndex({
-    required http.Client client,
+  String _describeHostedBundleError(Object error) {
+    final text = error.toString();
+    if (text.contains('pokemon_api_timeout')) {
+      return 'pokemon_hosted_bundle_timeout';
+    }
+    if (text.contains('pokemon_api_unreachable')) {
+      return 'pokemon_hosted_bundle_unreachable';
+    }
+    if (text.contains('pokemon_api_http_404')) {
+      return 'pokemon_hosted_bundle_http_404';
+    }
+    if (text.contains('pokemon_api_http_')) {
+      return text;
+    }
+    if (error is FormatException) {
+      return 'pokemon_hosted_bundle_invalid_payload';
+    }
+    return 'pokemon_hosted_bundle_failed:${error.runtimeType}';
+  }
+
+  String _sanitizeHostedBundleErrorDetail(Object error) {
+    final detail = error.toString().replaceAll(RegExp(r'[\r\n]+'), ' ').trim();
+    if (detail.isEmpty) {
+      return error.runtimeType.toString();
+    }
+    return detail.length <= 180 ? detail : '${detail.substring(0, 180)}...';
+  }
+
+  Future<void> _persistHostedBundleDiagnostic({
+    required String code,
+    required String stage,
+    required String detail,
   }) async {
-    if (!_isAllowedDownloadUri(_setsIndexEndpoint)) {
-      throw const FormatException('pokemon_dataset_url_not_allowed');
-    }
-    final payload = await _fetchJsonWithRetry(
-      client: client,
-      uri: Uri.parse(_setsIndexEndpoint),
-    );
-    final parsed = jsonDecode(payload);
-    if (parsed is! List) {
-      throw const FormatException('pokemon_sets_index_invalid_payload');
-    }
-    final result = <String, String>{};
-    for (final row in parsed) {
-      if (row is! Map) {
-        continue;
-      }
-      final map = Map<String, dynamic>.from(row);
-      final id = ((map['id'] as String?) ?? '').trim().toLowerCase();
-      final name = ((map['name'] as String?) ?? '').trim();
-      if (id.isEmpty || name.isEmpty) {
-        continue;
-      }
-      result[id] = name;
-    }
-    return result;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKeyLastError, code);
+    await prefs.setString(_prefsKeyLastErrorStage, stage);
+    await prefs.setString(_prefsKeyLastErrorDetail, detail);
   }
 
-  Future<http.Response> _fetchHeadOrGetWithRetry({
-    required http.Client client,
-    required Uri uri,
-  }) async {
-    Object? lastError;
-    for (var attempt = 1; attempt <= _maxAttemptsPerPage; attempt++) {
-      try {
-        final headResponse = await client
-            .head(uri, headers: const {'user-agent': 'bindervault/1.0'})
-            .timeout(const Duration(seconds: 25));
-        if (headResponse.statusCode == 200) {
-          return headResponse;
-        }
-      } catch (error) {
-        lastError = error;
-      }
-
-      try {
-        final getResponse = await client
-            .get(uri, headers: const {'user-agent': 'bindervault/1.0'})
-            .timeout(const Duration(seconds: 25));
-        if (getResponse.statusCode == 200) {
-          return getResponse;
-        }
-        final retryable =
-            getResponse.statusCode == 429 || getResponse.statusCode >= 500;
-        if (!retryable || attempt == _maxAttemptsPerPage) {
-          throw HttpException('pokemon_api_http_${getResponse.statusCode}');
-        }
-        lastError = HttpException('pokemon_api_http_${getResponse.statusCode}');
-      } catch (error) {
-        lastError = error;
-      }
-
-      if (attempt < _maxAttemptsPerPage) {
-        await Future<void>.delayed(_retryDelay(attempt));
-      }
-    }
-
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
-  }
-
-  int? _parsePokemonHttpStatus(String message) {
-    final match = RegExp(r'pokemon_api_http_(\d{3})').firstMatch(message);
-    if (match == null) {
-      return null;
-    }
-    return int.tryParse(match.group(1)!);
+  Future<void> _clearHostedBundleDiagnostic() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKeyLastError);
+    await prefs.remove(_prefsKeyLastErrorStage);
+    await prefs.remove(_prefsKeyLastErrorDetail);
   }
 
   Duration _retryDelay(int attempt) {
@@ -2949,20 +1975,6 @@ class _CanonicalSnapshotPayload {
   final String profile;
   final String languageSignature;
   final CanonicalCatalogImportBatch batch;
-}
-
-class _ArchiveSetEntry {
-  const _ArchiveSetEntry({
-    required this.setId,
-    required this.indexPath,
-    required this.dirPath,
-    required this.payload,
-  });
-
-  final String setId;
-  final String indexPath;
-  final String dirPath;
-  final Map<String, dynamic> payload;
 }
 
 Map<String, dynamic>? _mapPokemonCardPayload(Map<String, dynamic> card) {

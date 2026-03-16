@@ -380,17 +380,18 @@ Map<String, Object?> _pokemonCardMetadataToJson(PokemonCardMetadata pokemon) {
 PokemonCardMetadata _pokemonCardMetadataFromJson(Map<String, dynamic> json) {
   return PokemonCardMetadata(
     category: json['category'] as String?,
-    hp: (json['hp'] as num?)?.toInt(),
+    hp: _jsonIntValue(json['hp']),
     types: (json['types'] as List<dynamic>? ?? const <dynamic>[])
         .whereType<String>()
         .toList(growable: false),
-    subtypes: (json['subtypes'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .toList(growable: false),
+    subtypes: _jsonStringList(json['subtypes']),
     stage: json['stage'] as String?,
-    evolvesFrom: json['evolves_from'] as String?,
-    regulationMark: json['regulation_mark'] as String?,
-    retreatCost: (json['retreat_cost'] as num?)?.toInt(),
+    evolvesFrom:
+        (json['evolves_from'] as String?) ?? (json['evolvesFrom'] as String?),
+    regulationMark:
+        (json['regulation_mark'] as String?) ??
+        (json['regulationMark'] as String?),
+    retreatCost: _jsonIntValue(json['retreat_cost'] ?? json['retreat']),
     weaknesses: (json['weaknesses'] as List<dynamic>? ?? const <dynamic>[])
         .whereType<Map>()
         .map(
@@ -457,12 +458,12 @@ Map<String, Object?> _pokemonAttackToJson(PokemonAttack attack) {
 PokemonAttack _pokemonAttackFromJson(Map<String, dynamic> json) {
   return PokemonAttack(
     name: (json['name'] as String?) ?? '',
-    text: json['text'] as String?,
-    damage: json['damage'] as String?,
-    energyCost: (json['energy_cost'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .toList(growable: false),
-    convertedEnergyCost: (json['converted_energy_cost'] as num?)?.toInt(),
+    text: (json['text'] as String?) ?? (json['effect'] as String?),
+    damage: _jsonStringValue(json['damage']),
+    energyCost: _jsonStringList(json['energy_cost'] ?? json['cost']),
+    convertedEnergyCost: _jsonIntValue(
+      json['converted_energy_cost'] ?? json['convertedEnergyCost'],
+    ),
   );
 }
 
@@ -478,8 +479,42 @@ PokemonAbility _pokemonAbilityFromJson(Map<String, dynamic> json) {
   return PokemonAbility(
     name: (json['name'] as String?) ?? '',
     type: (json['type'] as String?) ?? '',
-    text: json['text'] as String?,
+    text: (json['text'] as String?) ?? (json['effect'] as String?),
   );
+}
+
+int? _jsonIntValue(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value.trim());
+  }
+  return null;
+}
+
+String? _jsonStringValue(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+  return '$value';
+}
+
+List<String> _jsonStringList(Object? value) {
+  if (value is! List) {
+    return const <String>[];
+  }
+  return value
+      .map(_jsonStringValue)
+      .whereType<String>()
+      .toList(growable: false);
 }
 
 TcgGameId _tcgGameIdFromValue(String? value) {
@@ -598,9 +633,7 @@ class CanonicalCatalogStore {
         <Object?>[gameId.value],
       );
       if (gameId == TcgGameId.pokemon) {
-        _database.execute(
-          "DELETE FROM pokemon_printing_metadata WHERE printing_id LIKE 'pokemon:%'",
-        );
+        _database.execute('DELETE FROM pokemon_printing_metadata');
       }
       _database.execute(
         'DELETE FROM catalog_card_localizations WHERE card_id LIKE ?',
@@ -669,7 +702,7 @@ class CanonicalCatalogStore {
         ''');
       final insertPokemonMetadata = gameId == TcgGameId.pokemon
           ? _database.prepare('''
-              INSERT INTO pokemon_printing_metadata (
+              INSERT OR REPLACE INTO pokemon_printing_metadata (
                 printing_id, category, hp, stage, evolves_from, regulation_mark, retreat_cost, illustrator, types_json, subtypes_json, weaknesses_json, resistances_json, attacks_json, abilities_json, updated_at_ms
               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               ''')
@@ -756,7 +789,7 @@ class CanonicalCatalogStore {
       insertPokemonMetadata?.dispose();
 
       final insertCardLocalization = _database.prepare('''
-        INSERT INTO catalog_card_localizations (
+        INSERT OR REPLACE INTO catalog_card_localizations (
           card_id, language_code, name, subtype_line, rules_text, flavor_text, search_aliases_json, updated_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''');
@@ -775,7 +808,7 @@ class CanonicalCatalogStore {
       insertCardLocalization.dispose();
 
       final insertSetLocalization = _database.prepare('''
-        INSERT INTO catalog_set_localizations (
+        INSERT OR REPLACE INTO catalog_set_localizations (
           set_id, language_code, name, series_name, updated_at_ms
         ) VALUES (?, ?, ?, ?, ?)
         ''');
@@ -1155,7 +1188,9 @@ class CanonicalCatalogStore {
         ) AS set_total,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
-          json_extract(cp.image_uris_json, '\$.default')
+          json_extract(cp.image_uris_json, '\$.normal'),
+          json_extract(cp.image_uris_json, '\$.default'),
+          json_extract(cp.image_uris_json, '\$.small')
         ) AS image_uri
       FROM card_printings cp
       INNER JOIN catalog_cards cc ON cc.id = cp.card_id
@@ -1753,10 +1788,26 @@ class CanonicalCatalogStore {
     if (normalized.isEmpty) {
       return const <String>['en'];
     }
-    if (normalized.contains('en')) {
-      return normalized;
+    final unique = <String>[];
+    final seen = <String>{};
+    for (final value in normalized) {
+      if (seen.add(value)) {
+        unique.add(value);
+      }
     }
-    return <String>[...normalized, 'en'];
+    unique.sort((a, b) {
+      if (a == 'en' && b != 'en') {
+        return 1;
+      }
+      if (a != 'en' && b == 'en') {
+        return -1;
+      }
+      return 0;
+    });
+    if (!unique.contains('en')) {
+      unique.add('en');
+    }
+    return unique;
   }
 
   List<String> _tokenizeSearch(String raw) {

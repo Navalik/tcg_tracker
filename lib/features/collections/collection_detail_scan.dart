@@ -585,7 +585,7 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     if (cached != null && cached.isNotEmpty) {
       return cached;
     }
-    final sets = await ScryfallDatabase.instance.fetchAvailableSets();
+    final sets = await appRepositories.sets.fetchAvailableSets();
     final known = sets
         .map((set) => set.code.trim().toLowerCase())
         .where((code) => code.isNotEmpty)

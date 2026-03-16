@@ -121,8 +121,8 @@ Future<String?> _showBulkTypePicker(
           TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
       final subtitle = isPokemonActive
           ? (isItalian
-                ? 'Catalogo Pokemon: scegli la copertura da importare da TCGdex (piu copertura = piu tempo/spazio).'
-                : 'Pokemon catalog: choose TCGdex coverage to import (more coverage = more time/storage).')
+                ? 'Catalogo Pokemon: scegli il pacchetto locale da installare (piu copertura = piu tempo/spazio).'
+                : 'Pokemon catalog: choose the local package to install (more coverage = more time/storage).')
           : (isItalian
                 ? 'Database Magic: scegli il dataset Scryfall. Per ricerca locale multilingua usa All Cards.'
                 : 'Magic database: choose the Scryfall dataset. For multilingual local search, use All Cards.');

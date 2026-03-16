@@ -29,16 +29,25 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
   }
 
   @override
-  Future<List<SetInfo>> fetchAvailableSets({TcgGameId? gameId}) async {
+  Future<List<SetInfo>> fetchAvailableSets({
+    TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
+  }) async {
     final resolvedGame = _resolvedGameId(gameId);
     if (resolvedGame == TcgGameId.mtg) {
-      return _legacy.fetchAvailableSets(gameId: resolvedGame);
+      return _legacy.fetchAvailableSets(
+        gameId: resolvedGame,
+        preferredLanguages: preferredLanguages,
+      );
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       return store.fetchSetsForGame(
         gameId: resolvedGame,
-        preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
+        preferredLanguages:
+            preferredLanguages.isNotEmpty
+                ? _normalizedLanguages(preferredLanguages)
+                : await _uiPreferredLanguagesForGame(resolvedGame),
       );
     } finally {
       store.dispose();
@@ -49,17 +58,25 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
   Future<Map<String, String>> fetchSetNamesForCodes(
     List<String> setCodes, {
     TcgGameId? gameId,
+    List<String> preferredLanguages = const [],
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
     if (resolvedGame == TcgGameId.mtg) {
-      return _legacy.fetchSetNamesForCodes(setCodes, gameId: resolvedGame);
+      return _legacy.fetchSetNamesForCodes(
+        setCodes,
+        gameId: resolvedGame,
+        preferredLanguages: preferredLanguages,
+      );
     }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       return store.fetchSetNamesForCodesForGame(
         resolvedGame,
         setCodes,
-        preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
+        preferredLanguages:
+            preferredLanguages.isNotEmpty
+                ? _normalizedLanguages(preferredLanguages)
+                : await _uiPreferredLanguagesForGame(resolvedGame),
       );
     } finally {
       store.dispose();
@@ -228,6 +245,17 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
         : AppTcgGame.mtg;
     final configured = await AppSettings.loadCardLanguagesForGame(settingsGame);
     return _normalizedLanguages(configured);
+  }
+
+  Future<List<String>> _uiPreferredLanguagesForGame(TcgGameId gameId) async {
+    if (gameId == TcgGameId.onePiece) {
+      return const <String>['en'];
+    }
+    final appLocale = await AppSettings.loadAppLocale();
+    if (appLocale.trim().toLowerCase().startsWith('it')) {
+      return const <String>['it', 'en'];
+    }
+    return const <String>['en'];
   }
 
   Future<List<String>> _effectiveLanguages(

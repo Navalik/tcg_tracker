@@ -269,7 +269,7 @@ abstract class AppLocalizations {
   /// No description provided for @cardDatabaseSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Configure local databases: Magic from Scryfall, Pokemon from TCGdex.'**
+  /// **'Configure local databases: Magic from Scryfall, Pokemon from the hosted bundle.'**
   String get cardDatabaseSubtitle;
 
   /// No description provided for @selectedType.
@@ -2813,7 +2813,7 @@ abstract class AppLocalizations {
   /// No description provided for @pokemonDbProfileFullDescription.
   ///
   /// In en, this message translates to:
-  /// **'Imports the full Pokemon catalog from TCGdex. Best coverage (including recent expansions), with longer download and larger local DB.'**
+  /// **'Installs the full hosted Pokemon catalog for the most complete offline coverage, with longer download and larger local DB.'**
   String get pokemonDbProfileFullDescription;
 
   /// No description provided for @pokemonDbProfileExpandedDescription.
@@ -2843,7 +2843,7 @@ abstract class AppLocalizations {
   /// No description provided for @pokemonDbPickerSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Each profile imports a different slice of TCGdex: more coverage = more time and storage.'**
+  /// **'Choose how much of the hosted Pokemon catalog to keep offline: more coverage = more time and storage.'**
   String get pokemonDbPickerSubtitle;
 
   /// No description provided for @primaryGameFixedMessage.
@@ -3131,49 +3131,49 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.4.7'**
+  /// **'What\'s new in 0.5.0'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Interface improvements'**
+  /// **'Pokemon catalog update'**
   String get whatsNewFeaturesTitle;
 
   /// No description provided for @whatsNewBugFixesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Bug fixes'**
+  /// **'Fixes and reliability'**
   String get whatsNewBugFixesTitle;
 
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Deck updates are now saved correctly only inside the deck, without affecting All Cards.'**
+  /// **'Pokemon now installs from the hosted GitHub bundle, with a more reliable offline catalog flow.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Secondary game access now refreshes correctly after purchase revoke or entitlement changes.'**
+  /// **'Pokemon set names now follow the app language, while card language stays selectable when you add a set.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'BinderVault Plus screens are clearer, with improved pricing readability and purchase disclosures.'**
+  /// **'Pokemon search now matches localized names such as Kissara while keeping the correct localized card name in results.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Several interface details were refined for better clarity in collection and upgrade flows.'**
+  /// **'Search gallery cards were aligned with the All Cards layout for a more consistent browsing flow.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **''**
+  /// **'The Pokemon sync badge is clearer and now shows phase, progress, and status in a single chip.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
@@ -3191,13 +3191,13 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **''**
+  /// **'Pokemon image loading is now consistent across search, home, and collection views, with better fallbacks for missing art.'**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **''**
+  /// **'Several Pokemon import edge cases were fixed, including duplicate localizations, metadata conflicts, and incomplete EN/IT merges.'**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.
