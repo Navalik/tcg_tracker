@@ -187,6 +187,33 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     }
   }
 
+  String _deckFormatSummaryLabel(AppLocalizations l10n) {
+    final italian = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('it');
+    final prefix = italian ? 'Formato' : 'Format';
+    final format = _deckFormatConstraint;
+    if (format == null) {
+      return italian ? '$prefix: nessun formato' : '$prefix: no format';
+    }
+    final normalized = format.trim();
+    final titled = normalized.isEmpty
+        ? normalized
+        : normalized[0].toUpperCase() + normalized.substring(1);
+    final hasNotLegalCard = _deckLegalityByCardId.values.any(
+      (isLegal) => !isLegal,
+    );
+    final suffix = hasNotLegalCard ? ' (${l10n.notLegalLabel})' : '';
+    return '$prefix: $titled$suffix';
+  }
+
+  Color _deckFormatSummaryColor() {
+    final hasNotLegalCard = _deckLegalityByCardId.values.any(
+      (isLegal) => !isLegal,
+    );
+    return hasNotLegalCard ? const Color(0xFFD06D5F) : const Color(0xFFBFAE95);
+  }
+
   Future<void> _loadSideboardCards() async {
     if (!widget.isDeckCollection) {
       return;
@@ -223,6 +250,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
         ..clear()
         ..addAll(all);
     });
+    await _refreshDeckLegalityForLoadedCards();
   }
 
   String _sideboardLabel() {
@@ -917,6 +945,17 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
                 .map(basicLandCell)
                 .toList(),
           ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _deckFormatSummaryLabel(l10n),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: _deckFormatSummaryColor(),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1052,6 +1091,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     final rows = _buildDeckSectionRows(visibleCards, l10n);
     final sideRows = _buildDeckSectionRows(_sideboardCards, l10n);
     final children = <Widget>[_buildDeckStatsCard(visibleCards, l10n)];
+    final listBottomPadding = 112.0 + MediaQuery.of(context).padding.bottom;
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
       final row = rows[rowIndex];
       if (row.isHeader) {
@@ -1108,7 +1148,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     }
     return ListView(
       controller: _scrollController,
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, listBottomPadding),
       children: children,
     );
   }

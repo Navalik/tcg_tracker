@@ -735,7 +735,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               final isDownloadPhase = pokemonPhase?.index == 1;
               _bulkDownloading = isDownloadPhase;
               _bulkImporting = !isDownloadPhase;
-              _bulkDownloadProgress = isDownloadPhase ? pokemonPhaseProgress : 1;
+              _bulkDownloadProgress = isDownloadPhase
+                  ? pokemonPhaseProgress
+                  : 1;
               _bulkDownloadReceived = (_bulkDownloadProgress * 10000).round();
               _bulkDownloadTotal = 10000;
               _bulkImportProgress = isDownloadPhase ? 0 : pokemonPhaseProgress;
@@ -749,8 +751,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             } else {
               _bulkDownloading = false;
               _bulkImporting = true;
-              _bulkImportProgress =
-                  ((clamped - 0.55) / (1.0 - 0.55)).clamp(0.0, 1.0);
+              _bulkImportProgress = ((clamped - 0.55) / (1.0 - 0.55)).clamp(
+                0.0,
+                1.0,
+              );
               _bulkImportedCount = (_bulkImportProgress * 100).round();
             }
           });
@@ -976,7 +980,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  double _pokemonSyncPhaseProgress(_PokemonSyncPhaseInfo phase, double progress) {
+  double _pokemonSyncPhaseProgress(
+    _PokemonSyncPhaseInfo phase,
+    double progress,
+  ) {
     final clamped = progress.clamp(0.0, 1.0);
     final span = (phase.endProgress - phase.startProgress).clamp(0.0001, 1.0);
     return ((clamped - phase.startProgress) / span).clamp(0.0, 1.0);
@@ -1197,7 +1204,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final stage = match.group(1)?.trim();
     final detail = match.group(2)?.trim();
-    if ((stage == null || stage.isEmpty) && (detail == null || detail.isEmpty)) {
+    if ((stage == null || stage.isEmpty) &&
+        (detail == null || detail.isEmpty)) {
       return null;
     }
     final parts = <String>[];
@@ -1376,7 +1384,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
   int _smartCollectionCount() {
     return _collections
-        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
+        .where(
+          (item) =>
+              item.type == CollectionType.smart && !_isSetCollection(item),
+        )
         .length;
   }
 
@@ -1658,10 +1669,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .where(_isValidSetCollection)
         .toList(growable: false);
     final customCollections = nonDeckCollections
-        .where((item) => item.type == CollectionType.custom && !_isSetCollection(item))
+        .where(
+          (item) =>
+              item.type == CollectionType.custom && !_isSetCollection(item),
+        )
         .toList(growable: false);
     final smartCollections = nonDeckCollections
-        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
+        .where(
+          (item) =>
+              item.type == CollectionType.smart && !_isSetCollection(item),
+        )
         .toList(growable: false);
     final wishlistCollections = nonDeckCollections
         .where((item) => item.type == CollectionType.wishlist)
@@ -1682,9 +1699,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _buildLockedCollectionsPreview(
             context,
             section: _activeCollectionsMenu,
-            introTitle: _isItalianUi()
-                ? 'Funzione premium'
-                : 'Premium feature',
+            introTitle: _isItalianUi() ? 'Funzione premium' : 'Premium feature',
             introBody: AppLocalizations.of(context)!.unlockProRemoveLimit,
           ),
         ];
@@ -2540,9 +2555,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final createTitle = switch (effectiveSection) {
       _HomeCollectionsMenu.set => l10n.createYourSetCollectionTitle,
       _HomeCollectionsMenu.custom => l10n.createYourCustomCollectionTitle,
-      _HomeCollectionsMenu.smart => _isItalianUi()
-          ? 'Crea una smart collection'
-          : 'Create your smart collection',
+      _HomeCollectionsMenu.smart =>
+        _isItalianUi()
+            ? 'Crea una smart collection'
+            : 'Create your smart collection',
       _HomeCollectionsMenu.wish => l10n.createYourWishlistTitle,
       _HomeCollectionsMenu.deck => l10n.createYourDeckTitle,
       _HomeCollectionsMenu.home => l10n.createYourSetCollectionTitle,
@@ -2670,7 +2686,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         )
         .toList();
     final smartItems = userCollections
-        .where((item) => item.type == CollectionType.smart && !_isSetCollection(item))
+        .where(
+          (item) =>
+              item.type == CollectionType.smart && !_isSetCollection(item),
+        )
         .toList();
     final deckItems = userCollections
         .where((item) => item.type == CollectionType.deck)
@@ -4588,8 +4607,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       borderRadius: BorderRadius.circular(14),
                       child:
                           _normalizeCardImageUrlForDisplay(
-                                card.imageUri,
-                              ).trim().isNotEmpty
+                            card.imageUri,
+                          ).trim().isNotEmpty
                           ? Image.network(
                               _normalizeCardImageUrlForDisplay(card.imageUri),
                               fit: BoxFit.cover,
@@ -6642,7 +6661,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final pokemonSyncMeta = (!_isMtgActiveGame && isBlockingSync)
         ? _pokemonSyncMetaLine()
         : null;
-    final pokemonSyncChip = (!_isMtgActiveGame &&
+    final pokemonSyncChip =
+        (!_isMtgActiveGame &&
             isBlockingSync &&
             pokemonPhase != null &&
             pokemonSyncMeta != null)
@@ -6652,10 +6672,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             metaLine: pokemonSyncMeta,
           )
         : null;
-    final mtgPercentValue = (_bulkDownloading
-            ? _bulkDownloadProgress
-            : _bulkImportProgress) *
-        100;
+    final mtgPercentValue =
+        (_bulkDownloading ? _bulkDownloadProgress : _bulkImportProgress) * 100;
     final mtgPercentText = mtgPercentValue >= 99.95
         ? '100'
         : mtgPercentValue.clamp(0.0, 100.0).toStringAsFixed(1);
@@ -6762,13 +6780,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       else if (_bulkDownloading)
                         _isMtgActiveGame
                             ? (mtgSyncChip ?? const SizedBox.shrink())
-                            : (pokemonSyncChip ??
-                                  const SizedBox.shrink())
+                            : (pokemonSyncChip ?? const SizedBox.shrink())
                       else if (_bulkImporting)
                         _isMtgActiveGame
                             ? (mtgSyncChip ?? const SizedBox.shrink())
-                            : (pokemonSyncChip ??
-                                  const SizedBox.shrink())
+                            : (pokemonSyncChip ?? const SizedBox.shrink())
                       else if (_bulkDownloadError != null)
                         Column(
                           mainAxisSize: MainAxisSize.min,
@@ -7573,10 +7589,16 @@ class _HomeAddSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final media = MediaQuery.of(context);
-    final maxSheetHeight = media.size.height - media.padding.top - 24;
+    final sheetMargin = _bottomSheetMenuMargin(context);
+    final maxSheetHeight =
+        media.size.height -
+        media.padding.top -
+        sheetMargin.top -
+        sheetMargin.bottom;
     return SafeArea(
+      bottom: false,
       child: Container(
-        margin: const EdgeInsets.all(16),
+        margin: sheetMargin,
         constraints: BoxConstraints(maxHeight: maxSheetHeight),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,

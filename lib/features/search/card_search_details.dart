@@ -213,13 +213,24 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
                       ],
                       const SizedBox(height: 16),
                       if (_normalizeCardImageUrlForDisplay(
-                            entry.imageUri,
-                          ).trim().isNotEmpty)
+                        entry.imageUri,
+                      ).trim().isNotEmpty)
                         ClipRRect(
                           borderRadius: BorderRadius.circular(16),
-                          child: Image.network(
-                            _normalizeCardImageUrlForDisplay(entry.imageUri),
-                            fit: BoxFit.contain,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 320),
+                            child: Image.network(
+                              _normalizeCardImageUrlForDisplay(entry.imageUri),
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  SizedBox(
+                                    height: 220,
+                                    child: _missingCardArtPlaceholder(
+                                      entry.setCode,
+                                      compact: false,
+                                    ),
+                                  ),
+                            ),
                           ),
                         ),
                       const SizedBox(height: 16),
@@ -592,6 +603,9 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
       if (!mounted) {
         return;
       }
+      if (missingCollectionId != null) {
+        _hideCardFromWishlistSearch(card.id);
+      }
       if (missingCollectionId == null &&
           customMembershipCollectionId == null &&
           ownedCollectionId != null) {
@@ -693,6 +707,9 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
       }
       if (!mounted) {
         return;
+      }
+      if (missingCollectionId != null) {
+        _hideCardFromWishlistSearch(entry.cardId);
       }
       if (missingCollectionId == null &&
           customMembershipCollectionId == null &&

@@ -175,27 +175,52 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
 
   Widget _buildResultTile(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
+    final deckLegality = _deckFormatConstraint != null
+        ? _deckLegalityByCardId[card.id]
+        : null;
     final statusBadge = _statusBadgeLabel(card, l10n);
     final hasStatusBadge = statusBadge != null;
+    final cornerStatusLabel = isMissing
+        ? l10n.missingLabel
+        : (deckLegality != null
+              ? (deckLegality ? l10n.legalLabel : l10n.notLegalLabel)
+              : null);
+    final cornerStatusColor = isMissing
+        ? const Color(0xFFE9C46A)
+        : (deckLegality ?? true)
+        ? const Color(0xFFE9C46A)
+        : const Color(0xFFD06D5F);
+    final cornerStatusDx = deckLegality == null
+        ? 0.0
+        : (deckLegality ? -6.0 : -2.0);
     final canSelectCards = widget.selectionEnabled;
+    final isMagicLayout = !_isPokemonSearch;
     final setLabel = _setLabelForSearch(card);
     final collectorNumber = card.collectorNumber.trim();
     final hasRarity = card.rarity.trim().isNotEmpty;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
     final showRightActions = showAdd || canSelectCards || hasStatusBadge;
     final quickAddButtonKey = GlobalKey();
+    final priceRightInset = isMagicLayout
+        ? (showRightActions ? 132.0 : 16.0)
+        : (showRightActions ? 64.0 : 16.0);
     return Stack(
       clipBehavior: Clip.none,
       children: [
         if (_showPrices)
           Positioned(
             left: 16,
-            right: showRightActions ? 64 : 16,
+            right: priceRightInset,
             bottom: -6,
             child: Opacity(
               opacity: isMissing ? 0.6 : 1.0,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(14, 9, 14, 3),
+                padding: EdgeInsets.fromLTRB(
+                  14,
+                  isMagicLayout ? 11 : 9,
+                  14,
+                  isMagicLayout ? 2 : 3,
+                ),
                 decoration: _priceBadgeDecorationForSearch(card),
                 child: Align(
                   alignment: Alignment.bottomLeft,
@@ -225,53 +250,90 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
               child: SizedBox(
                 height: 80,
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: isMagicLayout
+                      ? CrossAxisAlignment.center
+                      : CrossAxisAlignment.stretch,
                   children: [
                     Center(child: _buildSetIcon(card.setCode, size: 60)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: isMagicLayout
+                            ? MainAxisAlignment.center
+                            : MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            card.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleMedium,
+                          Builder(
+                            builder: (context) {
+                              final title = Text(
+                                card.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: isMagicLayout
+                                    ? Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium?.copyWith(
+                                        fontSize: 25,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.05,
+                                      )
+                                    : Theme.of(context).textTheme.titleMedium,
+                              );
+                              if (!isMagicLayout || !hasStatusBadge) {
+                                return title;
+                              }
+                              if (cornerStatusLabel != null) {
+                                return title;
+                              }
+                              return Row(
+                                children: [
+                                  Expanded(child: title),
+                                  const SizedBox(width: 6),
+                                  isMissing
+                                      ? _buildMissingCardChip(
+                                          context,
+                                          statusBadge,
+                                        )
+                                      : _buildBadge(
+                                          statusBadge,
+                                          inverted: true,
+                                        ),
+                                ],
+                              );
+                            },
                           ),
-                          const SizedBox(height: 4),
+                          SizedBox(height: isMagicLayout ? 7 : 4),
                           Builder(
                             builder: (context) {
                               final leftLabel = setLabel.isNotEmpty
                                   ? setLabel
                                   : collectorNumber;
+                              final metaStyle = isMagicLayout
+                                  ? Theme.of(
+                                      context,
+                                    ).textTheme.bodyMedium?.copyWith(
+                                      color: const Color(0xFFBFAE95),
+                                      fontSize: 21,
+                                      fontWeight: FontWeight.w400,
+                                      height: 1.0,
+                                    )
+                                  : Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall?.copyWith(
+                                      color: const Color(0xFFBFAE95),
+                                    );
                               return Row(
                                 children: [
                                   Expanded(
                                     child: Text(
                                       leftLabel,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFFBFAE95),
-                                          ),
+                                      style: metaStyle,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                                   if (collectorNumber.isNotEmpty &&
-                                      setLabel.isNotEmpty) ...[
-                                    Text(
-                                      collectorNumber,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: const Color(0xFFBFAE95),
-                                          ),
-                                    ),
-                                  ],
+                                      setLabel.isNotEmpty)
+                                    Text(collectorNumber, style: metaStyle),
                                   if (hasRarity) ...[
                                     const SizedBox(width: 6),
                                     _raritySquare(card.rarity),
@@ -290,10 +352,17 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (hasStatusBadge) ...[
+                            if (!isMagicLayout &&
+                                hasStatusBadge &&
+                                !isMissing) ...[
                               FittedBox(
                                 fit: BoxFit.scaleDown,
-                                child: _buildBadge(statusBadge, inverted: true),
+                                child: isMissing
+                                    ? _buildMissingCardChip(
+                                        context,
+                                        statusBadge,
+                                      )
+                                    : _buildBadge(statusBadge, inverted: true),
                               ),
                               const SizedBox(height: 4),
                             ],
@@ -333,6 +402,25 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
             ),
           ),
         ),
+        if (cornerStatusLabel != null && !_isPokemonSearch)
+          Positioned(
+            right: deckLegality != null ? 0 : 16,
+            bottom: 24,
+            child: SizedBox(
+              width: deckLegality != null ? 64 : null,
+              child: Transform.translate(
+                offset: Offset(cornerStatusDx, 0),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: _buildCardCornerTextLabel(
+                    context,
+                    cornerStatusLabel,
+                    color: cornerStatusColor,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -451,10 +539,9 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                             Positioned(
                               bottom: 8,
                               right: 8,
-                              child: _buildBadge(
-                                statusBadge,
-                                inverted: true,
-                              ),
+                              child: isMissing
+                                  ? _buildMissingCardChip(context, statusBadge)
+                                  : _buildBadge(statusBadge, inverted: true),
                             ),
                         ],
                       ),
@@ -502,8 +589,8 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                 ],
               ),
             ),
-            ),
           ),
+        ),
       ],
     );
   }

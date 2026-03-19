@@ -272,50 +272,54 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       backgroundColor: Colors.transparent,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                l10n.addCard,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const Icon(Icons.search),
-                title: Text(l10n.addByNameTitle),
-                subtitle: Text(l10n.addByNameSubtitle),
-                onTap: () =>
-                    Navigator.of(context).pop(_AddCardEntryMode.byName),
-              ),
-              ListTile(
-                leading: const Icon(Icons.document_scanner_outlined),
-                title: Text(l10n.addByScanTitle),
-                subtitle: Text(l10n.addByScanSubtitle),
-                onTap: () =>
-                    Navigator.of(context).pop(_AddCardEntryMode.byScan),
-              ),
-              ListTile(
-                leading: const Icon(Icons.tune_rounded),
-                title: Text(l10n.addMultipleCardsByFilterTitle),
-                subtitle: Text(l10n.addMultipleCardsByFilterSubtitle),
-                onTap: () =>
-                    Navigator.of(context).pop(_AddCardEntryMode.byFilter),
-              ),
-            ],
+        return SafeArea(
+          top: false,
+          bottom: false,
+          child: Container(
+            margin: _bottomSheetMenuMargin(context),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.addCard,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.search),
+                  title: Text(l10n.addByNameTitle),
+                  subtitle: Text(l10n.addByNameSubtitle),
+                  onTap: () =>
+                      Navigator.of(context).pop(_AddCardEntryMode.byName),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.document_scanner_outlined),
+                  title: Text(l10n.addByScanTitle),
+                  subtitle: Text(l10n.addByScanSubtitle),
+                  onTap: () =>
+                      Navigator.of(context).pop(_AddCardEntryMode.byScan),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.tune_rounded),
+                  title: Text(l10n.addMultipleCardsByFilterTitle),
+                  subtitle: Text(l10n.addMultipleCardsByFilterSubtitle),
+                  onTap: () =>
+                      Navigator.of(context).pop(_AddCardEntryMode.byFilter),
+                ),
+              ],
+            ),
           ),
         );
       },

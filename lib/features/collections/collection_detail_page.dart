@@ -86,6 +86,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   final Set<String> _quickAddAnimating = {};
   final Set<String> _quickRemoveAnimating = {};
   final Set<String> _priceRefreshQueued = {};
+  Map<String, bool> _deckLegalityByCardId = const {};
   Set<String>? _cachedKnownSetCodesForScan;
   String _priceCurrency = 'eur';
   bool _showPrices = true;
@@ -114,6 +115,13 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool get _isPokemonDeck => widget.isDeckCollection && _isPokemonActive;
   List<String> get _activeDeckTypeOrder =>
       _isPokemonDeck ? _pokemonDeckTypeOrder : _mtgDeckTypeOrder;
+  String? get _deckFormatConstraint {
+    final format = widget.filter?.format?.trim().toLowerCase();
+    if (format == null || format.isEmpty) {
+      return null;
+    }
+    return format;
+  }
 
   @override
   void initState() {
@@ -228,6 +236,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _localizedSetNamesByCode = {};
       _selectionMode = false;
       _selectedCardIds.clear();
+      _deckLegalityByCardId = const {};
     });
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
@@ -582,6 +591,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _loadingMore = false;
         _loading = false;
       });
+      await _refreshDeckLegalityForLoadedCards();
       _refreshListPrices(cards);
       _maybePrefetchIfShort();
     } catch (_) {
@@ -595,6 +605,34 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _hasMore = false;
       });
     }
+  }
+
+  Future<void> _refreshDeckLegalityForLoadedCards() async {
+    final format = _deckFormatConstraint;
+    if (!widget.isDeckCollection || _isPokemonDeck || format == null) {
+      return;
+    }
+    final cardIds = {
+      ..._cards.map((entry) => entry.cardId.trim()),
+      ..._sideboardCards.map((entry) => entry.cardId.trim()),
+    }.where((id) => id.isNotEmpty).toList(growable: false);
+    if (cardIds.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _deckLegalityByCardId = const {};
+      });
+      return;
+    }
+    final legalities = await ScryfallDatabase.instance
+        .fetchCardLegalityForFormat(cardIds, format: format);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _deckLegalityByCardId = legalities;
+    });
   }
 
   void _maybePrefetchIfShort() {
@@ -1274,6 +1312,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final visibleCards = _sortedCards();
+    final listBottomPadding = 112.0 + MediaQuery.of(context).padding.bottom;
     return Scaffold(
       backgroundColor: Colors.transparent,
       appBar: AppBar(
@@ -1389,6 +1428,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           const _AppBackground(),
           if (_loading)
             const Center(child: CircularProgressIndicator())
+          else if (widget.isDeckCollection && visibleCards.isEmpty)
+            _viewMode == CollectionViewMode.list
+                ? _buildDeckTypeListView(visibleCards, l10n)
+                : _buildDeckTypeGalleryView(visibleCards, l10n)
           else if (visibleCards.isEmpty)
             Center(
               child: Container(
@@ -1500,7 +1543,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                       ? _buildDeckTypeListView(visibleCards, l10n)
                       : ListView.separated(
                           controller: _scrollController,
-                          padding: const EdgeInsets.all(20),
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            20,
+                            20,
+                            listBottomPadding,
+                          ),
                           itemCount:
                               visibleCards.length + (_loadingMore ? 1 : 0),
                           separatorBuilder: (_, _) =>

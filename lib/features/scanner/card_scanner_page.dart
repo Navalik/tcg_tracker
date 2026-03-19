@@ -306,9 +306,11 @@ class _PickPrintingSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxHeight = MediaQuery.of(context).size.height * 0.82;
+    final media = MediaQuery.of(context);
+    final sheetMargin = _bottomSheetMenuMargin(context);
+    final maxHeight = media.size.height - sheetMargin.top - sheetMargin.bottom;
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: sheetMargin,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
@@ -323,6 +325,7 @@ class _PickPrintingSheet extends StatelessWidget {
       ),
       child: SafeArea(
         top: false,
+        bottom: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -583,7 +586,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          margin: const EdgeInsets.all(16),
+          margin: _bottomSheetMenuMargin(context),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
@@ -592,6 +595,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
           ),
           child: SafeArea(
             top: false,
+            bottom: false,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -762,7 +766,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
                 })
                 .toList(growable: false);
             return Container(
-              margin: const EdgeInsets.all(16),
+              margin: _bottomSheetMenuMargin(context),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
@@ -771,6 +775,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
               ),
               child: SafeArea(
                 top: false,
+                bottom: false,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [

@@ -143,6 +143,26 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         _isMissingStyleCollection &&
         !_isWishlistCollection &&
         entry.quantity == 0;
+    final deckLegality = widget.isDeckCollection
+        ? _deckLegalityByCardId[entry.cardId]
+        : null;
+    final cornerStatusLabel = isMissing
+        ? l10n.missingLabel
+        : (widget.isDeckCollection && deckLegality != null
+              ? (deckLegality ? l10n.legalLabel : l10n.notLegalLabel)
+              : null);
+    final cornerStatusColor = isMissing
+        ? const Color(0xFFE9C46A)
+        : (deckLegality ?? true)
+        ? const Color(0xFFE9C46A)
+        : const Color(0xFFD06D5F);
+    final cornerStatusDx = deckLegality == null
+        ? 0.0
+        : (deckLegality ? -6.0 : -2.0);
+    final showQuickAddButton =
+        widget.isDeckCollection ||
+        _isMissingStyleCollection ||
+        widget.isAllCards;
     final hasCornerQuantity = entry.quantity > 1;
     return GestureDetector(
       onTap: () {
@@ -169,9 +189,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
           if (_showPrices)
             Positioned(
               left: 16,
-              right: (_isMissingStyleCollection || widget.isAllCards)
-                  ? 132
-                  : 122,
+              right: showQuickAddButton ? 132 : 122,
               bottom: -6,
               child: Opacity(
                 opacity: isMissing ? 0.6 : 1.0,
@@ -219,10 +237,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                     Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
-                          right:
-                              (_isMissingStyleCollection || widget.isAllCards)
-                              ? 56
-                              : 0,
+                          right: showQuickAddButton ? 56 : 0,
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,15 +260,6 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                                         ),
                                   ),
                                 ),
-                                if ((_isMissingStyleCollection ||
-                                        widget.isAllCards) &&
-                                    isMissing) ...[
-                                  const SizedBox(width: 6),
-                                  _buildBadge(
-                                    l10n.missingLabel,
-                                    inverted: true,
-                                  ),
-                                ],
                               ],
                             ),
                             const SizedBox(height: 7),
@@ -305,7 +311,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
               ),
             ),
           ),
-          if (_isMissingStyleCollection || widget.isAllCards)
+          if (showQuickAddButton)
             Positioned(
               right: 12,
               top: 10,
@@ -351,6 +357,25 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                             ),
                     );
                   },
+                ),
+              ),
+            ),
+          if (cornerStatusLabel != null)
+            Positioned(
+              right: deckLegality != null ? 0 : 16,
+              bottom: 24,
+              child: SizedBox(
+                width: deckLegality != null ? 64 : null,
+                child: Transform.translate(
+                  offset: Offset(cornerStatusDx, 0),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: _buildCardCornerTextLabel(
+                      context,
+                      cornerStatusLabel,
+                      color: cornerStatusColor,
+                    ),
+                  ),
                 ),
               ),
             ),

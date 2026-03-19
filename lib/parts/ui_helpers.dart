@@ -56,7 +56,9 @@ String _normalizeCardImageUrlForDisplay(String? rawImageUri) {
         lowerPath.endsWith('.jpeg') ||
         lowerPath.endsWith('.webp');
     if (!hasKnownImageExtension) {
-      final nextPath = path.endsWith('/') ? '${path}low.webp' : '$path/low.webp';
+      final nextPath = path.endsWith('/')
+          ? '${path}high.webp'
+          : '$path/high.webp';
       return uri.replace(path: nextPath).toString();
     }
     return imageUrl;
@@ -175,10 +177,7 @@ Widget _missingCardArtPlaceholder(
   return Container(
     decoration: BoxDecoration(
       gradient: const LinearGradient(
-        colors: [
-          Color(0xFF241C15),
-          Color(0xFF1A1510),
-        ],
+        colors: [Color(0xFF241C15), Color(0xFF1A1510)],
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
       ),
@@ -267,6 +266,45 @@ Widget _buildBadge(String label, {bool inverted = false}) {
   );
 }
 
+Widget _buildMissingCardChip(BuildContext context, String label) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFFE9C46A),
+      borderRadius: BorderRadius.circular(9999),
+      border: Border.all(color: const Color(0xFFE9C46A)),
+    ),
+    child: Text(
+      label,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        fontSize: 10,
+        fontWeight: FontWeight.w700,
+        color: const Color(0xFF2A221B),
+      ),
+    ),
+  );
+}
+
+Widget _buildCardCornerTextLabel(
+  BuildContext context,
+  String label, {
+  Color color = const Color(0xFFE9C46A),
+}) {
+  return Text(
+    label,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+      fontSize: 13.5,
+      color: color,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0.2,
+    ),
+  );
+}
+
 Widget _statusMiniBadge({IconData? icon, String? label, double iconSize = 12}) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -286,6 +324,11 @@ Widget _statusMiniBadge({IconData? icon, String? label, double iconSize = 12}) {
             ),
           ),
   );
+}
+
+EdgeInsets _bottomSheetMenuMargin(BuildContext context) {
+  final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+  return EdgeInsets.fromLTRB(16, 16, 16, 24 + bottomInset);
 }
 
 String _formatRarity(BuildContext context, String raw) {
@@ -322,14 +365,8 @@ String _formatRarity(BuildContext context, String raw) {
       en: 'Special illustration rare',
       it: 'Rara illustrazione speciale',
     ),
-    'illustration rare': (
-      en: 'Illustration rare',
-      it: 'Rara illustrazione',
-    ),
-    'rara illustrazione': (
-      en: 'Illustration rare',
-      it: 'Rara illustrazione',
-    ),
+    'illustration rare': (en: 'Illustration rare', it: 'Rara illustrazione'),
+    'rara illustrazione': (en: 'Illustration rare', it: 'Rara illustrazione'),
     'ace spec rare': (en: 'Ace spec rare', it: 'Rara asso tattico'),
     'rara asso tattico': (en: 'Ace spec rare', it: 'Rara asso tattico'),
     'promo': (en: 'Promo', it: 'Promo'),

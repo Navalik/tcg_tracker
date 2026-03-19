@@ -93,9 +93,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   int? _filterTotalCount;
   Map<String, String>? _availableSetCodesCache;
   Map<String, int> _ownedQuantitiesByCardId = const {};
+  Map<String, int> _missingCollectionQuantitiesByCardId = const {};
   bool _galleryView = false;
   bool _artworkSearchEnabled = false;
   bool _ownedOnlyFilter = false;
+  bool _hideNotLegalFilter = false;
   bool _onlineArtworkLoading = false;
   bool _addingFromPreview = false;
   bool _limitedPrintCoverage = false;
@@ -354,6 +356,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
       final ownershipCollectionId = widget.ownershipCollectionId;
       Map<String, int> localOwnedQuantities = const {};
+      Map<String, int> localMissingQuantities = const {};
+      Map<String, bool> localDeckLegality = const {};
       if (ownershipCollectionId != null && filteredLocal.isNotEmpty) {
         localOwnedQuantities = await ScryfallDatabase.instance
             .fetchCollectionQuantities(
@@ -366,12 +370,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               .toList(growable: false);
         }
       }
+      if (filteredLocal.isNotEmpty) {
+        localMissingQuantities = await _fetchMissingCollectionQuantities(
+          filteredLocal,
+        );
+        filteredLocal = _excludeAlreadyMissingCards(
+          filteredLocal,
+          localMissingQuantities,
+        );
+      }
+      final deckFormat = _deckFormatConstraint;
+      if (deckFormat != null && filteredLocal.isNotEmpty) {
+        localDeckLegality = await ScryfallDatabase.instance
+            .fetchCardLegalityForFormat(
+              filteredLocal.map((card) => card.id).toList(growable: false),
+              format: deckFormat,
+            );
+        if (_hideNotLegalFilter) {
+          filteredLocal = filteredLocal
+              .where((card) => localDeckLegality[card.id] ?? false)
+              .toList(growable: false);
+        }
+      }
       if (!mounted || query != _query) {
         return;
       }
       setState(() {
         _results = filteredLocal;
         _ownedQuantitiesByCardId = localOwnedQuantities;
+        _missingCollectionQuantitiesByCardId = localMissingQuantities;
+        _deckLegalityByCardId = localDeckLegality;
         _loading = false;
         _loadingMore = false;
         _onlineArtworkLoading = true;
@@ -416,6 +444,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     }
     final rawPageCount = page.length;
     Map<String, int> ownedQuantities = const {};
+    Map<String, int> missingQuantities = const {};
     Map<String, bool> deckLegality = const {};
     final ownershipCollectionId = widget.ownershipCollectionId;
     if (ownershipCollectionId != null && page.isNotEmpty) {
@@ -430,12 +459,21 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             .toList(growable: false);
       }
     }
+    if (page.isNotEmpty) {
+      missingQuantities = await _fetchMissingCollectionQuantities(page);
+      page = _excludeAlreadyMissingCards(page, missingQuantities);
+    }
     final deckFormat = _deckFormatConstraint;
     if (deckFormat != null && page.isNotEmpty) {
       deckLegality = await ScryfallDatabase.instance.fetchCardLegalityForFormat(
         page.map((card) => card.id).toList(growable: false),
         format: deckFormat,
       );
+      if (_hideNotLegalFilter) {
+        page = page
+            .where((card) => deckLegality[card.id] ?? false)
+            .toList(growable: false);
+      }
     }
     if (!mounted) {
       return;
@@ -444,12 +482,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (replace) {
         _results = page;
         _ownedQuantitiesByCardId = ownedQuantities;
+        _missingCollectionQuantitiesByCardId = missingQuantities;
         _deckLegalityByCardId = deckLegality;
       } else {
         _results = [..._results, ...page];
         _ownedQuantitiesByCardId = {
           ..._ownedQuantitiesByCardId,
           ...ownedQuantities,
+        };
+        _missingCollectionQuantitiesByCardId = {
+          ..._missingCollectionQuantitiesByCardId,
+          ...missingQuantities,
         };
         _deckLegalityByCardId = {..._deckLegalityByCardId, ...deckLegality};
       }
@@ -874,10 +917,52 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<CardSearchResult> _filteredResults() {
+    final results = _results
+        .where(
+          (card) => !_missingCollectionQuantitiesByCardId.containsKey(card.id),
+        )
+        .toList(growable: false);
     if (_hasActiveAdvancedFilters()) {
-      return _results;
+      return results;
     }
-    return _results;
+    return results;
+  }
+
+  Future<Map<String, int>> _fetchMissingCollectionQuantities(
+    List<CardSearchResult> cards,
+  ) async {
+    final missingCollectionId = widget.addMissingToCollectionId;
+    if (missingCollectionId == null || cards.isEmpty) {
+      return const {};
+    }
+    return ScryfallDatabase.instance.fetchCollectionQuantities(
+      missingCollectionId,
+      cards.map((card) => card.id).toList(growable: false),
+    );
+  }
+
+  List<CardSearchResult> _excludeAlreadyMissingCards(
+    List<CardSearchResult> cards,
+    Map<String, int> missingQuantities,
+  ) {
+    if (missingQuantities.isEmpty) {
+      return cards;
+    }
+    return cards
+        .where((card) => !missingQuantities.containsKey(card.id))
+        .toList(growable: false);
+  }
+
+  void _hideCardFromWishlistSearch(String cardId) {
+    setState(() {
+      _results = _results
+          .where((card) => card.id != cardId)
+          .toList(growable: false);
+      _missingCollectionQuantitiesByCardId = {
+        ..._missingCollectionQuantitiesByCardId,
+        cardId: 1,
+      };
+    });
   }
 
   List<CardSearchResult> _applyPrefixWordFilter(
@@ -1457,6 +1542,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     final mediaQuery = MediaQuery.of(context);
     final l10n = AppLocalizations.of(context)!;
     final sheetHeight = mediaQuery.size.height * 0.78;
+    final listBottomPadding = widget.showFilterButton
+        ? 112.0 + mediaQuery.padding.bottom
+        : 80.0;
     final visibleResults = _filteredResults();
     final filtersActive = _hasActiveAdvancedFilters();
     final canSelectCards = widget.selectionEnabled;
@@ -1549,43 +1637,63 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                     if (!canSelectCards)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-                        child: Wrap(
-                          spacing: 10,
-                          runSpacing: 8,
-                          children: [
-                            if (!_isPokemonSearch)
-                              FilterChip(
-                                selected: _artworkSearchEnabled,
-                                onSelected: (value) async {
-                                  setState(() {
-                                    _artworkSearchEnabled = value;
-                                  });
-                                  if (_query.trim().isNotEmpty) {
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              if (!_isPokemonSearch)
+                                FilterChip(
+                                  selected: _artworkSearchEnabled,
+                                  onSelected: (value) async {
+                                    setState(() {
+                                      _artworkSearchEnabled = value;
+                                    });
+                                    if (_query.trim().isNotEmpty) {
+                                      await _runSearch(forceRefresh: true);
+                                    }
+                                  },
+                                  avatar: const Icon(
+                                    Icons.star_outline_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(l10n.allArtworks),
+                                ),
+                              if (!_isPokemonSearch) const SizedBox(width: 10),
+                              if (widget.ownershipCollectionId != null)
+                                FilterChip(
+                                  selected: _ownedOnlyFilter,
+                                  onSelected: (value) async {
+                                    setState(() {
+                                      _ownedOnlyFilter = value;
+                                    });
                                     await _runSearch(forceRefresh: true);
-                                  }
-                                },
-                                avatar: const Icon(
-                                  Icons.star_outline_rounded,
-                                  size: 18,
+                                  },
+                                  avatar: const Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 18,
+                                  ),
+                                  label: Text(l10n.ownedLabel),
                                 ),
-                                label: Text(l10n.allArtworks),
-                              ),
-                            if (widget.ownershipCollectionId != null)
-                              FilterChip(
-                                selected: _ownedOnlyFilter,
-                                onSelected: (value) async {
-                                  setState(() {
-                                    _ownedOnlyFilter = value;
-                                  });
-                                  await _runSearch(forceRefresh: true);
-                                },
-                                avatar: const Icon(
-                                  Icons.inventory_2_outlined,
-                                  size: 18,
+                              if (widget.ownershipCollectionId != null &&
+                                  _deckFormatConstraint != null)
+                                const SizedBox(width: 10),
+                              if (_deckFormatConstraint != null)
+                                FilterChip(
+                                  selected: _hideNotLegalFilter,
+                                  onSelected: (value) async {
+                                    setState(() {
+                                      _hideNotLegalFilter = value;
+                                    });
+                                    await _runSearch(forceRefresh: true);
+                                  },
+                                  avatar: const Icon(
+                                    Icons.gavel_rounded,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Legal'),
                                 ),
-                                label: Text(l10n.ownedLabel),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     if (_onlineArtworkLoading)
@@ -1781,7 +1889,12 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                             )
                           : ListView.separated(
                               shrinkWrap: true,
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 80),
+                              padding: EdgeInsets.fromLTRB(
+                                20,
+                                0,
+                                20,
+                                listBottomPadding,
+                              ),
                               itemCount:
                                   visibleResults.length +
                                   ((_loadingMore ||

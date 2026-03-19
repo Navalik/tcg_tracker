@@ -1,16 +1,11 @@
-# BinderVault – TCG Collection
+# BinderVault
 
-A new Flutter project.
+BinderVault is a Flutter app for managing Trading Card Game collections.
 
-## Getting Started
+## Repository Layout
 
-This project is a starting point for a Flutter application.
+- `lib/`, `android/`, `ios/`, `macos/`, `linux/`, `windows/`: main Flutter application.
+- `web/`: Flutter Web host shell for the future web app build.
+- `bindervault-site/`: separate static website currently used for the public landing page and privacy policy at `bidervault.app`.
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+`web/` and `bindervault-site/` are intentionally different things and should stay separate until the web app work starts.
