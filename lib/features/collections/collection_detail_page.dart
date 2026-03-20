@@ -629,7 +629,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         'name=${widget.name} '
         'isSet=${widget.isSetCollection} '
         'isPokemon=$_isPokemonActive '
-        'search=${_searchQuery ?? ""} '
+        'search=$_searchQuery '
         'offset=$_loadedOffset '
         'owned=$_showOwned missing=$_showMissing '
         'filter=${_effectiveFilter()?.toJson()} '

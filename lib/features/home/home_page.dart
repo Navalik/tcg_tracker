@@ -3368,6 +3368,31 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
 
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    List<CardSearchResult> previewCards = const [];
+    try {
+      previewCards = await _collectCardsForSmartPreview(filter);
+    } finally {
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+    }
+    if (!context.mounted) {
+      return;
+    }
+    final confirmed = await _confirmSmartCollectionPreview(
+      context,
+      name: name,
+      cards: previewCards,
+    );
+    if (!confirmed || !context.mounted) {
+      return;
+    }
+
     int id;
     try {
       id = await ScryfallDatabase.instance.addCollection(
@@ -3400,6 +3425,228 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
     });
     await _loadCollections();
+  }
+
+  Future<List<CardSearchResult>> _collectCardsForSmartPreview(
+    CollectionFilter filter, {
+    int pageSize = 400,
+  }) async {
+    final cardsByPrintingKey = <String, CardSearchResult>{};
+    var offset = 0;
+    while (true) {
+      final entries = await ScryfallDatabase.instance.fetchFilteredCollectionCards(
+        filter,
+        limit: pageSize,
+        offset: offset,
+      );
+      if (entries.isEmpty) {
+        break;
+      }
+      for (final entry in entries) {
+        final card = CardSearchResult(
+          id: entry.cardId,
+          printingId: entry.printingId,
+          name: entry.name,
+          setCode: entry.setCode,
+          setName: entry.setName,
+          collectorNumber: entry.collectorNumber,
+          setTotal: entry.setTotal,
+          rarity: entry.rarity,
+          typeLine: entry.typeLine,
+          colors: entry.colors,
+          colorIdentity: entry.colorIdentity,
+          priceUsd: entry.priceUsd,
+          priceUsdFoil: entry.priceUsdFoil,
+          priceEur: entry.priceEur,
+          priceEurFoil: entry.priceEurFoil,
+          imageUri: entry.imageUri,
+        );
+        final key = card.printingId ?? '${card.id}::legacy';
+        cardsByPrintingKey[key] = card;
+      }
+      if (entries.length < pageSize) {
+        break;
+      }
+      offset += entries.length;
+    }
+    return cardsByPrintingKey.values.toList(growable: false);
+  }
+
+  Future<void> _showSmartPreviewImage(
+    BuildContext context,
+    CardSearchResult card,
+  ) async {
+    final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
+    if (imageUrl.isEmpty) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          backgroundColor: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton.filledTonal(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      color: theme.colorScheme.surface,
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => SizedBox(
+                          width: 220,
+                          height: 300,
+                          child: Icon(
+                            Icons.style,
+                            size: 48,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool> _confirmSmartCollectionPreview(
+    BuildContext context, {
+    required String name,
+    required List<CardSearchResult> cards,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        final theme = Theme.of(dialogContext);
+        final isItalian = Localizations.localeOf(dialogContext).languageCode == 'it';
+        final summary = isItalian
+            ? 'Carte nel filtro: ${cards.length}'
+            : 'Cards in filter: ${cards.length}';
+        final previewMessage = isItalian
+            ? 'Anteprima delle carte attualmente incluse dal filtro della smart collection.'
+            : 'Preview of the cards currently included by the smart collection filter.';
+        final emptyMessage = isItalian
+            ? 'Al momento nessuna carta corrisponde al filtro. La smart collection verra comunque creata.'
+            : 'No cards currently match this filter. The smart collection will still be created.';
+        return AlertDialog(
+          title: Text(name),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(summary),
+                const SizedBox(height: 12),
+                Text(
+                  cards.isEmpty ? emptyMessage : previewMessage,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                if (cards.isNotEmpty)
+                  Flexible(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Scrollbar(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: cards.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: theme.dividerColor.withValues(alpha: 0.35),
+                          ),
+                          itemBuilder: (itemContext, index) {
+                            final card = cards[index];
+                            final imageUrl = _normalizeCardImageUrlForDisplay(
+                              card.imageUri,
+                            );
+                            return ListTile(
+                              dense: true,
+                              leading: GestureDetector(
+                                onTap: () async {
+                                  await _showSmartPreviewImage(
+                                    dialogContext,
+                                    card,
+                                  );
+                                },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    width: 36,
+                                    height: 50,
+                                    color: theme.colorScheme.surfaceContainerHighest,
+                                    child: Image.network(
+                                      imageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => Icon(
+                                        Icons.style,
+                                        size: 18,
+                                        color: theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              title: Text(
+                                card.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                '${card.setName} - ${card.collectorProgressLabel}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(l10n.create),
+            ),
+          ],
+        );
+      },
+    );
+    return result == true;
   }
 
   Future<void> _addSetCollection(BuildContext context) async {

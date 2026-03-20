@@ -171,6 +171,266 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     return cardsByPrintingKey.values.toList(growable: false);
   }
 
+  String _filterSelectionSummary(
+    BuildContext context,
+    int selectedCount,
+    int totalCount,
+  ) {
+    final isItalian = Localizations.localeOf(context).languageCode == 'it';
+    if (isItalian) {
+      return 'Selezionate: $selectedCount / Totali: $totalCount';
+    }
+    return 'Selected: $selectedCount / Total: $totalCount';
+  }
+
+  Future<void> _showFilterCardImagePreview(
+    BuildContext context,
+    CardSearchResult card,
+  ) async {
+    final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
+    if (imageUrl.isEmpty) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          backgroundColor: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: IconButton.filledTonal(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: InteractiveViewer(
+                  minScale: 1,
+                  maxScale: 4,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      color: theme.colorScheme.surface,
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => SizedBox(
+                          width: 220,
+                          height: 300,
+                          child: Icon(
+                            Icons.style,
+                            size: 48,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<List<CardSearchResult>?> _confirmCardsForFilterAdd(
+    BuildContext context,
+    List<CardSearchResult> cards,
+  ) async {
+    final result = await showDialog<List<CardSearchResult>>(
+      context: context,
+      builder: (dialogContext) {
+        final l10n = AppLocalizations.of(dialogContext)!;
+        final theme = Theme.of(dialogContext);
+        final selectedKeys = <String>{
+          for (final card in cards) card.printingId ?? card.id,
+        };
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(l10n.addAllResultsTitle),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.addAllResultsBody(cards.length)),
+                const SizedBox(height: 12),
+                Text(
+                  _filterSelectionSummary(
+                    dialogContext,
+                    selectedKeys.length,
+                    cards.length,
+                  ),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: selectedKeys.length == cards.length
+                          ? null
+                          : () {
+                              setDialogState(() {
+                                selectedKeys
+                                  ..clear()
+                                  ..addAll(
+                                    cards.map((card) => card.printingId ?? card.id),
+                                  );
+                              });
+                            },
+                      child: Text(
+                        Localizations.localeOf(dialogContext).languageCode == 'it'
+                            ? 'Seleziona tutto'
+                            : 'Select all',
+                      ),
+                    ),
+                    OutlinedButton(
+                      onPressed: selectedKeys.isEmpty
+                          ? null
+                          : () {
+                              setDialogState(() {
+                                selectedKeys.clear();
+                              });
+                            },
+                      child: Text(
+                        Localizations.localeOf(dialogContext).languageCode == 'it'
+                            ? 'Deseleziona tutto'
+                            : 'Clear all',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(
+                        color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Scrollbar(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: cards.length,
+                        separatorBuilder: (_, _) => Divider(
+                          height: 1,
+                          color: theme.dividerColor.withValues(alpha: 0.35),
+                        ),
+                        itemBuilder: (itemContext, index) {
+                          final card = cards[index];
+                          final key = card.printingId ?? card.id;
+                          final isSelected = selectedKeys.contains(key);
+                          final imageUrl = _normalizeCardImageUrlForDisplay(
+                            card.imageUri,
+                          );
+                          return ListTile(
+                            dense: true,
+                            onTap: () {
+                              setDialogState(() {
+                                if (isSelected) {
+                                  selectedKeys.remove(key);
+                                } else {
+                                  selectedKeys.add(key);
+                                }
+                              });
+                            },
+                            leading: GestureDetector(
+                              onTap: () async {
+                                await _showFilterCardImagePreview(
+                                  dialogContext,
+                                  card,
+                                );
+                              },
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  width: 36,
+                                  height: 50,
+                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  child: Image.network(
+                                    imageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, _, _) => Icon(
+                                      Icons.style,
+                                      size: 18,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              card.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              '${card.setName} • ${card.collectorProgressLabel}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: Checkbox(
+                              value: isSelected,
+                              onChanged: (_) {
+                                setDialogState(() {
+                                  if (isSelected) {
+                                    selectedKeys.remove(key);
+                                  } else {
+                                    selectedKeys.add(key);
+                                  }
+                                });
+                              },
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(null),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: selectedKeys.isEmpty
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(
+                        cards
+                            .where(
+                              (card) => selectedKeys.contains(
+                                card.printingId ?? card.id,
+                              ),
+                            )
+                            .toList(growable: false),
+                      ),
+              child: Text(l10n.addLabel),
+            ),
+          ],
+        ));
+      },
+    );
+    return result;
+  }
+
   Future<void> _addCardsByFilter(
     BuildContext context,
     int ownedCollectionId,
@@ -207,6 +467,14 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       Navigator.of(context, rootNavigator: true).pop();
       if (cards.isEmpty) {
         showAppSnackBar(context, AppLocalizations.of(context)!.noResultsFound);
+        return;
+      }
+      final confirmedCards = await _confirmCardsForFilterAdd(context, cards);
+      if (!context.mounted || confirmedCards == null) {
+        return;
+      }
+      cards = confirmedCards;
+      if (cards.isEmpty) {
         return;
       }
       if (_isWishlistCollection) {
