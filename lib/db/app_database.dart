@@ -1990,13 +1990,10 @@ class ScryfallDatabase {
       resolvedLimit = -1;
     }
     final variables = <Variable>[
-      Variable.withInt(collectionId),
       Variable.withInt(allCardsId),
+      Variable.withInt(collectionId),
     ];
-    final whereClauses = <String>[
-      'membership.collection_id = ?',
-      'COALESCE(inventory.quantity, 0) > 0',
-    ];
+    final whereClauses = <String>['membership.collection_id = ?'];
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
       whereClauses.add(
@@ -2012,7 +2009,7 @@ class ScryfallDatabase {
     final sql = StringBuffer('''
       SELECT
         membership.card_id AS card_id,
-        inventory.quantity AS quantity,
+        COALESCE(inventory.quantity, 0) AS quantity,
         COALESCE(inventory.foil, 0) AS foil,
         COALESCE(inventory.alt_art, 0) AS alt_art,
         cards.name AS name,
@@ -2237,13 +2234,10 @@ class ScryfallDatabase {
     final db = await open();
     final allCardsId = await ensureAllCardsCollectionId();
     final variables = <Variable>[
-      Variable.withInt(collectionId),
       Variable.withInt(allCardsId),
+      Variable.withInt(collectionId),
     ];
-    final whereClauses = <String>[
-      'membership.collection_id = ?',
-      'COALESCE(inventory.quantity, 0) > 0',
-    ];
+    final whereClauses = <String>['membership.collection_id = ?'];
     final query = searchQuery?.trim();
     if (query != null && query.isNotEmpty) {
       whereClauses.add(

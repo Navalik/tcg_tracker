@@ -614,23 +614,11 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
           printingId: card.printingId,
         );
       } else if (customMembershipCollectionId != null) {
-        final ownedQty = await InventoryService.instance.currentInventoryQty(
+        await InventoryService.instance.addToInventory(
           card.id,
           printingId: card.printingId,
+          deltaQty: 1,
         );
-        if (ownedQty <= 0) {
-          if (mounted) {
-            showAppSnackBar(
-              context,
-              Localizations.localeOf(
-                    context,
-                  ).languageCode.toLowerCase().startsWith('it')
-                  ? 'Aggiungila prima all\'inventario.'
-                  : 'Add it to inventory first.',
-            );
-          }
-          return;
-        }
         await ScryfallDatabase.instance.upsertCollectionMembership(
           customMembershipCollectionId,
           card.id,
@@ -725,23 +713,11 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
           printingId: entry.printingId,
         );
       } else if (customMembershipCollectionId != null) {
-        final ownedQty = await InventoryService.instance.currentInventoryQty(
+        await InventoryService.instance.addToInventory(
           entry.cardId,
           printingId: entry.printingId,
+          deltaQty: 1,
         );
-        if (ownedQty <= 0) {
-          if (mounted) {
-            showAppSnackBar(
-              context,
-              Localizations.localeOf(
-                    context,
-                  ).languageCode.toLowerCase().startsWith('it')
-                  ? 'Aggiungila prima all\'inventario.'
-                  : 'Add it to inventory first.',
-            );
-          }
-          return;
-        }
         await ScryfallDatabase.instance.upsertCollectionMembership(
           customMembershipCollectionId,
           entry.cardId,

@@ -222,14 +222,11 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         var added = 0;
         var skipped = 0;
         for (final card in cards) {
-          final ownedQty = await _inventoryService.currentInventoryQty(
+          await _inventoryService.addToInventory(
             card.id,
             printingId: card.printingId,
+            deltaQty: 1,
           );
-          if (ownedQty <= 0) {
-            skipped += 1;
-            continue;
-          }
           await ScryfallDatabase.instance.upsertCollectionMembership(
             widget.collectionId,
             card.id,

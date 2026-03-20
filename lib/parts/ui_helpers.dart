@@ -26,9 +26,6 @@ String _setIconUrl(String setCode) {
     return '';
   }
   final encoded = Uri.encodeComponent(code);
-  if (TcgEnvironmentController.instance.currentGame == TcgGame.pokemon) {
-    return 'https://images.pokemontcg.io/$encoded/symbol.png';
-  }
   return 'https://svgs.scryfall.io/sets/$encoded.svg';
 }
 
@@ -110,28 +107,18 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
   }
   final isPokemonGame =
       TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
-  return Container(
-    width: size,
-    height: size,
-    padding: const EdgeInsets.all(4),
-    decoration: BoxDecoration(
-      color: const Color(0xFF201A14),
-      borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: const Color(0xFF3A2F24)),
-    ),
-    child: isPokemonGame
-        ? ColorFiltered(
-            colorFilter: const ColorFilter.mode(
-              Color(0xFFE9C46A),
-              BlendMode.srcIn,
-            ),
-            child: Image.network(
-              _setIconUrl(code),
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => _emptySetIcon(size - 12),
-            ),
-          )
-        : FutureBuilder<String?>(
+  final child = isPokemonGame
+      ? _buildPokemonSetBadge(code, size: size)
+      : Container(
+          width: size,
+          height: size,
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF201A14),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF3A2F24)),
+          ),
+          child: FutureBuilder<String?>(
             future: _loadMtgSetSvg(code),
             builder: (context, snapshot) {
               final svg = snapshot.data;
@@ -148,6 +135,46 @@ Widget _buildSetIcon(String setCode, {double size = 28}) {
               );
             },
           ),
+        );
+  return child;
+}
+
+Widget _buildPokemonSetBadge(String setCode, {required double size}) {
+  final shortCode = setCode.trim().toUpperCase();
+  final compactLabel = shortCode.length <= 4
+      ? shortCode
+      : shortCode.substring(0, 4);
+  final fontSize = size < 24
+      ? 8.0
+      : size < 40
+      ? 10.0
+      : 12.0;
+  return Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: const Color(0xFF201A14),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: const Color(0xFF3A2F24)),
+    ),
+    child: FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 3),
+        child: Text(
+          compactLabel,
+          maxLines: 1,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: const Color(0xFFE9C46A),
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ),
+    ),
   );
 }
 
