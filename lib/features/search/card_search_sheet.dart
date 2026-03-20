@@ -304,6 +304,13 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       });
       return;
     }
+    if (_isPokemonSearch) {
+      setState(() {
+        _filterTotalCount = null;
+        _countLoading = false;
+      });
+      return;
+    }
     setState(() {
       _countLoading = true;
     });

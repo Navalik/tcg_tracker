@@ -18,6 +18,8 @@ class _CollectionFilterBuilderPage extends StatefulWidget {
 
 class _CollectionFilterBuilderPageState
     extends State<_CollectionFilterBuilderPage> {
+  static const int _countDebounceMs = 350;
+
   bool get _isPokemonActive =>
       TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
 
@@ -104,11 +106,10 @@ class _CollectionFilterBuilderPageState
   bool _loadingSets = true;
   String _setQuery = '';
 
-  bool _previewLoading = false;
-  int? _previewTotal;
-  List<CardSearchResult> _previewCards = [];
+  bool _impactCountLoading = false;
+  int? _impactCount;
 
-  Timer? _previewDebounce;
+  Timer? _countDebounce;
   Timer? _artistDebounce;
   List<String> _artistSuggestions = [];
   bool _loadingArtists = false;
@@ -170,12 +171,12 @@ class _CollectionFilterBuilderPageState
       _pokemonSubtypeController.text = initial.pokemonSubtypes.join(', ');
     }
     _loadSets();
-    _schedulePreviewUpdate();
+    _scheduleCountUpdate();
   }
 
   @override
   void dispose() {
-    _previewDebounce?.cancel();
+    _countDebounce?.cancel();
     _artistDebounce?.cancel();
     _nameController.dispose();
     _collectorNumberController.dispose();
@@ -199,10 +200,10 @@ class _CollectionFilterBuilderPageState
     });
   }
 
-  void _schedulePreviewUpdate() {
-    _previewDebounce?.cancel();
-    _previewDebounce = Timer(const Duration(milliseconds: 250), () async {
-      await _refreshPreview();
+  void _scheduleCountUpdate() {
+    _countDebounce?.cancel();
+    _countDebounce = Timer(const Duration(milliseconds: _countDebounceMs), () async {
+      await _refreshImpactCount();
     });
   }
 
@@ -214,7 +215,7 @@ class _CollectionFilterBuilderPageState
         _artistSuggestions = [];
         _loadingArtists = false;
       });
-      _schedulePreviewUpdate();
+      _scheduleCountUpdate();
       return;
     }
     _artistDebounce = Timer(const Duration(milliseconds: 250), () async {
@@ -232,7 +233,7 @@ class _CollectionFilterBuilderPageState
         _loadingArtists = false;
       });
     });
-    _schedulePreviewUpdate();
+    _scheduleCountUpdate();
   }
 
   CollectionFilter _buildFilter() {
@@ -290,32 +291,75 @@ class _CollectionFilterBuilderPageState
         filter.pokemonStages.isNotEmpty;
   }
 
-  Future<void> _refreshPreview() async {
+  bool _shouldTriggerCount(CollectionFilter filter) {
+    final name = filter.name?.trim() ?? '';
+    final collector = filter.collectorNumber?.trim() ?? '';
+    final artist = filter.artist?.trim() ?? '';
+    if (name.length >= 2 || collector.isNotEmpty || artist.length >= 2) {
+      return true;
+    }
+    return filter.sets.isNotEmpty ||
+        filter.languages.isNotEmpty ||
+        filter.rarities.isNotEmpty ||
+        filter.colors.isNotEmpty ||
+        filter.types.isNotEmpty ||
+        filter.pokemonCategories.isNotEmpty ||
+        filter.pokemonSubtypes.isNotEmpty ||
+        filter.pokemonRegulationMarks.isNotEmpty ||
+        filter.pokemonStages.isNotEmpty ||
+        filter.manaMin != null ||
+        filter.manaMax != null ||
+        filter.hpMin != null ||
+        filter.hpMax != null;
+  }
+
+  Future<void> _refreshImpactCount() async {
     final filter = _buildFilter();
-    if (!_hasCriteria(filter)) {
+    if (!_hasCriteria(filter) || !_shouldTriggerCount(filter)) {
       setState(() {
-        _previewLoading = false;
-        _previewTotal = null;
-        _previewCards = [];
+        _impactCountLoading = false;
+        _impactCount = null;
       });
       return;
     }
     setState(() {
-      _previewLoading = true;
+      _impactCountLoading = true;
     });
-    final total = await appRepositories.search.countCardsForFilter(filter);
-    final cards = await appRepositories.search.fetchCardsForAdvancedFilters(
-      filter,
-      limit: 30,
-    );
+    final total = await ScryfallDatabase.instance.countCardsForFilter(filter);
     if (!mounted) {
       return;
     }
     setState(() {
-      _previewTotal = total;
-      _previewCards = cards;
-      _previewLoading = false;
+      _impactCount = total;
+      _impactCountLoading = false;
     });
+  }
+
+  void _resetFilters() {
+    setState(() {
+      _nameController.clear();
+      _collectorNumberController.clear();
+      _artistController.clear();
+      _manaMinController.clear();
+      _manaMaxController.clear();
+      _hpMinController.clear();
+      _hpMaxController.clear();
+      _pokemonSubtypeController.clear();
+      _selectedSets.clear();
+      _selectedLanguages.clear();
+      _selectedRarities.clear();
+      _selectedColors.clear();
+      _selectedTypes.clear();
+      _selectedPokemonCategories.clear();
+      _selectedPokemonRegulationMarks.clear();
+      _selectedPokemonStages.clear();
+      _setQuery = '';
+      _artistSuggestions = [];
+      _loadingArtists = false;
+      _impactCount = null;
+      _impactCountLoading = false;
+    });
+    _scheduleCountUpdate();
   }
 
   String _colorLabel(String code) {
@@ -453,8 +497,6 @@ class _CollectionFilterBuilderPageState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final filter = _buildFilter();
-    final hasCriteria = _hasCriteria(filter);
     final filterDefinitions = filterDefinitionsForGame(
       _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg,
     );
@@ -513,13 +555,55 @@ class _CollectionFilterBuilderPageState
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.name)),
+      appBar: AppBar(
+        title: Text(widget.name),
+        actions: [
+          TextButton(
+            onPressed: _resetFilters,
+            child: Text(l10n.reset),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: FilledButton(
+              onPressed: () => Navigator.of(context).pop(_buildFilter()),
+              child: Text(widget.submitLabel ?? l10n.create),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          16,
+          20,
+          32 + MediaQuery.of(context).padding.bottom,
+        ),
         children: [
-          Text(
-            l10n.searchCardsHint,
-            style: Theme.of(context).textTheme.titleSmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l10n.searchCardsHint,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _impactCountLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(
+                      _isItalianUi()
+                          ? 'Carte nel filtro: ${_impactCount?.toString() ?? "-"}'
+                          : 'Cards in filter: ${_impactCount?.toString() ?? "-"}',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: const Color(0xFFE9C46A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ],
           ),
           const SizedBox(height: 8),
           TextField(
@@ -528,7 +612,7 @@ class _CollectionFilterBuilderPageState
               hintText: l10n.typeCardNameHint,
               prefixIcon: const Icon(Icons.search),
             ),
-            onChanged: (_) => _schedulePreviewUpdate(),
+            onChanged: (_) => _scheduleCountUpdate(),
           ),
           if (_isPokemonActive && hasDefinition('collector_number')) ...[
             const SizedBox(height: 16),
@@ -543,7 +627,7 @@ class _CollectionFilterBuilderPageState
                 hintText: l10n.detailCollector,
                 prefixIcon: const Icon(Icons.tag),
               ),
-              onChanged: (_) => _schedulePreviewUpdate(),
+              onChanged: (_) => _scheduleCountUpdate(),
             ),
           ],
           const SizedBox(height: 16),
@@ -552,7 +636,7 @@ class _CollectionFilterBuilderPageState
           if (_selectedSets.isNotEmpty) ...[
             buildSelectedChips(_selectedSets, (value) {
               _selectedSets.remove(value);
-              _schedulePreviewUpdate();
+              _scheduleCountUpdate();
             }),
             const SizedBox(height: 8),
           ],
@@ -590,7 +674,7 @@ class _CollectionFilterBuilderPageState
                           _selectedSets.add(set.code.toLowerCase());
                           _setQuery = '';
                         });
-                        _schedulePreviewUpdate();
+                        _scheduleCountUpdate();
                       },
                     );
                   },
@@ -610,7 +694,7 @@ class _CollectionFilterBuilderPageState
               if (!_selectedLanguages.add(value)) {
                 _selectedLanguages.remove(value);
               }
-              _schedulePreviewUpdate();
+              _scheduleCountUpdate();
             },
             _languageLabel,
           ),
@@ -624,7 +708,7 @@ class _CollectionFilterBuilderPageState
               if (!_selectedRarities.add(value)) {
                 _selectedRarities.remove(value);
               }
-              _schedulePreviewUpdate();
+              _scheduleCountUpdate();
             },
             (value) => _formatRarity(context, value),
           ),
@@ -641,7 +725,7 @@ class _CollectionFilterBuilderPageState
               if (!_selectedColors.add(value)) {
                 _selectedColors.remove(value);
               }
-              _schedulePreviewUpdate();
+              _scheduleCountUpdate();
             },
             (value) => _colorLabel(value),
           ),
@@ -659,7 +743,7 @@ class _CollectionFilterBuilderPageState
                 if (!_selectedPokemonCategories.add(value)) {
                   _selectedPokemonCategories.remove(value);
                 }
-                _schedulePreviewUpdate();
+                _scheduleCountUpdate();
               },
               (value) => _typeLabel(value),
             ),
@@ -677,7 +761,7 @@ class _CollectionFilterBuilderPageState
               if (!_selectedTypes.add(value)) {
                 _selectedTypes.remove(value);
               }
-              _schedulePreviewUpdate();
+              _scheduleCountUpdate();
             },
             (value) => _typeLabel(value),
           ),
@@ -691,7 +775,7 @@ class _CollectionFilterBuilderPageState
                 hintText: 'Basic, Item, Supporter...',
                 prefixIcon: Icon(Icons.category_outlined),
               ),
-              onChanged: (_) => _schedulePreviewUpdate(),
+              onChanged: (_) => _scheduleCountUpdate(),
             ),
           ],
           const SizedBox(height: 16),
@@ -711,7 +795,7 @@ class _CollectionFilterBuilderPageState
                   controller: _manaMinController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(hintText: l10n.minLabel),
-                  onChanged: (_) => _schedulePreviewUpdate(),
+                  onChanged: (_) => _scheduleCountUpdate(),
                 ),
               ),
               const SizedBox(width: 12),
@@ -720,7 +804,7 @@ class _CollectionFilterBuilderPageState
                   controller: _manaMaxController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(hintText: l10n.maxLabel),
-                  onChanged: (_) => _schedulePreviewUpdate(),
+                  onChanged: (_) => _scheduleCountUpdate(),
                 ),
               ),
             ],
@@ -736,7 +820,7 @@ class _CollectionFilterBuilderPageState
                     controller: _hpMinController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(hintText: l10n.minLabel),
-                    onChanged: (_) => _schedulePreviewUpdate(),
+                    onChanged: (_) => _scheduleCountUpdate(),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -745,7 +829,7 @@ class _CollectionFilterBuilderPageState
                     controller: _hpMaxController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(hintText: l10n.maxLabel),
-                    onChanged: (_) => _schedulePreviewUpdate(),
+                    onChanged: (_) => _scheduleCountUpdate(),
                   ),
                 ),
               ],
@@ -779,7 +863,7 @@ class _CollectionFilterBuilderPageState
                 if (!_selectedPokemonRegulationMarks.add(value)) {
                   _selectedPokemonRegulationMarks.remove(value);
                 }
-                _schedulePreviewUpdate();
+                _scheduleCountUpdate();
               },
               (value) => value,
             ),
@@ -795,7 +879,7 @@ class _CollectionFilterBuilderPageState
                 if (!_selectedPokemonStages.add(value)) {
                   _selectedPokemonStages.remove(value);
                 }
-                _schedulePreviewUpdate();
+                _scheduleCountUpdate();
               },
               (value) => value,
             ),
@@ -823,54 +907,13 @@ class _CollectionFilterBuilderPageState
                           );
                           _artistSuggestions = [];
                         });
-                        _schedulePreviewUpdate();
+                        _scheduleCountUpdate();
                       },
                     );
                   },
                 ),
               ),
           ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(l10n.cancel),
-              ),
-              const Spacer(),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(_buildFilter()),
-                child: Text(widget.submitLabel ?? l10n.create),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            l10n.cardCount(_previewTotal ?? 0),
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 8),
-          if (!hasCriteria)
-            Text(l10n.selectFiltersFirst)
-          else if (_previewLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (_previewCards.isEmpty)
-            Text(l10n.noResultsFound)
-          else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _previewCards.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final card = _previewCards[index];
-                return ListTile(
-                  leading: _buildSetIcon(card.setCode, size: 20),
-                  title: Text(card.name),
-                  subtitle: Text(card.subtitleLabel),
-                );
-              },
-            ),
         ],
       ),
     );

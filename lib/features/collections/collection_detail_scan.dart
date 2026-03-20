@@ -128,25 +128,45 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
   }) async {
     final cardsByPrintingKey = <String, CardSearchResult>{};
     var offset = 0;
-    final gameId = _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg;
     while (true) {
-      final batch = await appRepositories.search.fetchCardsForAdvancedFilters(
+      final entries = await ScryfallDatabase.instance.fetchFilteredCollectionCards(
         filter,
-        gameId: gameId,
         limit: pageSize,
         offset: offset,
       );
-      if (batch.isEmpty) {
+      if (entries.isEmpty) {
         break;
       }
+      final batch = entries
+          .map(
+            (entry) => CardSearchResult(
+              id: entry.cardId,
+              printingId: entry.printingId,
+              name: entry.name,
+              setCode: entry.setCode,
+              setName: entry.setName,
+              collectorNumber: entry.collectorNumber,
+              setTotal: entry.setTotal,
+              rarity: entry.rarity,
+              typeLine: entry.typeLine,
+              colors: entry.colors,
+              colorIdentity: entry.colorIdentity,
+              priceUsd: entry.priceUsd,
+              priceUsdFoil: entry.priceUsdFoil,
+              priceEur: entry.priceEur,
+              priceEurFoil: entry.priceEurFoil,
+              imageUri: entry.imageUri,
+            ),
+          )
+          .toList(growable: false);
       for (final card in batch) {
         final key = card.printingId ?? '${card.id}::legacy';
         cardsByPrintingKey[key] = card;
       }
-      if (batch.length < pageSize) {
+      if (entries.length < pageSize) {
         break;
       }
-      offset += batch.length;
+      offset += entries.length;
     }
     return cardsByPrintingKey.values.toList(growable: false);
   }

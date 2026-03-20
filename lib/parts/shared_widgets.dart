@@ -384,14 +384,27 @@ void showAppSnackBar(
   Duration duration = const Duration(seconds: 3),
 }) {
   final mediaQuery = MediaQuery.of(context);
-  final availableHeight =
-      mediaQuery.size.height - mediaQuery.padding.top - mediaQuery.padding.bottom;
-  final bottom = (availableHeight * 0.5).clamp(120.0, availableHeight - 80.0);
-  ScaffoldMessenger.of(context).showSnackBar(
+  final visibleHeight =
+      mediaQuery.size.height -
+      mediaQuery.padding.top -
+      mediaQuery.padding.bottom -
+      mediaQuery.viewInsets.bottom;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.clearSnackBars();
+  if (visibleHeight < 160) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: duration,
+      ),
+    );
+    return;
+  }
+  messenger.showSnackBar(
     SnackBar(
       content: Text(message),
       behavior: SnackBarBehavior.floating,
-      margin: EdgeInsets.fromLTRB(16, 0, 16, bottom),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       duration: duration,
     ),
   );

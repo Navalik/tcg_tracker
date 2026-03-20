@@ -128,6 +128,15 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
+    if (resolvedGame == TcgGameId.pokemon) {
+      return _legacy.searchCardsByName(
+        query,
+        gameId: resolvedGame,
+        languages: languages,
+        limit: limit,
+        offset: offset,
+      );
+    }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
@@ -162,6 +171,16 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
+    if (resolvedGame == TcgGameId.pokemon) {
+      return _legacy.fetchCardsForAdvancedFilters(
+        filter,
+        gameId: resolvedGame,
+        searchQuery: searchQuery,
+        languages: languages,
+        limit: limit,
+        offset: offset,
+      );
+    }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
@@ -193,6 +212,9 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     TcgGameId? gameId,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
+    if (resolvedGame == TcgGameId.pokemon) {
+      return _legacy.countCardsForFilter(filter, gameId: resolvedGame);
+    }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
@@ -216,6 +238,14 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     List<String> languages = const [],
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
+    if (resolvedGame == TcgGameId.pokemon) {
+      return _legacy.countCardsForFilterWithSearch(
+        filter,
+        gameId: resolvedGame,
+        searchQuery: searchQuery,
+        languages: languages,
+      );
+    }
     final store = await CanonicalCatalogStore.openDefault();
     try {
       if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {

@@ -650,8 +650,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         _hideCardFromWishlistSearch(card.id);
       }
       if (missingCollectionId == null &&
-          customMembershipCollectionId == null &&
-          ownedCollectionId != null) {
+          (customMembershipCollectionId != null || ownedCollectionId != null)) {
         final current = _ownedQuantitiesByCardId[card.id] ?? 0;
         setState(() {
           _ownedQuantitiesByCardId = {
@@ -666,6 +665,21 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         _showMiniToastForContext(anchorContext, '+1');
       }
       await _hidePreview(immediate: false);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'card_search_details',
+          context: ErrorDescription('while adding a card from search preview'),
+        ),
+      );
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.networkErrorTryAgain,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -749,8 +763,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         _hideCardFromWishlistSearch(entry.cardId);
       }
       if (missingCollectionId == null &&
-          customMembershipCollectionId == null &&
-          ownedCollectionId != null) {
+          (customMembershipCollectionId != null || ownedCollectionId != null)) {
         final current =
             _ownedQuantitiesByCardId[entry.cardId] ?? entry.quantity;
         setState(() {
@@ -759,6 +772,21 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
             entry.cardId: current + 1,
           };
         });
+      }
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'card_search_details',
+          context: ErrorDescription('while adding a card from search details'),
+        ),
+      );
+      if (mounted) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.networkErrorTryAgain,
+        );
       }
     } finally {
       if (mounted) {
