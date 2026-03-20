@@ -2952,23 +2952,54 @@ class ScryfallDatabase {
         'ownedOnly=$ownedOnly missingOnly=$missingOnly '
         'search=${searchQuery ?? ""} limit=${limit ?? 200} offset=${offset ?? 0}',
       );
-      final rows = store.fetchCollectionCardsForGame(
-        gameId: TcgGameId.pokemon,
+      final rawRows = _fetchCanonicalPokemonRowsForFilter(
+        store,
         filter: filter,
-        ownedCollectionId: allCardsId,
         searchQuery: searchQuery,
-        ownedOnly: ownedOnly,
-        missingOnly: missingOnly,
         preferredLanguages: preferredLanguages,
-        limit: limit ?? 200,
-        offset: offset,
       );
+      final collapsedRows = _collapseCanonicalPokemonRowsByPreferredLanguage(
+        rawRows,
+        preferredLanguages: _canonicalPokemonPreferredRowLanguages(
+          filter,
+          preferredLanguages,
+        ),
+      );
+      final ownedState = await _fetchOwnedStateForCanonicalPokemonRows(
+        allCardsId: allCardsId,
+        rows: collapsedRows,
+      );
+      final filteredRows = collapsedRows.where((row) {
+        final state = _ownedStateForCanonicalPokemonRow(row, ownedState);
+        if (ownedOnly) {
+          return state.quantity > 0;
+        }
+        if (missingOnly) {
+          return state.quantity == 0;
+        }
+        return true;
+      }).toList(growable: false);
+      final resolvedOffset = offset ?? 0;
+      if (resolvedOffset >= filteredRows.length) {
+        debugPrint('[pokemon-multilang] canonical fetch success rows=0');
+        return const <CollectionCardEntry>[];
+      }
+      final resolvedLimit = limit ?? 200;
+      final pageRows = filteredRows
+          .skip(resolvedOffset)
+          .take(resolvedLimit)
+          .toList(growable: false);
       debugPrint(
-        '[pokemon-multilang] canonical fetch success rows=${rows.length}',
+        '[pokemon-multilang] canonical fetch success rows=${pageRows.length}',
       );
-      return rows.map(_canonicalCollectionCardDataToEntry).toList(
-        growable: false,
-      );
+      return pageRows
+          .map(
+            (row) => _canonicalPokemonCollectionCardDataToEntry(
+              row,
+              ownedState: ownedState,
+            ),
+          )
+          .toList(growable: false);
     } catch (error, stackTrace) {
       debugPrint(
         '[pokemon-multilang] canonical fetch failed: $error',
@@ -3016,15 +3047,33 @@ class ScryfallDatabase {
         'ownedOnly=$ownedOnly missingOnly=$missingOnly '
         'search=${searchQuery ?? ""}',
       );
-      final total = store.countCollectionCardsForGame(
-        gameId: TcgGameId.pokemon,
+      final rawRows = _fetchCanonicalPokemonRowsForFilter(
+        store,
         filter: filter,
-        ownedCollectionId: allCardsId,
         searchQuery: searchQuery,
-        ownedOnly: ownedOnly,
-        missingOnly: missingOnly,
         preferredLanguages: preferredLanguages,
       );
+      final collapsedRows = _collapseCanonicalPokemonRowsByPreferredLanguage(
+        rawRows,
+        preferredLanguages: _canonicalPokemonPreferredRowLanguages(
+          filter,
+          preferredLanguages,
+        ),
+      );
+      final ownedState = await _fetchOwnedStateForCanonicalPokemonRows(
+        allCardsId: allCardsId,
+        rows: collapsedRows,
+      );
+      final total = collapsedRows.where((row) {
+        final state = _ownedStateForCanonicalPokemonRow(row, ownedState);
+        if (ownedOnly) {
+          return state.quantity > 0;
+        }
+        if (missingOnly) {
+          return state.quantity == 0;
+        }
+        return true;
+      }).length;
       debugPrint('[pokemon-multilang] canonical count success total=$total');
       return total;
     } catch (error, stackTrace) {
@@ -3045,9 +3094,197 @@ class ScryfallDatabase {
     return store;
   }
 
-  CollectionCardEntry _canonicalCollectionCardDataToEntry(
-    CanonicalCollectionCardData value,
+  Future<Map<String, ({int quantity, bool foil, bool altArt})>>
+  _fetchOwnedStateForCanonicalPokemonRows({
+    required int allCardsId,
+    required List<CanonicalCollectionCardData> rows,
+  }) async {
+    if (rows.isEmpty) {
+      return const <String, ({int quantity, bool foil, bool altArt})>{};
+    }
+    final printingIds = rows
+        .map((row) => row.printingId.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final cardIds = rows
+        .map((row) => row.cardId.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    final whereClauses = <String>['collection_id = ?'];
+    final variables = <Variable>[Variable.withInt(allCardsId)];
+    final lookupClauses = <String>[];
+    if (printingIds.isNotEmpty) {
+      lookupClauses.add(
+        'printing_id IN (${List.filled(printingIds.length, '?').join(', ')})',
+      );
+      variables.addAll(printingIds.map(Variable.withString));
+    }
+    if (cardIds.isNotEmpty) {
+      lookupClauses.add(
+        'card_id IN (${List.filled(cardIds.length, '?').join(', ')})',
+      );
+      variables.addAll(cardIds.map(Variable.withString));
+    }
+    if (lookupClauses.isEmpty) {
+      return const <String, ({int quantity, bool foil, bool altArt})>{};
+    }
+    whereClauses.add('(${lookupClauses.join(' OR ')})');
+    final db = await open();
+    final ownedRows = await db.customSelect(
+      '''
+      SELECT
+        card_id AS card_id,
+        printing_id AS printing_id,
+        quantity AS quantity,
+        foil AS foil,
+        alt_art AS alt_art
+      FROM collection_cards
+      WHERE ${whereClauses.join(' AND ')}
+      ''',
+      variables: variables,
+    ).get();
+    final result = <String, ({int quantity, bool foil, bool altArt})>{};
+    for (final row in ownedRows) {
+      final state = (
+        quantity: row.read<int>('quantity'),
+        foil: row.read<int>('foil') == 1,
+        altArt: row.read<int>('alt_art') == 1,
+      );
+      final printingId = row.readNullable<String>('printing_id')?.trim();
+      final cardId = row.read<String>('card_id').trim();
+      if (printingId != null && printingId.isNotEmpty) {
+        result['printing:$printingId'] = state;
+      }
+      if (cardId.isNotEmpty) {
+        result['card:$cardId'] = state;
+      }
+    }
+    return result;
+  }
+
+  List<CanonicalCollectionCardData> _fetchCanonicalPokemonRowsForFilter(
+    CanonicalCatalogStore store, {
+    required CollectionFilter filter,
+    required String? searchQuery,
+    required List<String> preferredLanguages,
+  }) {
+    final rows = <CanonicalCollectionCardData>[];
+    var offset = 0;
+    const batchSize = 400;
+    while (true) {
+      final batch = store.fetchCollectionCardsForGame(
+        gameId: TcgGameId.pokemon,
+        filter: filter,
+        ownedCollectionId: -1,
+        searchQuery: searchQuery,
+        ownedOnly: false,
+        missingOnly: false,
+        preferredLanguages: preferredLanguages,
+        limit: batchSize,
+        offset: offset,
+      );
+      if (batch.isEmpty) {
+        break;
+      }
+      rows.addAll(batch);
+      if (batch.length < batchSize) {
+        break;
+      }
+      offset += batch.length;
+    }
+    return rows;
+  }
+
+  List<String> _canonicalPokemonPreferredRowLanguages(
+    CollectionFilter filter,
+    List<String> preferredLanguages,
   ) {
+    final requested = filter.languages
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+    if (requested.isNotEmpty) {
+      return requested;
+    }
+    return preferredLanguages
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<CanonicalCollectionCardData> _collapseCanonicalPokemonRowsByPreferredLanguage(
+    List<CanonicalCollectionCardData> rows, {
+    required List<String> preferredLanguages,
+  }) {
+    if (rows.isEmpty) {
+      return const <CanonicalCollectionCardData>[];
+    }
+    final languagePriority = <String, int>{};
+    for (var index = 0; index < preferredLanguages.length; index += 1) {
+      languagePriority[preferredLanguages[index]] = index;
+    }
+    final bestByBasePrinting = <String, CanonicalCollectionCardData>{};
+    final order = <String>[];
+    for (final row in rows) {
+      final baseKey = _canonicalPokemonBasePrintingKey(row.printingId);
+      final existing = bestByBasePrinting[baseKey];
+      if (existing == null) {
+        bestByBasePrinting[baseKey] = row;
+        order.add(baseKey);
+        continue;
+      }
+      final currentScore = _canonicalPokemonLanguageScore(
+        row.lang,
+        languagePriority,
+      );
+      final existingScore = _canonicalPokemonLanguageScore(
+        existing.lang,
+        languagePriority,
+      );
+      if (currentScore < existingScore) {
+        bestByBasePrinting[baseKey] = row;
+      }
+    }
+    return order
+        .map((key) => bestByBasePrinting[key]!)
+        .toList(growable: false);
+  }
+
+  String _canonicalPokemonBasePrintingKey(String printingId) {
+    final normalized = printingId.trim();
+    final match = RegExp(r'^(.*):([a-z]{2,5})$').firstMatch(normalized);
+    if (match == null) {
+      return normalized;
+    }
+    return match.group(1) ?? normalized;
+  }
+
+  int _canonicalPokemonLanguageScore(
+    String rawLanguage,
+    Map<String, int> languagePriority,
+  ) {
+    final normalized = rawLanguage.trim().toLowerCase();
+    return languagePriority[normalized] ?? (languagePriority.length + 100);
+  }
+
+  ({int quantity, bool foil, bool altArt}) _ownedStateForCanonicalPokemonRow(
+    CanonicalCollectionCardData row,
+    Map<String, ({int quantity, bool foil, bool altArt})> ownedState,
+  ) {
+    final printingKey = 'printing:${row.printingId.trim()}';
+    final cardKey = 'card:${row.cardId.trim()}';
+    return ownedState[printingKey] ??
+        ownedState[cardKey] ??
+        (quantity: 0, foil: false, altArt: false);
+  }
+
+  CollectionCardEntry _canonicalPokemonCollectionCardDataToEntry(
+    CanonicalCollectionCardData value, {
+    required Map<String, ({int quantity, bool foil, bool altArt})> ownedState,
+  }) {
+    final state = _ownedStateForCanonicalPokemonRow(value, ownedState);
     return CollectionCardEntry(
       cardId: value.cardId,
       printingId: value.printingId,
@@ -3069,9 +3306,9 @@ class ScryfallDatabase {
       colors: value.colors,
       colorIdentity: value.colorIdentity,
       releasedAt: value.releasedAt,
-      quantity: value.quantity,
-      foil: value.foil,
-      altArt: value.altArt,
+      quantity: state.quantity,
+      foil: state.foil,
+      altArt: state.altArt,
       priceUsd: value.priceUsd,
       priceUsdFoil: value.priceUsdFoil,
       priceUsdEtched: value.priceUsdEtched,

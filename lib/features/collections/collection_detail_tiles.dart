@@ -3,6 +3,112 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _CollectionDetailTileStateX on _CollectionDetailPageState {
+  bool _matchesCollectionEntry(
+    CollectionCardEntry a,
+    CollectionCardEntry b,
+  ) {
+    return a.cardId == b.cardId &&
+        (a.printingId?.trim() ?? '') == (b.printingId?.trim() ?? '');
+  }
+
+  CollectionCardEntry _copyCollectionEntryWithQuantity(
+    CollectionCardEntry entry,
+    int quantity,
+  ) {
+    return CollectionCardEntry(
+      cardId: entry.cardId,
+      printingId: entry.printingId,
+      name: entry.name,
+      setCode: entry.setCode,
+      setName: entry.setName,
+      setTotal: entry.setTotal,
+      collectorNumber: entry.collectorNumber,
+      rarity: entry.rarity,
+      typeLine: entry.typeLine,
+      manaCost: entry.manaCost,
+      oracleText: entry.oracleText,
+      manaValue: entry.manaValue,
+      lang: entry.lang,
+      artist: entry.artist,
+      power: entry.power,
+      toughness: entry.toughness,
+      loyalty: entry.loyalty,
+      colors: entry.colors,
+      colorIdentity: entry.colorIdentity,
+      releasedAt: entry.releasedAt,
+      quantity: quantity,
+      foil: entry.foil,
+      altArt: entry.altArt,
+      priceUsd: entry.priceUsd,
+      priceUsdFoil: entry.priceUsdFoil,
+      priceUsdEtched: entry.priceUsdEtched,
+      priceEur: entry.priceEur,
+      priceEurFoil: entry.priceEurFoil,
+      priceTix: entry.priceTix,
+      pricesUpdatedAt: entry.pricesUpdatedAt,
+      imageUri: entry.imageUri,
+    );
+  }
+
+  void _applyQuickInventoryUpdateLocally(
+    CollectionCardEntry entry, {
+    required int nextQuantity,
+    bool removeFromList = false,
+  }) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final index = _cards.indexWhere((item) => _matchesCollectionEntry(item, entry));
+      final previousQuantity = index == -1 ? entry.quantity : _cards[index].quantity;
+      final wasOwned = previousQuantity > 0;
+      final isOwned = nextQuantity > 0;
+
+      if (_isFilterCollection && wasOwned != isOwned) {
+        if (isOwned) {
+          _ownedCount = (_ownedCount ?? 0) + 1;
+          if (_missingCount != null && _missingCount! > 0) {
+            _missingCount = _missingCount! - 1;
+          }
+        } else {
+          if (_ownedCount != null && _ownedCount! > 0) {
+            _ownedCount = _ownedCount! - 1;
+          }
+          _missingCount = (_missingCount ?? 0) + 1;
+        }
+      }
+
+      if (_isWishlistCollection && removeFromList) {
+        if (index != -1) {
+          _cards.removeAt(index);
+        }
+        if (_missingCount != null && _missingCount! > 0) {
+          _missingCount = _missingCount! - 1;
+        }
+        return;
+      }
+
+      final shouldRemainVisible =
+          (_showOwned && _showMissing) ||
+          (_showOwned && isOwned) ||
+          (_showMissing && !isOwned);
+
+      if (index == -1) {
+        return;
+      }
+      if (!shouldRemainVisible || removeFromList) {
+        _cards.removeAt(index);
+        return;
+      }
+      _cards[index] = _copyCollectionEntryWithQuantity(entry, nextQuantity);
+    });
+
+    unawaited(_refreshCounts());
+    if (_hasMore && _cards.length < _CollectionDetailPageState._pageSize) {
+      unawaited(_loadMoreCards());
+    }
+  }
+
   Future<void> _quickAddCard(
     CollectionCardEntry entry, {
     BuildContext? anchorContext,
@@ -22,6 +128,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         printingId: entry.printingId,
         deltaQty: 1,
       );
+      _applyQuickInventoryUpdateLocally(entry, nextQuantity: 0, removeFromList: true);
     } else if (widget.isDeckCollection) {
       final nextQuantity = entry.quantity + 1;
       await ScryfallDatabase.instance.upsertCollectionCard(
@@ -32,11 +139,16 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         foil: false,
         altArt: entry.altArt,
       );
+      _applyQuickInventoryUpdateLocally(entry, nextQuantity: nextQuantity);
     } else {
       await _inventoryService.addToInventory(
         entry.cardId,
         printingId: entry.printingId,
         deltaQty: 1,
+      );
+      _applyQuickInventoryUpdateLocally(
+        entry,
+        nextQuantity: entry.quantity + 1,
       );
     }
     if (mounted) {
@@ -53,7 +165,6 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         });
       }
     }
-    await _loadCards();
   }
 
   Future<void> _quickRemoveCard(
@@ -76,11 +187,16 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         foil: false,
         altArt: nextQuantity == 0 ? false : entry.altArt,
       );
+      _applyQuickInventoryUpdateLocally(entry, nextQuantity: nextQuantity);
     } else {
       await _inventoryService.removeFromInventory(
         entry.cardId,
         printingId: entry.printingId,
         deltaQty: 1,
+      );
+      _applyQuickInventoryUpdateLocally(
+        entry,
+        nextQuantity: entry.quantity - 1,
       );
     }
     if (mounted) {
@@ -97,7 +213,6 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         });
       }
     }
-    await _loadCards();
   }
 
   static const double _galleryActionHeight = 42;
