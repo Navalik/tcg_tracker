@@ -581,15 +581,27 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
           .where((code) => !_setTotalsByCode.containsKey(code))
           .toSet()
           .toList();
-      final totals = newSetCodes.isEmpty
-          ? <String, int>{}
-          : await ScryfallDatabase.instance.fetchSetTotalsForCodes(newSetCodes);
-      final localizedSetNames = newSetCodes.isEmpty
-          ? const <String, String>{}
-          : await appRepositories.sets.fetchSetNamesForCodes(
-              newSetCodes,
-              gameId: _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg,
-            );
+      Map<String, int> totals = <String, int>{};
+      if (newSetCodes.isNotEmpty) {
+        try {
+          totals = await ScryfallDatabase.instance.fetchSetTotalsForCodes(
+            newSetCodes,
+          );
+        } catch (_) {
+          totals = <String, int>{};
+        }
+      }
+      Map<String, String> localizedSetNames = const <String, String>{};
+      if (newSetCodes.isNotEmpty) {
+        try {
+          localizedSetNames = await appRepositories.sets.fetchSetNamesForCodes(
+            newSetCodes,
+            gameId: _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg,
+          );
+        } catch (_) {
+          localizedSetNames = const <String, String>{};
+        }
+      }
 
       if (!mounted) {
         return;
@@ -611,6 +623,18 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _refreshListPrices(cards);
       _maybePrefetchIfShort();
     } catch (error) {
+      debugPrint(
+        '[collection-detail] load more failed '
+        'collection=${widget.collectionId} '
+        'name=${widget.name} '
+        'isSet=${widget.isSetCollection} '
+        'isPokemon=$_isPokemonActive '
+        'search=${_searchQuery ?? ""} '
+        'offset=$_loadedOffset '
+        'owned=$_showOwned missing=$_showMissing '
+        'filter=${_effectiveFilter()?.toJson()} '
+        'error=$error',
+      );
       if (!mounted) {
         return;
       }

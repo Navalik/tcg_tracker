@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as path;
@@ -10,8 +11,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ignore: unused_import
 import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 
+import '../domain/domain_models.dart';
 import '../models.dart';
+import '../services/app_settings.dart';
 import '../services/price_provider.dart';
+import 'canonical_catalog_store.dart';
 
 part 'app_database.g.dart';
 
@@ -608,6 +612,7 @@ class ScryfallDatabase {
     });
 
     await _ensureTableColumns(db, 'collection_cards', const <String, String>{
+      'printing_id': 'TEXT',
       'quantity': 'INTEGER NOT NULL DEFAULT 1',
       'foil': 'INTEGER NOT NULL DEFAULT 0',
       'alt_art': 'INTEGER NOT NULL DEFAULT 0',
@@ -2484,6 +2489,17 @@ class ScryfallDatabase {
     int? limit,
     int? offset,
   }) async {
+    final canonicalPokemonCards = await _tryFetchCanonicalPokemonFilteredCards(
+      filter,
+      searchQuery: searchQuery,
+      ownedOnly: ownedOnly,
+      missingOnly: missingOnly,
+      limit: limit,
+      offset: offset,
+    );
+    if (canonicalPokemonCards != null) {
+      return canonicalPokemonCards;
+    }
     final db = await open();
     final allCardsId = await fetchAllCardsCollectionId();
     if (allCardsId == null) {
@@ -2621,6 +2637,15 @@ class ScryfallDatabase {
     CollectionFilter filter, {
     String? searchQuery,
   }) async {
+    final canonicalCount = await _tryCountCanonicalPokemonFilteredCards(
+      filter,
+      searchQuery: searchQuery,
+      ownedOnly: true,
+      missingOnly: false,
+    );
+    if (canonicalCount != null) {
+      return canonicalCount;
+    }
     final db = await open();
     final allCardsId = await fetchAllCardsCollectionId();
     if (allCardsId == null) {
@@ -2659,6 +2684,15 @@ class ScryfallDatabase {
   }
 
   Future<int> countCardsForFilter(CollectionFilter filter) async {
+    final canonicalCount = await _tryCountCanonicalPokemonFilteredCards(
+      filter,
+      searchQuery: null,
+      ownedOnly: false,
+      missingOnly: false,
+    );
+    if (canonicalCount != null) {
+      return canonicalCount;
+    }
     final db = await open();
     final filterQuery = _buildFilterQuery(filter);
     final whereSql = filterQuery.whereClauses.isEmpty
@@ -2676,6 +2710,15 @@ class ScryfallDatabase {
     CollectionFilter filter, {
     String? searchQuery,
   }) async {
+    final canonicalCount = await _tryCountCanonicalPokemonFilteredCards(
+      filter,
+      searchQuery: searchQuery,
+      ownedOnly: false,
+      missingOnly: false,
+    );
+    if (canonicalCount != null) {
+      return canonicalCount;
+    }
     final db = await open();
     final filterQuery = _buildFilterQuery(filter);
     final whereClauses = [...filterQuery.whereClauses];
@@ -2726,6 +2769,175 @@ class ScryfallDatabase {
       $whereSql
       ''', variables: variables).getSingle();
     return row.read<int>('total');
+  }
+
+  Future<List<CollectionCardEntry>?> _tryFetchCanonicalPokemonFilteredCards(
+    CollectionFilter filter, {
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+    required int? limit,
+    required int? offset,
+  }) async {
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    if (selectedGame != AppTcgGame.pokemon) {
+      return null;
+    }
+    final store = await _openCanonicalPokemonStore();
+    if (store == null) {
+      debugPrint(
+        '[pokemon-multilang] canonical fetch skipped: catalog store unavailable',
+      );
+      return null;
+    }
+    try {
+      final allCardsId = await fetchAllCardsCollectionId();
+      if (allCardsId == null) {
+        debugPrint(
+          '[pokemon-multilang] canonical fetch: no all-cards collection id',
+        );
+        return const <CollectionCardEntry>[];
+      }
+      final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+        AppTcgGame.pokemon,
+      );
+      debugPrint(
+        '[pokemon-multilang] canonical fetch start '
+        'sets=${filter.sets.join(",")} '
+        'langs=${filter.languages.join(",")} '
+        'preferred=${preferredLanguages.join(",")} '
+        'ownedOnly=$ownedOnly missingOnly=$missingOnly '
+        'search=${searchQuery ?? ""} limit=${limit ?? 200} offset=${offset ?? 0}',
+      );
+      final rows = store.fetchCollectionCardsForGame(
+        gameId: TcgGameId.pokemon,
+        filter: filter,
+        ownedCollectionId: allCardsId,
+        searchQuery: searchQuery,
+        ownedOnly: ownedOnly,
+        missingOnly: missingOnly,
+        preferredLanguages: preferredLanguages,
+        limit: limit ?? 200,
+        offset: offset,
+      );
+      debugPrint(
+        '[pokemon-multilang] canonical fetch success rows=${rows.length}',
+      );
+      return rows.map(_canonicalCollectionCardDataToEntry).toList(
+        growable: false,
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[pokemon-multilang] canonical fetch failed: $error',
+      );
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    } finally {
+      store.dispose();
+    }
+  }
+
+  Future<int?> _tryCountCanonicalPokemonFilteredCards(
+    CollectionFilter filter, {
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+  }) async {
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    if (selectedGame != AppTcgGame.pokemon) {
+      return null;
+    }
+    final store = await _openCanonicalPokemonStore();
+    if (store == null) {
+      debugPrint(
+        '[pokemon-multilang] canonical count skipped: catalog store unavailable',
+      );
+      return null;
+    }
+    try {
+      final allCardsId = await fetchAllCardsCollectionId();
+      if (allCardsId == null) {
+        debugPrint(
+          '[pokemon-multilang] canonical count: no all-cards collection id',
+        );
+        return 0;
+      }
+      final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+        AppTcgGame.pokemon,
+      );
+      debugPrint(
+        '[pokemon-multilang] canonical count start '
+        'sets=${filter.sets.join(",")} '
+        'langs=${filter.languages.join(",")} '
+        'preferred=${preferredLanguages.join(",")} '
+        'ownedOnly=$ownedOnly missingOnly=$missingOnly '
+        'search=${searchQuery ?? ""}',
+      );
+      final total = store.countCollectionCardsForGame(
+        gameId: TcgGameId.pokemon,
+        filter: filter,
+        ownedCollectionId: allCardsId,
+        searchQuery: searchQuery,
+        ownedOnly: ownedOnly,
+        missingOnly: missingOnly,
+        preferredLanguages: preferredLanguages,
+      );
+      debugPrint('[pokemon-multilang] canonical count success total=$total');
+      return total;
+    } catch (error, stackTrace) {
+      debugPrint('[pokemon-multilang] canonical count failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      rethrow;
+    } finally {
+      store.dispose();
+    }
+  }
+
+  Future<CanonicalCatalogStore?> _openCanonicalPokemonStore() async {
+    final store = await CanonicalCatalogStore.openDefault();
+    if (!store.hasCatalogForGame(TcgGameId.pokemon)) {
+      store.dispose();
+      return null;
+    }
+    return store;
+  }
+
+  CollectionCardEntry _canonicalCollectionCardDataToEntry(
+    CanonicalCollectionCardData value,
+  ) {
+    return CollectionCardEntry(
+      cardId: value.cardId,
+      printingId: value.printingId,
+      name: value.name,
+      setCode: value.setCode,
+      setName: value.setName,
+      setTotal: value.setTotal,
+      collectorNumber: value.collectorNumber,
+      rarity: value.rarity,
+      typeLine: value.typeLine,
+      manaCost: value.manaCost,
+      oracleText: value.oracleText,
+      manaValue: value.manaValue,
+      lang: value.lang,
+      artist: value.artist,
+      power: value.power,
+      toughness: value.toughness,
+      loyalty: value.loyalty,
+      colors: value.colors,
+      colorIdentity: value.colorIdentity,
+      releasedAt: value.releasedAt,
+      quantity: value.quantity,
+      foil: value.foil,
+      altArt: value.altArt,
+      priceUsd: value.priceUsd,
+      priceUsdFoil: value.priceUsdFoil,
+      priceUsdEtched: value.priceUsdEtched,
+      priceEur: value.priceEur,
+      priceEurFoil: value.priceEurFoil,
+      priceTix: value.priceTix,
+      pricesUpdatedAt: value.pricesUpdatedAt,
+      imageUri: value.imageUri,
+    );
   }
 
   Future<int> countCollectionQuantity(int collectionId) async {
@@ -3056,6 +3268,17 @@ class ScryfallDatabase {
     String? printingId,
     int? collectionId,
   }) async {
+    final normalizedPrintingId = printingId?.trim();
+    if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty) {
+      final canonical = await _tryFetchCanonicalCardEntryByPrintingId(
+        cardId: cardId,
+        printingId: normalizedPrintingId,
+        collectionId: collectionId,
+      );
+      if (canonical != null) {
+        return canonical;
+      }
+    }
     final db = await open();
     final rows = await db
         .customSelect(
@@ -3487,22 +3710,45 @@ class ScryfallDatabase {
     required bool altArt,
   }) async {
     final db = await open();
-    if (quantity <= 0) {
-      await deleteCollectionCard(collectionId, cardId, printingId: printingId);
+    final normalizedCardId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
+    if (normalizedCardId.isEmpty) {
       return;
     }
-    await db
-        .into(db.collectionCards)
-        .insert(
-          CollectionCardsCompanion.insert(
-            collectionId: collectionId,
-            cardId: cardId,
-            quantity: Value(quantity),
-            foil: Value(foil),
-            altArt: Value(altArt),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
+    if (quantity <= 0) {
+      await deleteCollectionCard(
+        collectionId,
+        normalizedCardId,
+        printingId: normalizedPrintingId,
+      );
+      return;
+    }
+    await db.customStatement(
+      '''
+      INSERT INTO collection_cards(
+        collection_id,
+        card_id,
+        printing_id,
+        quantity,
+        foil,
+        alt_art
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(collection_id, card_id) DO UPDATE SET
+        printing_id = excluded.printing_id,
+        quantity = excluded.quantity,
+        foil = excluded.foil,
+        alt_art = excluded.alt_art
+      ''',
+      <Object?>[
+        collectionId,
+        normalizedCardId,
+        normalizedPrintingId,
+        quantity,
+        foil ? 1 : 0,
+        altArt ? 1 : 0,
+      ],
+    );
   }
 
   Future<void> upsertCollectionMembership(
@@ -3513,18 +3759,28 @@ class ScryfallDatabase {
   }
   ) async {
     final db = await open();
-    await db
-        .into(db.collectionCards)
-        .insert(
-          CollectionCardsCompanion.insert(
-            collectionId: collectionId,
-            cardId: cardId,
-            quantity: const Value(0),
-            foil: const Value(false),
-            altArt: const Value(false),
-          ),
-          mode: InsertMode.insertOrReplace,
-        );
+    final normalizedCardId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
+    if (normalizedCardId.isEmpty) {
+      return;
+    }
+    await db.customStatement(
+      '''
+      INSERT INTO collection_cards(
+        collection_id,
+        card_id,
+        printing_id,
+        quantity,
+        foil,
+        alt_art
+      )
+      VALUES (?, ?, ?, 0, 0, 0)
+      ON CONFLICT(collection_id, card_id) DO UPDATE SET
+        printing_id = excluded.printing_id,
+        quantity = 0
+      ''',
+      <Object?>[collectionId, normalizedCardId, normalizedPrintingId],
+    );
   }
 
   Future<int> fetchOwnedQuantityInAllCards(
@@ -3532,25 +3788,32 @@ class ScryfallDatabase {
     String? printingId,
   }) async {
     final normalizedId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
     if (normalizedId.isEmpty) {
       return 0;
     }
     final db = await open();
     final allCardsId = await ensureAllCardsCollectionId();
-    final row = await db
-        .customSelect(
-          '''
+    final row = await db.customSelect(
+      '''
       SELECT COALESCE(quantity, 0) AS qty
       FROM collection_cards
-      WHERE collection_id = ? AND card_id = ?
+      WHERE collection_id = ?
+        AND (
+          card_id = ?
+          ${normalizedPrintingId == null || normalizedPrintingId.isEmpty ? '' : 'OR printing_id = ?'}
+        )
+      ORDER BY CASE WHEN printing_id = ? THEN 0 ELSE 1 END
       LIMIT 1
       ''',
-          variables: [
-            Variable.withInt(allCardsId),
-            Variable.withString(normalizedId),
-          ],
-        )
-        .getSingleOrNull();
+      variables: <Variable>[
+        Variable.withInt(allCardsId),
+        Variable.withString(normalizedId),
+        if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty)
+          Variable.withString(normalizedPrintingId),
+        Variable.withString(normalizedPrintingId ?? ''),
+      ],
+    ).getSingleOrNull();
     return row?.read<int>('qty') ?? 0;
   }
 
@@ -3559,6 +3822,7 @@ class ScryfallDatabase {
     String? printingId,
   }) async {
     final normalizedId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
     if (normalizedId.isEmpty) {
       return;
     }
@@ -3566,7 +3830,10 @@ class ScryfallDatabase {
     await db.customStatement(
       '''
       DELETE FROM collection_cards
-      WHERE card_id = ?
+      WHERE (
+          card_id = ?
+          ${normalizedPrintingId == null || normalizedPrintingId.isEmpty ? '' : 'OR printing_id = ?'}
+        )
         AND collection_id IN (
           SELECT id FROM collections
           WHERE type = 'custom'
@@ -3574,7 +3841,11 @@ class ScryfallDatabase {
             AND name NOT LIKE '__deck_side__:%'
         )
       ''',
-      [normalizedId],
+      <Object?>[
+        normalizedId,
+        if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty)
+          normalizedPrintingId,
+      ],
     );
   }
 
@@ -3583,6 +3854,7 @@ class ScryfallDatabase {
     String? printingId,
   }) async {
     final normalizedId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
     if (normalizedId.isEmpty) {
       return;
     }
@@ -3590,13 +3862,20 @@ class ScryfallDatabase {
     await db.customStatement(
       '''
       DELETE FROM collection_cards
-      WHERE card_id = ?
+      WHERE (
+          card_id = ?
+          ${normalizedPrintingId == null || normalizedPrintingId.isEmpty ? '' : 'OR printing_id = ?'}
+        )
         AND collection_id IN (
           SELECT id FROM collections
           WHERE type = 'wishlist'
         )
       ''',
-      [normalizedId],
+      <Object?>[
+        normalizedId,
+        if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty)
+          normalizedPrintingId,
+      ],
     );
   }
 
@@ -3609,14 +3888,39 @@ class ScryfallDatabase {
     bool? altArt,
   }) async {
     final db = await open();
+    final normalizedCardId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
     final values = CollectionCardsCompanion(
       quantity: quantity == null ? const Value.absent() : Value(quantity),
       foil: foil == null ? const Value.absent() : Value(foil),
       altArt: altArt == null ? const Value.absent() : Value(altArt),
     );
+    if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty) {
+      await db.customStatement(
+        '''
+        UPDATE collection_cards
+        SET
+          quantity = COALESCE(?, quantity),
+          foil = COALESCE(?, foil),
+          alt_art = COALESCE(?, alt_art)
+        WHERE collection_id = ?
+          AND (card_id = ? OR printing_id = ?)
+        ''',
+        <Object?>[
+          quantity,
+          foil == null ? null : (foil ? 1 : 0),
+          altArt == null ? null : (altArt ? 1 : 0),
+          collectionId,
+          normalizedCardId,
+          normalizedPrintingId,
+        ],
+      );
+      return;
+    }
     await (db.update(db.collectionCards)..where(
           (tbl) =>
-              tbl.collectionId.equals(collectionId) & tbl.cardId.equals(cardId),
+              tbl.collectionId.equals(collectionId) &
+              tbl.cardId.equals(normalizedCardId),
         ))
         .write(values);
   }
@@ -3627,9 +3931,23 @@ class ScryfallDatabase {
     String? printingId,
   }) async {
     final db = await open();
+    final normalizedCardId = cardId.trim();
+    final normalizedPrintingId = printingId?.trim();
+    if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty) {
+      await db.customStatement(
+        '''
+        DELETE FROM collection_cards
+        WHERE collection_id = ?
+          AND (card_id = ? OR printing_id = ?)
+        ''',
+        <Object?>[collectionId, normalizedCardId, normalizedPrintingId],
+      );
+      return;
+    }
     await (db.delete(db.collectionCards)..where(
           (tbl) =>
-              tbl.collectionId.equals(collectionId) & tbl.cardId.equals(cardId),
+              tbl.collectionId.equals(collectionId) &
+              tbl.cardId.equals(normalizedCardId),
         ))
         .go();
   }
@@ -3670,6 +3988,87 @@ class ScryfallDatabase {
       }
     } catch (_) {}
     return null;
+  }
+
+  Future<CollectionCardEntry?> _tryFetchCanonicalCardEntryByPrintingId({
+    required String cardId,
+    required String printingId,
+    required int? collectionId,
+  }) async {
+    final store = await _openCanonicalPokemonStore();
+    if (store == null) {
+      return null;
+    }
+    try {
+      final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+        AppTcgGame.pokemon,
+      );
+      final view = store.fetchPrintingViews(
+        <String>[printingId],
+        preferredLanguages: preferredLanguages,
+      )[printingId];
+      if (view == null) {
+        return null;
+      }
+      var quantity = 0;
+      var foil = false;
+      var altArt = false;
+      if (collectionId != null) {
+        final db = await open();
+        final row = await db.customSelect(
+          '''
+          SELECT
+            COALESCE(quantity, 0) AS quantity,
+            COALESCE(foil, 0) AS foil,
+            COALESCE(alt_art, 0) AS alt_art
+          FROM collection_cards
+          WHERE collection_id = ?
+            AND (card_id = ? OR printing_id = ?)
+          ORDER BY CASE WHEN printing_id = ? THEN 0 ELSE 1 END
+          LIMIT 1
+          ''',
+          variables: <Variable>[
+            Variable.withInt(collectionId),
+            Variable.withString(cardId.trim()),
+            Variable.withString(printingId),
+            Variable.withString(printingId),
+          ],
+        ).getSingleOrNull();
+        if (row != null) {
+          quantity = row.read<int>('quantity');
+          foil = row.read<int>('foil') == 1;
+          altArt = row.read<int>('alt_art') == 1;
+        }
+      }
+      return CollectionCardEntry(
+        cardId: cardId.trim().isEmpty ? view.printingId : cardId.trim(),
+        printingId: view.printingId,
+        name: view.name,
+        setCode: view.setCode,
+        setName: view.setName,
+        setTotal: view.setTotal,
+        collectorNumber: view.collectorNumber,
+        rarity: view.rarity,
+        typeLine: view.typeLine,
+        manaCost: view.manaCost,
+        oracleText: view.oracleText,
+        manaValue: view.manaValue,
+        lang: view.lang,
+        artist: view.artist,
+        power: view.power,
+        toughness: view.toughness,
+        loyalty: view.loyalty,
+        colors: view.colors,
+        colorIdentity: view.colorIdentity,
+        releasedAt: view.releasedAt,
+        quantity: quantity,
+        foil: foil,
+        altArt: altArt,
+        imageUri: view.imageUri,
+      );
+    } finally {
+      store.dispose();
+    }
   }
 
   Future<void> rebuildCardsFts() async {

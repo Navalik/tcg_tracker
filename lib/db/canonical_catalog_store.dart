@@ -1804,11 +1804,21 @@ class CanonicalCatalogStore {
             json_extract(cc.metadata_json, '\$.cmc')
           ) AS REAL
         ) AS cmc,
-        LOWER(
-          COALESCE(
-            NULLIF(TRIM(cp.language_code), ''),
-            cc.default_language,
-            'en'
+        COALESCE(
+          (
+            SELECT ccl.language_code
+            FROM catalog_card_localizations ccl
+            WHERE ccl.card_id = cc.id
+              AND ccl.language_code IN (${_inClause(normalizedLanguages.length)})
+            ORDER BY CASE ccl.language_code ${_preferredLanguageCaseWhen(normalizedLanguages)} ELSE ${normalizedLanguages.length} END
+            LIMIT 1
+          ),
+          LOWER(
+            COALESCE(
+              NULLIF(TRIM(cp.language_code), ''),
+              cc.default_language,
+              'en'
+            )
           )
         ) AS lang,
         COALESCE(
@@ -1842,18 +1852,17 @@ class CanonicalCatalogStore {
           '[]'
         ) AS color_identity_json,
         COALESCE(cp.release_date, cs.release_date, '') AS released_at,
-        legacy_card.price_usd AS price_usd,
-        legacy_card.price_usd_foil AS price_usd_foil,
-        legacy_card.price_usd_etched AS price_usd_etched,
-        legacy_card.price_eur AS price_eur,
-        legacy_card.price_eur_foil AS price_eur_foil,
-        legacy_card.price_tix AS price_tix,
-        legacy_card.prices_updated_at AS prices_updated_at,
+        NULL AS price_usd,
+        NULL AS price_usd_foil,
+        NULL AS price_usd_etched,
+        NULL AS price_eur,
+        NULL AS price_eur_foil,
+        NULL AS price_tix,
+        NULL AS prices_updated_at,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
           json_extract(cp.image_uris_json, '\$.normal'),
           json_extract(cp.image_uris_json, '\$.default'),
-          legacy_card.image_uris,
           json_extract(cp.image_uris_json, '\$.small')
         ) AS image_uri
       FROM card_printings cp
@@ -1865,8 +1874,6 @@ class CanonicalCatalogStore {
       LEFT JOIN collection_cards owned
         ON owned.collection_id = ?
        AND owned.printing_id = cp.id
-      LEFT JOIN cards legacy_card
-        ON legacy_card.id = legacy.provider_object_id
       WHERE cp.game_id = ?
         ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
       ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
@@ -2020,19 +2027,18 @@ class CanonicalCatalogStore {
         COALESCE(pm.types_json, '[]') AS colors_json,
         COALESCE(pm.types_json, '[]') AS color_identity_json,
         COALESCE(cp.release_date, cs.release_date, '') AS released_at,
-        legacy_card.price_usd AS price_usd,
-        legacy_card.price_usd_foil AS price_usd_foil,
-        legacy_card.price_usd_etched AS price_usd_etched,
-        legacy_card.price_eur AS price_eur,
-        legacy_card.price_eur_foil AS price_eur_foil,
-        legacy_card.price_tix AS price_tix,
-        legacy_card.prices_updated_at AS prices_updated_at,
+        NULL AS price_usd,
+        NULL AS price_usd_foil,
+        NULL AS price_usd_etched,
+        NULL AS price_eur,
+        NULL AS price_eur_foil,
+        NULL AS price_tix,
+        NULL AS prices_updated_at,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
           json_extract(cp.image_uris_json, '\$.normal'),
           json_extract(cp.image_uris_json, '\$.default'),
-          json_extract(cp.image_uris_json, '\$.small'),
-          legacy_card.image_uris
+          json_extract(cp.image_uris_json, '\$.small')
         ) AS image_uri
       FROM card_printings cp
       INNER JOIN catalog_cards cc ON cc.id = cp.card_id
@@ -2045,8 +2051,6 @@ class CanonicalCatalogStore {
       LEFT JOIN collection_cards owned
         ON owned.collection_id = ?
        AND owned.printing_id = cp.id
-      LEFT JOIN cards legacy_card
-        ON legacy_card.id = legacy.provider_object_id
       WHERE cp.game_id = ?
         ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
       ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
@@ -2056,6 +2060,7 @@ class CanonicalCatalogStore {
         ...cardNameParams,
         ...setNameParams,
         ...subtypeParams,
+        ...normalizedLanguages,
         CatalogProviderId.pokemonTcgApi.value,
         ownedCollectionId,
         TcgGameId.pokemon.value,
@@ -2222,6 +2227,16 @@ class CanonicalCatalogStore {
         captured_at_ms INTEGER NOT NULL
       )
       ''');
+    _database.execute('''
+      CREATE TABLE IF NOT EXISTS collection_cards (
+        collection_id INTEGER NOT NULL,
+        card_id TEXT,
+        printing_id TEXT,
+        quantity INTEGER NOT NULL DEFAULT 0,
+        foil INTEGER NOT NULL DEFAULT 0,
+        alt_art INTEGER NOT NULL DEFAULT 0
+      )
+      ''');
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_catalog_sets_game_code ON catalog_sets(game_id, code)',
     );
@@ -2247,6 +2262,9 @@ class CanonicalCatalogStore {
     );
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_pokemon_metadata_illustrator ON pokemon_printing_metadata(illustrator COLLATE NOCASE)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_collection_cards_lookup ON collection_cards(collection_id, printing_id)',
     );
   }
 
@@ -2428,13 +2446,27 @@ class CanonicalCatalogStore {
       values: filter.colors.expand(_pokemonEnergyCodeToNames),
     );
 
-    _appendInClause(
-      whereClauses: whereClauses,
-      params: params,
-      sqlExpression:
-          r"LOWER(COALESCE(NULLIF(TRIM(cp.language_code), ''), cc.default_language, 'en'))",
-      values: filter.languages.map((value) => value.trim().toLowerCase()),
-    );
+    final normalizedLanguages = filter.languages
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedLanguages.isNotEmpty) {
+      final placeholders = _inClause(normalizedLanguages.length);
+      whereClauses.add('''
+        (
+          LOWER(COALESCE(NULLIF(TRIM(cp.language_code), ''), cc.default_language, 'en')) IN ($placeholders)
+          OR EXISTS (
+            SELECT 1
+            FROM catalog_card_localizations ccl_lang
+            WHERE ccl_lang.card_id = cc.id
+              AND LOWER(ccl_lang.language_code) IN ($placeholders)
+          )
+        )
+      ''');
+      params.addAll(normalizedLanguages);
+      params.addAll(normalizedLanguages);
+    }
 
     if (filter.hpMin != null) {
       whereClauses.add('COALESCE(pm.hp, 0) >= ?');
