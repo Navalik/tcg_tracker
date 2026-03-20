@@ -4,17 +4,21 @@ enum _AddCardEntryMode { byName, byScan, byFilter }
 
 extension _CollectionDetailScanStateX on _CollectionDetailPageState {
   CollectionFilter? _requiredSearchFilter() {
-    if (widget.isDeckCollection) {
-      final format = widget.filter?.format?.trim().toLowerCase();
-      if (format == null || format.isEmpty) {
-        return null;
-      }
-      return CollectionFilter(format: format);
-    }
     if (_isFilterCollection) {
       return _effectiveFilter();
     }
     return null;
+  }
+
+  String? _deckSearchFormatConstraint() {
+    if (!widget.isDeckCollection) {
+      return null;
+    }
+    final format = widget.filter?.format?.trim().toLowerCase();
+    if (format == null || format.isEmpty) {
+      return null;
+    }
+    return format;
   }
 
   Future<void> _addCard(BuildContext context) async {
@@ -77,6 +81,7 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
             ? widget.collectionId
             : null,
         requiredFilter: _requiredSearchFilter(),
+        deckFormatConstraint: _deckSearchFormatConstraint(),
         addMissingToCollectionId: _isWishlistCollection
             ? widget.collectionId
             : null,
@@ -245,6 +250,17 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     BuildContext context,
     List<CardSearchResult> cards,
   ) async {
+    final deckFormat = _deckSearchFormatConstraint();
+    final deckLegalityByCardId =
+        deckFormat == null || cards.isEmpty
+        ? const <String, bool>{}
+        : await ScryfallDatabase.instance.fetchCardLegalityForFormat(
+            cards.map((card) => card.id).toList(growable: false),
+            format: deckFormat,
+          );
+    if (!context.mounted) {
+      return null;
+    }
     final result = await showDialog<List<CardSearchResult>>(
       context: context,
       builder: (dialogContext) {
@@ -338,6 +354,17 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
                           final imageUrl = _normalizeCardImageUrlForDisplay(
                             card.imageUri,
                           );
+                          final isLegal = deckLegalityByCardId[card.id];
+                          final legalityLabel = isLegal == null
+                              ? null
+                              : (isLegal
+                                    ? l10n.legalLabel
+                                    : l10n.notLegalLabel);
+                          final legalityColor = isLegal == null
+                              ? null
+                              : (isLegal
+                                    ? const Color(0xFFE9C46A)
+                                    : const Color(0xFFD06D5F));
                           return ListTile(
                             dense: true,
                             onTap: () {
@@ -374,10 +401,28 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
                                 ),
                               ),
                             ),
-                            title: Text(
-                              card.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            title: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  card.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (legalityLabel != null)
+                                  Text(
+                                    legalityLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.labelMedium?.copyWith(
+                                      fontSize: 13.5,
+                                      color: legalityColor,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                              ],
                             ),
                             subtitle: Text(
                               '${card.setName} • ${card.collectorProgressLabel}',
@@ -536,11 +581,27 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       }
       var added = 0;
       for (final card in cards) {
-        await _inventoryService.addToInventory(
-          card.id,
-          printingId: card.printingId,
-          deltaQty: 1,
-        );
+        if (widget.isDeckCollection) {
+          final currentEntry = await ScryfallDatabase.instance.fetchCardEntryById(
+            card.id,
+            printingId: card.printingId,
+            collectionId: ownedCollectionId,
+          );
+          await ScryfallDatabase.instance.upsertCollectionCard(
+            ownedCollectionId,
+            card.id,
+            printingId: card.printingId,
+            quantity: (currentEntry?.quantity ?? 0) + 1,
+            foil: false,
+            altArt: false,
+          );
+        } else {
+          await _inventoryService.addToInventory(
+            card.id,
+            printingId: card.printingId,
+            deltaQty: 1,
+          );
+        }
         added += 1;
       }
       if (!context.mounted) {

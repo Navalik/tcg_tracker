@@ -313,7 +313,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                                       const SizedBox(width: 6),
                                       _raritySquare(entry.rarity),
                                     ],
-                                    ],
+                                  ],
                                 );
                               },
                             ),
@@ -340,6 +340,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                     );
                     return IconButton(
                       tooltip: l10n.addOne,
+                      style: _galleryQuickActionStyle(),
                       iconSize: 36,
                       icon: AnimatedSwitcher(
                         duration: const Duration(milliseconds: 250),
@@ -445,6 +446,12 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
         _isMissingStyleCollection &&
         !_isWishlistCollection &&
         entry.quantity == 0;
+    final deckLegality = widget.isDeckCollection
+        ? _deckLegalityByCardId[entry.cardId]
+        : null;
+    final deckLegalityLabel = deckLegality == null
+        ? null
+        : (deckLegality ? l10n.legalLabel : l10n.notLegalLabel);
     final hasCornerQuantity = entry.quantity > 1;
     final showQuickAdd =
         _isWishlistCollection ||
@@ -533,6 +540,42 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                         fit: StackFit.expand,
                         children: [
                           _cardImageOrPlaceholder(entry.imageUri),
+                          if (deckLegalityLabel != null)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: deckLegality == true
+                                  ? _buildBadge(
+                                      deckLegalityLabel,
+                                      inverted: true,
+                                    )
+                                  : Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 9,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xCC3A1613),
+                                        borderRadius: BorderRadius.circular(
+                                          9999,
+                                        ),
+                                        border: Border.all(
+                                          color: const Color(0xFFD06D5F),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        deckLegalityLabel,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFFFF8A7A),
+                                            ),
+                                      ),
+                                    ),
+                            ),
                           if (entry.altArt)
                             Positioned(
                               top: 6,
@@ -732,7 +775,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                               const SizedBox(width: 6),
                               _raritySquare(entry.rarity),
                             ],
-                            ],
+                          ],
                         ),
                       ],
                     ),

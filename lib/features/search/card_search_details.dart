@@ -340,7 +340,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
     if (legalFormatLabels.isNotEmpty) {
       add(l10n.detailFormat, legalFormatLabels.join(', '));
     } else {
-      final deckFormat = widget.requiredFilter?.format?.trim().toLowerCase();
+      final deckFormat = _deckFormatConstraint;
       if (deckFormat != null && deckFormat.isNotEmpty) {
         add(l10n.detailFormat, deckFormatLabel(deckFormat));
       }

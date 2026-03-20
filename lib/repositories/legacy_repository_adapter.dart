@@ -164,6 +164,7 @@ class LegacyScryfallRepositoryAdapter
       () => _database.countCardsForFilterWithSearch(
         filter,
         searchQuery: searchQuery,
+        languages: languages,
       ),
     );
   }

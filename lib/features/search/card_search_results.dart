@@ -3,6 +3,23 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _CardSearchResultsSection on _CardSearchSheetState {
+  static const double _searchQuickActionSize = 42;
+
+  ButtonStyle _searchQuickActionStyle() {
+    return IconButton.styleFrom(
+      backgroundColor: const Color(0xCC1C1510),
+      foregroundColor: const Color(0xFFE9C46A),
+      disabledBackgroundColor: const Color(0x991C1510),
+      disabledForegroundColor: const Color(0xFF8A7A62),
+      side: const BorderSide(color: Color(0xFF5D4731), width: 1),
+      shape: const CircleBorder(),
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(_searchQuickActionSize, _searchQuickActionSize),
+      fixedSize: const Size(_searchQuickActionSize, _searchQuickActionSize),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
   Decoration _cardTintDecorationForSearch(CardSearchResult card) {
     final base = Theme.of(context).colorScheme.surface;
     final accents = _accentColorsForCard(
@@ -345,7 +362,7 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                                     const SizedBox(width: 6),
                                     _raritySquare(card.rarity),
                                   ],
-                                  ],
+                                ],
                               );
                             },
                           ),
@@ -377,15 +394,9 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                               IconButton(
                                 key: quickAddButtonKey,
                                 tooltip: l10n.addOne,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 40,
-                                  height: 40,
-                                ),
-                                visualDensity: VisualDensity.compact,
+                                style: _searchQuickActionStyle(),
                                 iconSize: 32,
                                 icon: const Icon(Icons.add_circle, size: 32),
-                                color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
                                     : () => _addCardFromPreview(
@@ -434,11 +445,14 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
 
   Widget _buildGalleryCard(CardSearchResult card, AppLocalizations l10n) {
     final isMissing = _isMissingCard(card);
+    final deckLegality = _deckFormatConstraint != null
+        ? _deckLegalityByCardId[card.id]
+        : null;
     final statusBadge = _statusBadgeLabel(card, l10n);
     final hasStatusBadge = statusBadge != null;
     final canSelectCards = widget.selectionEnabled;
     final showAdd = !canSelectCards && widget.ownershipCollectionId != null;
-    final showMissingQuickAdd = isMissing && showAdd;
+    final showQuickAdd = showAdd;
     final quickAddButtonKey = GlobalKey();
     final imageUrl = _normalizeCardImageUrlForDisplay(card.imageUri);
     final setLabel = _setLabelForSearch(card);
@@ -518,22 +532,16 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                                         compact: true,
                                       ),
                                 ),
-                          if (showMissingQuickAdd)
+                          if (showQuickAdd)
                             Positioned(
                               bottom: 2,
                               left: 2,
                               child: IconButton(
                                 key: quickAddButtonKey,
                                 tooltip: l10n.addOne,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 40,
-                                  height: 40,
-                                ),
-                                visualDensity: VisualDensity.compact,
+                                style: _searchQuickActionStyle(),
                                 iconSize: 32,
                                 icon: const Icon(Icons.add_circle, size: 32),
-                                color: const Color(0xFFE9C46A),
                                 onPressed: _addingFromPreview
                                     ? null
                                     : () => _addCardFromPreview(
@@ -547,8 +555,28 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                               bottom: 8,
                               right: 8,
                               child: isMissing
-                                  ? _buildMissingCardChip(context, statusBadge)
-                                  : _buildBadge(statusBadge, inverted: true),
+                                  ? _buildGalleryStatusCardChip(
+                                      context,
+                                      statusBadge,
+                                    )
+                                  : (deckLegality != null
+                                        ? _buildGalleryStatusCardChip(
+                                            context,
+                                            statusBadge,
+                                            backgroundColor: deckLegality
+                                                ? const Color(0xCC1C1510)
+                                                : const Color(0xCC3A1613),
+                                            borderColor: deckLegality
+                                                ? const Color(0xFF5D4731)
+                                                : const Color(0xFFD06D5F),
+                                            textColor: deckLegality
+                                                ? const Color(0xFFE9C46A)
+                                                : const Color(0xFFFF8A7A),
+                                          )
+                                        : _buildBadge(
+                                            statusBadge,
+                                            inverted: true,
+                                          )),
                             ),
                         ],
                       ),
@@ -588,7 +616,7 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                               const SizedBox(width: 6),
                               _raritySquare(card.rarity),
                             ],
-                            ],
+                          ],
                         ),
                       ],
                     ),

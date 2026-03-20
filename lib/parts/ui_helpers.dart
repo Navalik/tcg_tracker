@@ -314,6 +314,48 @@ Widget _buildMissingCardChip(BuildContext context, String label) {
   );
 }
 
+Widget _buildGalleryStatusCardChip(
+  BuildContext context,
+  String label, {
+  Color backgroundColor = const Color(0xCC1C1510),
+  Color borderColor = const Color(0xFF5D4731),
+  Color textColor = const Color(0xFFE9C46A),
+}) {
+  return IgnorePointer(
+    child: Container(
+      height: 42,
+      constraints: const BoxConstraints(minWidth: 92),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: textColor,
+          fontWeight: FontWeight.w800,
+          fontSize: 15,
+          height: 1,
+          letterSpacing: 0.35,
+        ),
+      ),
+    ),
+  );
+}
+
 Widget _buildCardCornerTextLabel(
   BuildContext context,
   String label, {

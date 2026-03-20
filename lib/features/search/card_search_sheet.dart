@@ -36,6 +36,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.customMembershipCollectionId,
     this.addMissingToCollectionId,
     this.requiredFilter,
+    this.deckFormatConstraint,
     this.showFilterButton = true,
   });
 
@@ -48,6 +49,7 @@ class _CardSearchSheet extends StatefulWidget {
   final int? customMembershipCollectionId;
   final int? addMissingToCollectionId;
   final CollectionFilter? requiredFilter;
+  final String? deckFormatConstraint;
   final bool showFilterButton;
 
   @override
@@ -111,12 +113,20 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Map<String, bool> _deckLegalityByCardId = const {};
 
   String? get _deckFormatConstraint {
+    final explicit = widget.deckFormatConstraint?.trim().toLowerCase();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit;
+    }
     final format = widget.requiredFilter?.format?.trim().toLowerCase();
     if (format == null || format.isEmpty) {
       return null;
     }
     return format;
   }
+
+  bool get _isDeckContext => widget.addToOwnershipCollectionDirectly;
+
+  bool get _isDeckSearch => _deckFormatConstraint != null;
 
   bool get _isPokemonSearch => _activeSearchGame == AppTcgGame.pokemon;
 
@@ -315,12 +325,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _countLoading = true;
     });
     final filter = _effectiveAdvancedFilter();
-    final total = await appRepositories.search.countCardsForFilterWithSearch(
-      filter,
-      gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
-      searchQuery: _query.isEmpty ? null : _query,
-      languages: _effectiveLanguages(),
-    );
+    final trimmedQuery = _query.trim();
+    final total = trimmedQuery.isEmpty
+        ? await appRepositories.search.countCardsForFilterWithSearch(
+            filter,
+            gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
+            searchQuery: null,
+            languages: _effectiveLanguages(),
+          )
+        : await _countExactAdvancedFilterMatches(filter, trimmedQuery);
     if (!mounted) {
       return;
     }
@@ -328,6 +341,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       _filterTotalCount = total;
       _countLoading = false;
     });
+  }
+
+  Future<int> _countExactAdvancedFilterMatches(
+    CollectionFilter filter,
+    String query,
+  ) async {
+    const pageSize = 400;
+    var offset = 0;
+    var total = 0;
+    while (true) {
+      var page = await appRepositories.search.fetchCardsForAdvancedFilters(
+        filter,
+        gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
+        searchQuery: query,
+        languages: _effectiveLanguages(),
+        limit: pageSize,
+        offset: offset,
+      );
+      final rawPageCount = page.length;
+      if (page.isEmpty) {
+        break;
+      }
+      page = _applyPrefixWordFilter(page, query);
+      total += page.length;
+      if (rawPageCount < pageSize) {
+        break;
+      }
+      offset += pageSize;
+    }
+    return total;
   }
 
   List<String> _effectiveLanguages() {
@@ -366,7 +409,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       Map<String, int> localOwnedQuantities = const {};
       Map<String, int> localMissingQuantities = const {};
       Map<String, bool> localDeckLegality = const {};
-      if (ownershipCollectionId != null && filteredLocal.isNotEmpty) {
+      if (!_isDeckContext &&
+          ownershipCollectionId != null &&
+          filteredLocal.isNotEmpty) {
         localOwnedQuantities = await ScryfallDatabase.instance
             .fetchCollectionQuantities(
               ownershipCollectionId,
@@ -378,7 +423,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
               .toList(growable: false);
         }
       }
-      if (filteredLocal.isNotEmpty) {
+      if (!_isDeckContext && filteredLocal.isNotEmpty) {
         localMissingQuantities = await _fetchMissingCollectionQuantities(
           filteredLocal,
         );
@@ -455,7 +500,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     Map<String, int> missingQuantities = const {};
     Map<String, bool> deckLegality = const {};
     final ownershipCollectionId = widget.ownershipCollectionId;
-    if (ownershipCollectionId != null && page.isNotEmpty) {
+    if (!_isDeckContext && ownershipCollectionId != null && page.isNotEmpty) {
       ownedQuantities = await ScryfallDatabase.instance
           .fetchCollectionQuantities(
             ownershipCollectionId,
@@ -467,7 +512,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
             .toList(growable: false);
       }
     }
-    if (page.isNotEmpty) {
+    if (!_isDeckContext && page.isNotEmpty) {
       missingQuantities = await _fetchMissingCollectionQuantities(page);
       page = _excludeAlreadyMissingCards(page, missingQuantities);
     }
@@ -893,6 +938,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         required.manaMax != null ||
         required.hpMin != null ||
         required.hpMax != null ||
+        (required.format?.trim().isNotEmpty ?? false) ||
         (required.collectorNumber?.trim().isNotEmpty ?? false) ||
         required.languages.isNotEmpty ||
         required.sets.isNotEmpty ||
@@ -1278,7 +1324,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       const pageSize = 200;
       var offset = 0;
       while (true) {
-        final page = await appRepositories.search.fetchCardsForAdvancedFilters(
+        var page = await appRepositories.search.fetchCardsForAdvancedFilters(
           filter,
           gameId: _isPokemonSearch ? TcgGameId.pokemon : TcgGameId.mtg,
           searchQuery: _query.isEmpty ? null : _query,
@@ -1286,14 +1332,19 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           limit: pageSize,
           offset: offset,
         );
+        final rawPageCount = page.length;
+        final trimmedQuery = _query.trim();
+        if (trimmedQuery.isNotEmpty) {
+          page = _applyPrefixWordFilter(page, trimmedQuery);
+        }
         if (page.isEmpty) {
           break;
         }
         allResults.addAll(page);
-        if (page.length < pageSize) {
+        if (rawPageCount < pageSize) {
           break;
         }
-        offset += page.length;
+        offset += rawPageCount;
       }
       final filtered = allResults;
       if (!mounted) {
@@ -1441,7 +1492,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   bool _isMissingCard(CardSearchResult card) {
-    if (widget.ownershipCollectionId == null) {
+    if (widget.ownershipCollectionId == null || _isDeckContext) {
       return false;
     }
     final quantity = _ownedQuantitiesByCardId[card.id] ?? 0;
@@ -1675,7 +1726,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                   label: Text(l10n.allArtworks),
                                 ),
                               if (!_isPokemonSearch) const SizedBox(width: 10),
-                              if (widget.ownershipCollectionId != null)
+                              if (widget.ownershipCollectionId != null &&
+                                  !_isDeckSearch)
                                 FilterChip(
                                   selected: _ownedOnlyFilter,
                                   onSelected: (value) async {

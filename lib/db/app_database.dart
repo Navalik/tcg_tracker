@@ -1335,7 +1335,7 @@ class ScryfallDatabase {
     return <String, dynamic>{
       'schemaVersion': 1,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      if (metadata != null) 'metadata': metadata,
+      'metadata': metadata,
       'collections': collectionRows
           .map(
             (row) => <String, dynamic>{
@@ -2703,6 +2703,7 @@ class ScryfallDatabase {
   Future<int> countCardsForFilterWithSearch(
     CollectionFilter filter, {
     String? searchQuery,
+    List<String> languages = const [],
   }) async {
     final canonicalCount = await _tryCountCanonicalPokemonFilteredCards(
       filter,
@@ -2725,6 +2726,18 @@ class ScryfallDatabase {
       final like = '%${query.toLowerCase()}%';
       variables.add(Variable.withString(like));
       variables.add(Variable.withString(like));
+    }
+    if (languages.isNotEmpty) {
+      final normalized = languages
+          .map((lang) => lang.trim().toLowerCase())
+          .where((lang) => lang.isNotEmpty)
+          .toList();
+      if (normalized.isNotEmpty) {
+        whereClauses.add(
+          'LOWER(cards.lang) IN (${List.filled(normalized.length, '?').join(', ')})',
+        );
+        variables.addAll(normalized.map((lang) => Variable.withString(lang)));
+      }
     }
     final whereSql = whereClauses.isEmpty
         ? ''
