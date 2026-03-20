@@ -48,7 +48,8 @@ class PokemonBulkService {
   static const int _minFullProfileCards = 10000;
   File? _lastAutomaticCollectionsBackupFile;
 
-  File? get lastAutomaticCollectionsBackupFile => _lastAutomaticCollectionsBackupFile;
+  File? get lastAutomaticCollectionsBackupFile =>
+      _lastAutomaticCollectionsBackupFile;
 
   Future<bool> isInstalled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -201,9 +202,7 @@ class PokemonBulkService {
       progressEnd: 0.90,
     );
     if (inserted < _minFullProfileCards) {
-      throw HttpException(
-        'pokemon_hosted_bundle_incomplete:$inserted',
-      );
+      throw HttpException('pokemon_hosted_bundle_incomplete:$inserted');
     }
     legacyBuildStopwatch.stop();
 
@@ -313,9 +312,7 @@ class PokemonBulkService {
     if (hostedBatch != null) {
       return hostedBatch;
     }
-    throw HttpException(
-      'pokemon_hosted_bundle_unavailable:$languageSignature',
-    );
+    throw HttpException('pokemon_hosted_bundle_unavailable:$languageSignature');
   }
 
   Future<CanonicalCatalogImportBatch?> _tryDownloadHostedCanonicalSnapshot({
@@ -378,12 +375,13 @@ class PokemonBulkService {
         final downloadedLanguages = <String>{};
         for (var i = 0; i < selectedBundles.length; i++) {
           final bundle = selectedBundles[i];
-          final bundleId = ((bundle['id'] as String?)?.trim().toLowerCase() ??
-                  '')
-              .isEmpty
+          final bundleId =
+              ((bundle['id'] as String?)?.trim().toLowerCase() ?? '').isEmpty
               ? 'bundle_$i'
               : (bundle['id'] as String).trim().toLowerCase();
-          final assetPath = _resolveCanonicalSnapshotAssetPathFromBundle(bundle);
+          final assetPath = _resolveCanonicalSnapshotAssetPathFromBundle(
+            bundle,
+          );
           if (assetPath == null || assetPath.trim().isEmpty) {
             return null;
           }
@@ -419,16 +417,16 @@ class PokemonBulkService {
             return null;
           }
           final downloadedSignature =
-              (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
+              (parsed['languages_signature'] as String?)
+                  ?.trim()
+                  .toLowerCase() ??
               '';
           if (downloadedSignature.isNotEmpty) {
             downloadedLanguages.addAll(
               _languageCodeSetFromSignature(downloadedSignature),
             );
           } else {
-            downloadedLanguages.addAll(
-              _bundleLanguageSet(bundle),
-            );
+            downloadedLanguages.addAll(_bundleLanguageSet(bundle));
           }
           final batchJson = parsed['batch'];
           if (batchJson is! Map) {
@@ -447,9 +445,9 @@ class PokemonBulkService {
           )) {
             return null;
           }
-          final bundleLanguages = _bundleLanguageSet(bundle).toList(
-            growable: false,
-          );
+          final bundleLanguages = _bundleLanguageSet(
+            bundle,
+          ).toList(growable: false);
           if (snapshotSchemaVersion < _canonicalSnapshotSchemaVersion &&
               bundleLanguages.length == 1) {
             batch = _upgradeHostedSnapshotBatchForLanguage(
@@ -595,10 +593,9 @@ class PokemonBulkService {
       await _writeCanonicalCatalogSnapshot(
         batch,
         profile: profile.trim().toLowerCase(),
-        languageSignature:
-            downloadedSignature.isNotEmpty
-                ? downloadedSignature
-                : expectedLanguageSignature,
+        languageSignature: downloadedSignature.isNotEmpty
+            ? downloadedSignature
+            : expectedLanguageSignature,
       );
       await _clearHostedBundleDiagnostic();
       onStatus?.call('Using hosted Pokemon snapshot');
@@ -876,7 +873,9 @@ class PokemonBulkService {
       'installed_dataset_version': prefs.getString(_prefsKeyInstalledVersion),
       'installed_dataset_source': prefs.getString(_prefsKeyInstalledSource),
       'installed_dataset_profile': prefs.getString(_prefsKeyInstalledProfile),
-      'installed_dataset_languages': prefs.getString(_prefsKeyInstalledLanguages),
+      'installed_dataset_languages': prefs.getString(
+        _prefsKeyInstalledLanguages,
+      ),
       'installed_dataset_at': prefs.getInt(_prefsKeyInstalledAt),
       'installed_manifest_fingerprint': prefs.getString(
         _prefsKeyManifestFingerprint,
@@ -1106,6 +1105,20 @@ class PokemonBulkService {
     return (bundle['compatibility_version'] as num?)?.toInt() ?? 1;
   }
 
+  List<Map<String, dynamic>>? selectHostedBundlesForMissingLanguagesForTesting({
+    required List<Map<String, dynamic>> bundles,
+    required String profile,
+    required Set<String> requiredLanguages,
+    Set<String> existingLanguages = const <String>{},
+  }) {
+    return _selectHostedBundlesForMissingLanguages(
+      bundles: bundles,
+      profile: profile,
+      requiredLanguages: requiredLanguages,
+      existingLanguages: existingLanguages,
+    );
+  }
+
   bool _isSupportedHostedCompatibilityVersion(int version) {
     return version >= _hostedBundleCompatibilityVersion;
   }
@@ -1145,15 +1158,17 @@ class PokemonBulkService {
     required Set<String> requiredLanguages,
     required Set<String> existingLanguages,
   }) {
-    final profileBundles = bundles.where((bundle) {
-      final bundleProfile =
-          (bundle['profile'] as String?)?.trim().toLowerCase() ?? '';
-      return (bundleProfile.isEmpty ||
-              bundleProfile == profile.trim().toLowerCase()) &&
-          _isSupportedHostedCompatibilityVersion(
-            _bundleCompatibilityVersion(bundle),
-          );
-    }).toList(growable: false);
+    final profileBundles = bundles
+        .where((bundle) {
+          final bundleProfile =
+              (bundle['profile'] as String?)?.trim().toLowerCase() ?? '';
+          return (bundleProfile.isEmpty ||
+                  bundleProfile == profile.trim().toLowerCase()) &&
+              _isSupportedHostedCompatibilityVersion(
+                _bundleCompatibilityVersion(bundle),
+              );
+        })
+        .toList(growable: false);
     final byId = <String, Map<String, dynamic>>{};
     for (final bundle in profileBundles) {
       final id = (bundle['id'] as String?)?.trim();
@@ -1224,6 +1239,8 @@ class PokemonBulkService {
           continue;
         }
         selectedIds.add(dependencyId);
+        selected.add(dependency);
+        covered.addAll(dependencyLanguages);
         queue.add(dependency);
       }
     }
@@ -1342,17 +1359,13 @@ class PokemonBulkService {
           ? delta.languageCode
           : base.languageCode,
       providerMappings: providerMappings.values.toList(growable: false),
-      rarity: (delta.rarity ?? '').trim().isNotEmpty ? delta.rarity : base.rarity,
+      rarity: (delta.rarity ?? '').trim().isNotEmpty
+          ? delta.rarity
+          : base.rarity,
       releaseDate: delta.releaseDate ?? base.releaseDate,
       imageUris: delta.imageUris.isNotEmpty ? delta.imageUris : base.imageUris,
-      finishKeys: {
-        ...base.finishKeys,
-        ...delta.finishKeys,
-      },
-      metadata: <String, Object?>{
-        ...base.metadata,
-        ...delta.metadata,
-      },
+      finishKeys: {...base.finishKeys, ...delta.finishKeys},
+      metadata: <String, Object?>{...base.metadata, ...delta.metadata},
     );
   }
 

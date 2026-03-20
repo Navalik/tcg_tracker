@@ -1277,7 +1277,8 @@ class CanonicalCatalogStore {
     );
     return <String, CanonicalPrintingViewData>{
       for (final row in rows)
-        ((row['printing_id'] as String? ?? '').trim()): CanonicalPrintingViewData(
+        ((row['printing_id'] as String? ?? '')
+            .trim()): CanonicalPrintingViewData(
           printingId: (row['printing_id'] as String? ?? '').trim(),
           name: (row['display_name'] as String? ?? '').trim(),
           setCode: ((row['set_code'] as String? ?? '').trim().toLowerCase()),
@@ -2060,7 +2061,6 @@ class CanonicalCatalogStore {
         ...cardNameParams,
         ...setNameParams,
         ...subtypeParams,
-        ...normalizedLanguages,
         CatalogProviderId.pokemonTcgApi.value,
         ownedCollectionId,
         TcgGameId.pokemon.value,
