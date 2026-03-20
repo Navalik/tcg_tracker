@@ -851,6 +851,32 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     Widget basicLandCell(String mana) {
       final count = basicLandCounts[mana] ?? 0;
       final manaColor = _basicLandColor(mana);
+      Widget actionButton({
+        required IconData icon,
+        required VoidCallback onTap,
+        required double alpha,
+      }) {
+        return Material(
+          color: const Color(0xCC1C1510),
+          shape: const CircleBorder(
+            side: BorderSide(color: Color(0xFF5D4731), width: 1),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: Icon(
+                icon,
+                size: 14,
+                color: manaColor.withValues(alpha: alpha),
+              ),
+            ),
+          ),
+        );
+      }
+
       return Container(
         decoration: BoxDecoration(
           color: manaColor.withValues(alpha: 0.16),
@@ -861,17 +887,10 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            InkWell(
+            actionButton(
+              icon: Icons.add,
               onTap: () => _changeBasicLandInDeck(mana, 1),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: EdgeInsets.all(2),
-                child: Icon(
-                  Icons.add,
-                  size: 14,
-                  color: manaColor.withValues(alpha: 0.95),
-                ),
-              ),
+              alpha: 0.95,
             ),
             const SizedBox(height: 2),
             Text(
@@ -882,17 +901,10 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
               ),
             ),
             const SizedBox(height: 2),
-            InkWell(
+            actionButton(
+              icon: Icons.remove,
               onTap: () => _changeBasicLandInDeck(mana, -1),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: EdgeInsets.all(2),
-                child: Icon(
-                  Icons.remove,
-                  size: 14,
-                  color: manaColor.withValues(alpha: 0.9),
-                ),
-              ),
+              alpha: 0.9,
             ),
           ],
         ),
@@ -1167,6 +1179,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
   ) {
     final sections = _buildDeckSections(visibleCards, l10n);
     final children = <Widget>[_buildDeckStatsCard(visibleCards, l10n)];
+    final listBottomPadding = 112.0 + MediaQuery.of(context).padding.bottom;
     for (var i = 0; i < sections.length; i++) {
       final section = sections[i];
       children.add(
@@ -1240,7 +1253,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     }
     return ListView(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, listBottomPadding),
       children: children,
     );
   }
