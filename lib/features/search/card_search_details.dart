@@ -6,6 +6,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
   Future<void> _showCardDetailsForSearch(CardSearchResult card) async {
     final entry = await ScryfallDatabase.instance.fetchCardEntryById(
       card.id,
+      printingId: card.printingId,
       collectionId: widget.ownershipCollectionId,
     );
     if (!mounted) {
@@ -28,6 +29,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
     }
     final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
       card.id,
+      printingId: card.printingId,
       collectionId: widget.ownershipCollectionId,
     );
     if (!mounted) {
@@ -52,6 +54,14 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
     } catch (_) {
       legalFormats = const [];
     }
+    Map<String, dynamic>? cardJsonPayload;
+    try {
+      cardJsonPayload = await ScryfallDatabase.instance.fetchCardJsonPayload(
+        entry.cardId,
+      );
+    } catch (_) {
+      cardJsonPayload = null;
+    }
     if (!mounted) {
       return;
     }
@@ -63,7 +73,12 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         final addButtonKey = GlobalKey();
         var showCheck = false;
         final l10n = AppLocalizations.of(context)!;
-        final details = _parseCardDetails(l10n, entry, legalFormats);
+        final details = _parseCardDetails(
+          l10n,
+          entry,
+          legalFormats,
+          cardJsonPayload,
+        );
         final typeLine = entry.typeLine.trim();
         final manaCost = entry.manaCost.trim();
         final oracleText = entry.oracleText.trim();
@@ -269,6 +284,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
     AppLocalizations l10n,
     CollectionCardEntry entry,
     List<String> legalFormats,
+    Map<String, dynamic>? cardJsonPayload,
   ) {
     final setLabel = entry.setName.isNotEmpty
         ? entry.setName
@@ -286,6 +302,36 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
     }
 
     add(l10n.detailRarity, _formatRarity(context, entry.rarity));
+    final pokemonDetails = _parsePokemonCardDetails(cardJsonPayload);
+    if (pokemonDetails != null) {
+      add(l10n.pokemonCardCategoryLabel, pokemonDetails.category);
+      add('HP', pokemonDetails.hp);
+      add(l10n.pokemonEnergyTypeLabel, pokemonDetails.types);
+      add(
+        _localizedInlineLabel(context, it: 'Stadio', en: 'Stage'),
+        pokemonDetails.stage,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Evolve da', en: 'Evolves from'),
+        pokemonDetails.evolvesFrom,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Marchio reg.', en: 'Regulation'),
+        pokemonDetails.regulationMark,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Debolezze', en: 'Weaknesses'),
+        pokemonDetails.weaknesses,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Resistenze', en: 'Resistances'),
+        pokemonDetails.resistances,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Costo ritirata', en: 'Retreat'),
+        pokemonDetails.retreatCost,
+      );
+    }
     add(l10n.detailSetName, entry.setName);
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
@@ -547,6 +593,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
       if (missingCollectionId != null) {
         final ownedQty = await InventoryService.instance.currentInventoryQty(
           card.id,
+          printingId: card.printingId,
         );
         if (ownedQty > 0) {
           if (mounted) {
@@ -564,10 +611,12 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         await ScryfallDatabase.instance.addCardToCollectionAsMissing(
           missingCollectionId,
           card.id,
+          printingId: card.printingId,
         );
       } else if (customMembershipCollectionId != null) {
         final ownedQty = await InventoryService.instance.currentInventoryQty(
           card.id,
+          printingId: card.printingId,
         );
         if (ownedQty <= 0) {
           if (mounted) {
@@ -585,6 +634,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         await ScryfallDatabase.instance.upsertCollectionMembership(
           customMembershipCollectionId,
           card.id,
+          printingId: card.printingId,
         );
       } else if (ownedCollectionId != null) {
         if (widget.addToOwnershipCollectionDirectly) {
@@ -592,12 +642,17 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
           await ScryfallDatabase.instance.upsertCollectionCard(
             ownedCollectionId,
             card.id,
+            printingId: card.printingId,
             quantity: currentQty + 1,
             foil: false,
             altArt: false,
           );
         } else {
-          await InventoryService.instance.addToInventory(card.id, deltaQty: 1);
+          await InventoryService.instance.addToInventory(
+            card.id,
+            printingId: card.printingId,
+            deltaQty: 1,
+          );
         }
       }
       if (!mounted) {
@@ -649,6 +704,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
       if (missingCollectionId != null) {
         final ownedQty = await InventoryService.instance.currentInventoryQty(
           entry.cardId,
+          printingId: entry.printingId,
         );
         if (ownedQty > 0) {
           if (mounted) {
@@ -666,10 +722,12 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         await ScryfallDatabase.instance.addCardToCollectionAsMissing(
           missingCollectionId,
           entry.cardId,
+          printingId: entry.printingId,
         );
       } else if (customMembershipCollectionId != null) {
         final ownedQty = await InventoryService.instance.currentInventoryQty(
           entry.cardId,
+          printingId: entry.printingId,
         );
         if (ownedQty <= 0) {
           if (mounted) {
@@ -687,6 +745,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         await ScryfallDatabase.instance.upsertCollectionMembership(
           customMembershipCollectionId,
           entry.cardId,
+          printingId: entry.printingId,
         );
       } else if (ownedCollectionId != null) {
         if (widget.addToOwnershipCollectionDirectly) {
@@ -694,6 +753,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
           await ScryfallDatabase.instance.upsertCollectionCard(
             ownedCollectionId,
             entry.cardId,
+            printingId: entry.printingId,
             quantity: currentQty + 1,
             foil: false,
             altArt: false,
@@ -701,6 +761,7 @@ extension _CardSearchDetailsSection on _CardSearchSheetState {
         } else {
           await InventoryService.instance.addToInventory(
             entry.cardId,
+            printingId: entry.printingId,
             deltaQty: 1,
           );
         }

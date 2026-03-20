@@ -14,10 +14,10 @@ class TcgdexPokemonProvider
   TcgdexPokemonProvider({TcgdexApiClient? apiClient})
     : _apiClient = apiClient ?? TcgdexApiClient();
 
-  static const TcgCardLanguage canonicalLanguage = TcgCardLanguage.en;
-  static const List<TcgCardLanguage> supportedLanguages = <TcgCardLanguage>[
-    TcgCardLanguage.en,
-    TcgCardLanguage.it,
+  static const String canonicalLanguage = TcgLanguageCodes.en;
+  static const List<String> supportedLanguages = <String>[
+    TcgLanguageCodes.en,
+    TcgLanguageCodes.it,
   ];
   static const int _setFetchConcurrency = 32;
   static final RegExp _providerObjectIdPattern = RegExp(r'^[a-z0-9-]+$');
@@ -159,7 +159,7 @@ class TcgdexPokemonProvider
 
   Future<CatalogSet?> fetchSetByCodeLocalized(
     String setCode, {
-    required TcgCardLanguage language,
+    required String language,
   }) async {
     final payload = await _fetchSetPayload(setCode, language: language);
     if (payload == null) {
@@ -170,7 +170,7 @@ class TcgdexPokemonProvider
 
   Future<List<String>> fetchSetCardIds(
     String setCode, {
-    TcgCardLanguage language = canonicalLanguage,
+    String language = canonicalLanguage,
   }) async {
     final payload = await _fetchSetPayload(setCode, language: language);
     if (payload == null) {
@@ -195,7 +195,7 @@ class TcgdexPokemonProvider
 
   Future<List<ProviderPrintingBundle>> fetchSetPrintings(
     String setCode, {
-    List<TcgCardLanguage> languages = supportedLanguages,
+    List<String> languages = supportedLanguages,
     void Function(int completed, int total)? onProgress,
   }) async {
     final ids = await fetchSetCardIds(setCode);
@@ -244,16 +244,18 @@ class TcgdexPokemonProvider
 
   Future<ProviderPrintingBundle?> fetchPrintingBundle(
     String providerObjectId, {
-    List<TcgCardLanguage> languages = supportedLanguages,
+    List<String> languages = supportedLanguages,
   }) async {
     final normalizedId = _normalizeProviderObjectId(providerObjectId);
     if (normalizedId == null) {
       return null;
     }
     final resolvedLanguages = _resolveLanguages(
-      languages.map((language) => language.code).toList(growable: false),
+      languages.map((language) => language.trim().toLowerCase()).toList(
+        growable: false,
+      ),
     );
-    final localizedPayloads = <TcgCardLanguage, Map<String, dynamic>>{};
+    final localizedPayloads = <String, Map<String, dynamic>>{};
     for (final language in resolvedLanguages) {
       try {
         final payload = await _fetchCardPayload(
@@ -325,21 +327,21 @@ class TcgdexPokemonProvider
 
   CatalogSet? mapSetPayload(
     Map<String, dynamic> payload, {
-    required TcgCardLanguage language,
+    required String language,
   }) {
     return _mapSet(payload, language);
   }
 
   ProviderPrintingBundle? mapPrintingBundleFromPayloads(
     Map<String, dynamic> canonicalPayload,
-    Map<TcgCardLanguage, Map<String, dynamic>> localizedPayloads,
+    Map<String, Map<String, dynamic>> localizedPayloads,
   ) {
     return _mapPrintingBundle(canonicalPayload, localizedPayloads);
   }
 
   Future<Map<String, dynamic>?> _fetchCardPayload(
     String providerObjectId, {
-    required TcgCardLanguage language,
+    required String language,
   }) async {
     try {
       final payload = await _apiClient.getJson(
@@ -381,14 +383,14 @@ class TcgdexPokemonProvider
 
   Future<Map<String, dynamic>?> _fetchSetPayload(
     String setCode, {
-    required TcgCardLanguage language,
+    required String language,
   }) {
     final normalized = setCode.trim();
     if (normalized.isEmpty) {
       return Future<Map<String, dynamic>?>.value(null);
     }
     final resolvedCode = _normalizeTcgdexSetCode(normalized);
-    final cacheKey = '${language.code}:$resolvedCode';
+    final cacheKey = '${language.trim().toLowerCase()}:$resolvedCode';
     return _setPayloadCache.putIfAbsent(cacheKey, () async {
       for (final candidate in _setEndpointCandidates(resolvedCode)) {
         try {
@@ -439,7 +441,7 @@ class TcgdexPokemonProvider
 
   ProviderPrintingBundle? _mapPrintingBundle(
     Map<String, dynamic> canonicalPayload,
-    Map<TcgCardLanguage, Map<String, dynamic>> localizedPayloads,
+    Map<String, Map<String, dynamic>> localizedPayloads,
   ) {
     final providerObjectId = (canonicalPayload['id'] as String?)?.trim() ?? '';
     final localizedSet = canonicalPayload['set'];
@@ -475,11 +477,11 @@ class TcgdexPokemonProvider
       }
     }
     final defaultLocalizedCard = localizedCards.firstWhere(
-      (value) => value.language == canonicalLanguage,
+      (value) => value.languageCode == canonicalLanguage,
       orElse: () => localizedCards.first,
     );
     final defaultLocalizedSet = localizedSets.firstWhere(
-      (value) => value.language == canonicalLanguage,
+      (value) => value.languageCode == canonicalLanguage,
       orElse: () => localizedSets.first,
     );
     final releaseDateRaw = (canonicalPayload['updated'] as String?)?.trim();
@@ -543,6 +545,7 @@ class TcgdexPokemonProvider
       gameId: gameId,
       collectorNumber:
           (canonicalPayload['localId'] as String?)?.trim() ?? providerObjectId,
+      languageCode: canonicalLanguage,
       providerMappings: <ProviderMapping>[
         ProviderMapping(
           providerId: providerId,
@@ -580,7 +583,7 @@ class TcgdexPokemonProvider
     return ProviderPrintingBundle(card: card, set: set, printing: printing);
   }
 
-  CatalogSet? _mapSet(Map<String, dynamic> payload, TcgCardLanguage language) {
+  CatalogSet? _mapSet(Map<String, dynamic> payload, String language) {
     final setCode = (payload['id'] as String?)?.trim().toLowerCase() ?? '';
     final name = (payload['name'] as String?)?.trim() ?? '';
     if (setCode.isEmpty || name.isEmpty) {
@@ -589,7 +592,7 @@ class TcgdexPokemonProvider
     final setId = _setId(setCode);
     final localized = LocalizedSetData(
       setId: setId,
-      language: language,
+      languageCode: language,
       name: name,
       seriesName: _nestedString(payload, 'serie', 'name'),
     );
@@ -614,7 +617,7 @@ class TcgdexPokemonProvider
 
   LocalizedCardData? _mapLocalizedCard(
     String cardId,
-    TcgCardLanguage language,
+    String language,
     Map<String, dynamic> payload,
   ) {
     final name = (payload['name'] as String?)?.trim() ?? '';
@@ -623,7 +626,7 @@ class TcgdexPokemonProvider
     }
     return LocalizedCardData(
       cardId: cardId,
-      language: language,
+      languageCode: language,
       name: name,
       subtypeLine: _buildSubtypeLine(payload),
       rulesText: _buildRulesText(payload),
@@ -638,7 +641,7 @@ class TcgdexPokemonProvider
 
   LocalizedSetData? _mapLocalizedSet(
     String setId,
-    TcgCardLanguage language,
+    String language,
     Object? rawSet,
   ) {
     if (rawSet is! Map) {
@@ -651,7 +654,7 @@ class TcgdexPokemonProvider
     }
     return LocalizedSetData(
       setId: setId,
-      language: language,
+      languageCode: language,
       name: name,
       seriesName: _nestedString(payload, 'serie', 'name'),
     );
@@ -767,27 +770,22 @@ class TcgdexPokemonProvider
   }
 
   Uri _buildUri(
-    TcgCardLanguage language,
+    String language,
     String path, {
     Map<String, String>? queryParameters,
   }) {
     final normalizedPath = path.startsWith('/') ? path.substring(1) : path;
     return Uri.parse(
-      '${TcgdexApiClient.baseUrl}/${language.code}/$normalizedPath',
+      '${TcgdexApiClient.baseUrl}/${language.trim().toLowerCase()}/$normalizedPath',
     ).replace(queryParameters: queryParameters);
   }
 
-  List<TcgCardLanguage> _resolveLanguages(List<String> rawLanguages) {
-    final resolved = <TcgCardLanguage>[canonicalLanguage];
+  List<String> _resolveLanguages(List<String> rawLanguages) {
+    final resolved = <String>[canonicalLanguage];
     for (final raw in rawLanguages) {
       final normalized = raw.trim().toLowerCase();
-      final language = switch (normalized) {
-        'it' => TcgCardLanguage.it,
-        'en' => TcgCardLanguage.en,
-        _ => null,
-      };
-      if (language != null && !resolved.contains(language)) {
-        resolved.add(language);
+      if (normalized.isNotEmpty && !resolved.contains(normalized)) {
+        resolved.add(normalized);
       }
     }
     return resolved;

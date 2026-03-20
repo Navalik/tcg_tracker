@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../db/app_database.dart';
 import '../db/canonical_catalog_store.dart';
 import '../domain/domain_models.dart';
+import 'local_backup_service.dart';
 import 'pokemon_dataset_manifest.dart';
 
 class PokemonBulkService {
@@ -37,25 +38,17 @@ class PokemonBulkService {
   static const int _maxAttemptsPerPage = 4;
   static const String _canonicalSnapshotFileName =
       'canonical_catalog_snapshot.json';
+  static const int _canonicalSnapshotSchemaVersion = 2;
+  static const int _hostedBundleCompatibilityVersion = 2;
   static const String _hostedBundleManifestUrl =
       'https://github.com/Navalik/tcg_tracker/releases/latest/download/manifest.json';
   static const String _hostedCanonicalSnapshotAssetName =
       'canonical_catalog_snapshot.json.gz';
   static const String _fixedProfile = 'full';
   static const int _minFullProfileCards = 10000;
+  File? _lastAutomaticCollectionsBackupFile;
 
-  void _logPhaseDuration(String label, Stopwatch stopwatch) {
-    final elapsed = stopwatch.elapsed;
-    final minutes = elapsed.inMinutes;
-    final seconds = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
-    final millis = elapsed.inMilliseconds
-        .remainder(1000)
-        .toString()
-        .padLeft(3, '0');
-    debugPrint(
-      'Pokemon import phase "$label" took ${minutes}m $seconds.${millis}s',
-    );
-  }
+  File? get lastAutomaticCollectionsBackupFile => _lastAutomaticCollectionsBackupFile;
 
   Future<bool> isInstalled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -123,6 +116,7 @@ class PokemonBulkService {
   }
 
   Future<void> clearLocalDatasetArtifacts() async {
+    _lastAutomaticCollectionsBackupFile = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_prefsKeyInstalledVersion);
     await prefs.remove(_prefsKeyInstalledSource);
@@ -155,7 +149,7 @@ class PokemonBulkService {
     final selectedLanguageSignature = await _selectedPokemonLanguageSignature();
     final languageLabel =
         selectedCanonicalLanguages
-            .map((language) => language.code.toUpperCase())
+            .map((language) => language.toUpperCase())
             .toList(growable: false)
           ..sort();
     final totalStopwatch = Stopwatch()..start();
@@ -176,10 +170,6 @@ class PokemonBulkService {
       onStatus: onStatus,
     );
     canonicalDownloadStopwatch.stop();
-    _logPhaseDuration(
-      'download canonical catalog snapshot',
-      canonicalDownloadStopwatch,
-    );
 
     final canonicalImportStopwatch = Stopwatch()..start();
     onStatus?.call('Importing local Pokemon catalog');
@@ -193,10 +183,6 @@ class PokemonBulkService {
       },
     );
     canonicalImportStopwatch.stop();
-    _logPhaseDuration(
-      'import canonical catalog snapshot',
-      canonicalImportStopwatch,
-    );
 
     final database = await ScryfallDatabase.instance.open();
     onProgress(0.70);
@@ -220,10 +206,6 @@ class PokemonBulkService {
       );
     }
     legacyBuildStopwatch.stop();
-    _logPhaseDuration(
-      'build legacy compatibility dataset',
-      legacyBuildStopwatch,
-    );
 
     final finalizeStopwatch = Stopwatch()..start();
     onStatus?.call('Finalizing local database');
@@ -251,9 +233,7 @@ class PokemonBulkService {
     }
     await _clearHostedBundleDiagnostic();
     finalizeStopwatch.stop();
-    _logPhaseDuration('finalize local database', finalizeStopwatch);
     totalStopwatch.stop();
-    _logPhaseDuration('full pokemon install', totalStopwatch);
     onStatus?.call('Completed ($inserted cards)');
     onProgress(1);
   }
@@ -270,7 +250,7 @@ class PokemonBulkService {
 
   Future<CanonicalCatalogImportBatch> _downloadCanonicalCatalogSnapshot({
     required String profile,
-    required List<TcgCardLanguage> languages,
+    required List<String> languages,
     required String languageSignature,
     required bool allowUseExistingSnapshot,
     required void Function(double progress) onProgress,
@@ -278,12 +258,14 @@ class PokemonBulkService {
   }) async {
     final normalizedProfile = profile.trim().toLowerCase();
     final requestedLanguageCodes = languages
-        .map((language) => language.code.trim().toLowerCase())
+        .map((language) => language.trim().toLowerCase())
         .where((code) => code.isNotEmpty)
         .toSet();
     final snapshot = await _readCanonicalSnapshotPayload();
     if (allowUseExistingSnapshot &&
         snapshot != null &&
+        snapshot.schemaVersion >= _canonicalSnapshotSchemaVersion &&
+        _isSupportedHostedCompatibilityVersion(snapshot.compatibilityVersion) &&
         snapshot.profile == normalizedProfile &&
         snapshot.batch.cards.isNotEmpty &&
         snapshot.batch.printings.isNotEmpty) {
@@ -305,10 +287,7 @@ class PokemonBulkService {
         }
         return snapshot.batch;
       }
-      final missingLanguages = missingCodes
-          .map(_languageFromCode)
-          .whereType<TcgCardLanguage>()
-          .toList(growable: false);
+      final missingLanguages = missingCodes.toList(growable: false);
       if (missingLanguages.isNotEmpty) {
         final hostedDeltaBatch = await _tryDownloadHostedCanonicalSnapshot(
           profile: normalizedProfile,
@@ -362,6 +341,13 @@ class PokemonBulkService {
       stage = 'manifest_parse';
       final manifestParsed = jsonDecode(manifestRaw);
       if (manifestParsed is! Map<String, dynamic>) {
+        return null;
+      }
+      final manifestCompatibilityVersion =
+          (manifestParsed['compatibility_version'] as num?)?.toInt() ?? 1;
+      if (!_isSupportedHostedCompatibilityVersion(
+        manifestCompatibilityVersion,
+      )) {
         return null;
       }
       final requiredLanguages = _languageCodeSetFromSignature(
@@ -449,9 +435,28 @@ class PokemonBulkService {
             return null;
           }
           stage = 'batch_parse:$bundleId';
-          final batch = canonicalCatalogBatchFromJson(
+          var batch = canonicalCatalogBatchFromJson(
             Map<String, dynamic>.from(batchJson),
           );
+          final snapshotSchemaVersion =
+              (parsed['schema_version'] as num?)?.toInt() ?? 1;
+          final snapshotCompatibilityVersion =
+              (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
+          if (!_isSupportedHostedCompatibilityVersion(
+            snapshotCompatibilityVersion,
+          )) {
+            return null;
+          }
+          final bundleLanguages = _bundleLanguageSet(bundle).toList(
+            growable: false,
+          );
+          if (snapshotSchemaVersion < _canonicalSnapshotSchemaVersion &&
+              bundleLanguages.length == 1) {
+            batch = _upgradeHostedSnapshotBatchForLanguage(
+              batch,
+              languageCode: bundleLanguages.first,
+            );
+          }
           if (batch.cards.isEmpty || batch.printings.isEmpty) {
             return null;
           }
@@ -547,6 +552,13 @@ class PokemonBulkService {
       final downloadedSignature =
           (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
           '';
+      final snapshotCompatibilityVersion =
+          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
+      if (!_isSupportedHostedCompatibilityVersion(
+        snapshotCompatibilityVersion,
+      )) {
+        return null;
+      }
       if (downloadedSignature.isNotEmpty &&
           !_signatureContainsRequiredLanguages(
             availableSignature: downloadedSignature,
@@ -559,15 +571,35 @@ class PokemonBulkService {
         return null;
       }
       stage = 'batch_parse:canonical_catalog_snapshot';
-      final batch = canonicalCatalogBatchFromJson(
+      var batch = canonicalCatalogBatchFromJson(
         Map<String, dynamic>.from(batchJson),
       );
+      final snapshotSchemaVersion =
+          (parsed['schema_version'] as num?)?.toInt() ?? 1;
+      final downloadedLanguageCodes = _languageCodeSetFromSignature(
+        downloadedSignature.isNotEmpty
+            ? downloadedSignature
+            : expectedLanguageSignature,
+      ).toList(growable: false);
+      if (snapshotSchemaVersion < _canonicalSnapshotSchemaVersion &&
+          downloadedLanguageCodes.length == 1) {
+        batch = _upgradeHostedSnapshotBatchForLanguage(
+          batch,
+          languageCode: downloadedLanguageCodes.first,
+        );
+      }
       if (batch.cards.isEmpty || batch.printings.isEmpty) {
         return null;
       }
       stage = 'snapshot_write';
-      final snapshotFile = await _canonicalSnapshotFile();
-      await snapshotFile.writeAsString(jsonText);
+      await _writeCanonicalCatalogSnapshot(
+        batch,
+        profile: profile.trim().toLowerCase(),
+        languageSignature:
+            downloadedSignature.isNotEmpty
+                ? downloadedSignature
+                : expectedLanguageSignature,
+      );
       await _clearHostedBundleDiagnostic();
       onStatus?.call('Using hosted Pokemon snapshot');
       onProgress(1);
@@ -691,10 +723,6 @@ class PokemonBulkService {
     final canonicalRestoreStopwatch = Stopwatch()..start();
     await _restoreCanonicalCatalogSnapshot(snapshotFile);
     canonicalRestoreStopwatch.stop();
-    _logPhaseDuration(
-      'restore canonical catalog snapshot',
-      canonicalRestoreStopwatch,
-    );
     final files =
         datasetDir
             .listSync()
@@ -754,10 +782,6 @@ class PokemonBulkService {
       }
     });
     legacyReimportStopwatch.stop();
-    _logPhaseDuration(
-      'reimport legacy compatibility dataset from cache',
-      legacyReimportStopwatch,
-    );
 
     if (inserted <= 0) {
       throw const FormatException('pokemon_dataset_cache_invalid');
@@ -780,7 +804,6 @@ class PokemonBulkService {
       'local_cache:${files.length}:$inserted:$nowMs',
     );
     totalStopwatch.stop();
-    _logPhaseDuration('full pokemon cache reimport', totalStopwatch);
     onStatus?.call('Completed');
     onProgress(1);
   }
@@ -789,6 +812,10 @@ class PokemonBulkService {
     required void Function(double progress) onProgress,
     void Function(String status)? onStatus,
   }) async {
+    await _createAutomaticCollectionsBackup(
+      reason: 'pokemon_reimport_or_install',
+      onStatus: onStatus,
+    );
     final selectedLanguageSignature = await _selectedPokemonLanguageSignature();
     final snapshotCompatible = await _isCanonicalSnapshotCompatible(
       expectedProfile: _fixedProfile,
@@ -809,11 +836,54 @@ class PokemonBulkService {
     }
     onStatus?.call('Refreshing Pokemon catalog for selected languages');
     onProgress(0.0);
+    await _deleteCanonicalSnapshotIfPresent();
     await installDataset(
       onProgress: onProgress,
       onStatus: onStatus,
-      allowLanguageDeltaFromCache: true,
+      allowLanguageDeltaFromCache: false,
     );
+  }
+
+  Future<void> _createAutomaticCollectionsBackup({
+    required String reason,
+    void Function(String status)? onStatus,
+  }) async {
+    final metadata = await _buildAutomaticBackupMetadata(reason: reason);
+    onStatus?.call('Saving local collection safety backup');
+    final result = await LocalBackupService.instance.exportCollectionsBackup(
+      metadata: metadata,
+      filePrefix: LocalBackupService.pokemonAutomaticBackupPrefix,
+      skipIfEmpty: true,
+    );
+    _lastAutomaticCollectionsBackupFile = result?.file;
+    if (result == null) {
+      return;
+    }
+  }
+
+  Future<Map<String, Object?>> _buildAutomaticBackupMetadata({
+    required String reason,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final selectedLanguageSignature = await _selectedPokemonLanguageSignature();
+    return <String, Object?>{
+      'kind': 'automatic_pre_update_backup',
+      'game': 'pokemon',
+      'reason': reason,
+      'created_by': 'pokemon_bulk_service',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'selected_language_signature': selectedLanguageSignature,
+      'installed_dataset_version': prefs.getString(_prefsKeyInstalledVersion),
+      'installed_dataset_source': prefs.getString(_prefsKeyInstalledSource),
+      'installed_dataset_profile': prefs.getString(_prefsKeyInstalledProfile),
+      'installed_dataset_languages': prefs.getString(_prefsKeyInstalledLanguages),
+      'installed_dataset_at': prefs.getInt(_prefsKeyInstalledAt),
+      'installed_manifest_fingerprint': prefs.getString(
+        _prefsKeyManifestFingerprint,
+      ),
+      'expected_bundle_compatibility_version':
+          _hostedBundleCompatibilityVersion,
+    };
   }
 
   Future<void> reimportFromCanonicalSnapshot({
@@ -834,21 +904,14 @@ class PokemonBulkService {
 
     onStatus?.call('Restoring Pokemon canonical catalog');
     onProgress(0.02);
-    final canonicalRestoreStopwatch = Stopwatch()..start();
     await _importCanonicalCatalogBatch(
       snapshot.batch,
       onProgress: (_) {},
       onStatus: null,
     );
-    canonicalRestoreStopwatch.stop();
-    _logPhaseDuration(
-      'restore canonical catalog snapshot',
-      canonicalRestoreStopwatch,
-    );
 
     onStatus?.call('Rebuilding local Pokemon database');
     onProgress(0.08);
-    final legacyReimportStopwatch = Stopwatch()..start();
     final inserted = await _installFromCanonicalBatch(
       database: database,
       batch: snapshot.batch,
@@ -859,11 +922,6 @@ class PokemonBulkService {
       },
       progressStart: 0.0,
       progressEnd: 1.0,
-    );
-    legacyReimportStopwatch.stop();
-    _logPhaseDuration(
-      'reimport legacy compatibility dataset from canonical snapshot',
-      legacyReimportStopwatch,
     );
     if (inserted <= 0) {
       throw const FormatException('pokemon_dataset_cache_invalid');
@@ -888,22 +946,21 @@ class PokemonBulkService {
       'canonical_snapshot_cache:${snapshot.batch.printings.length}:$inserted:$nowMs',
     );
     totalStopwatch.stop();
-    _logPhaseDuration('full pokemon canonical cache reimport', totalStopwatch);
     onStatus?.call('Completed');
     onProgress(1);
   }
 
-  Future<List<TcgCardLanguage>> _selectedPokemonCanonicalLanguages() async {
+  Future<List<String>> _selectedPokemonCanonicalLanguages() async {
     // Intermediate release strategy: always build/download the full Pokemon
     // canonical catalog for EN+IT to guarantee deterministic local coverage.
-    return const <TcgCardLanguage>[TcgCardLanguage.en, TcgCardLanguage.it];
+    return const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it];
   }
 
   Future<String> _selectedPokemonLanguageSignature() async {
     final languages = await _selectedPokemonCanonicalLanguages();
     final codes =
         languages
-            .map((language) => language.code.trim().toLowerCase())
+            .map((language) => language.trim().toLowerCase())
             .where((code) => code.isNotEmpty)
             .toSet()
             .toList(growable: false)
@@ -916,6 +973,16 @@ class PokemonBulkService {
     return File(p.join(datasetDir.path, _canonicalSnapshotFileName));
   }
 
+  Future<void> _deleteCanonicalSnapshotIfPresent() async {
+    final file = await _canonicalSnapshotFile();
+    if (!await file.exists()) {
+      return;
+    }
+    try {
+      await file.delete();
+    } catch (_) {}
+  }
+
   Future<void> _writeCanonicalCatalogSnapshot(
     CanonicalCatalogImportBatch batch, {
     required String profile,
@@ -923,6 +990,8 @@ class PokemonBulkService {
   }) async {
     final file = await _canonicalSnapshotFile();
     final payload = <String, Object?>{
+      'schema_version': _canonicalSnapshotSchemaVersion,
+      'compatibility_version': _hostedBundleCompatibilityVersion,
       'profile': profile,
       'languages_signature': languageSignature,
       'generated_at': DateTime.now().toUtc().toIso8601String(),
@@ -948,6 +1017,15 @@ class PokemonBulkService {
       final profile =
           (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
       if (profile != expectedProfile.trim().toLowerCase()) {
+        return false;
+      }
+      final schemaVersion = (parsed['schema_version'] as num?)?.toInt() ?? 1;
+      if (schemaVersion < _canonicalSnapshotSchemaVersion) {
+        return false;
+      }
+      final compatibilityVersion =
+          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
+      if (!_isSupportedHostedCompatibilityVersion(compatibilityVersion)) {
         return false;
       }
       final languageSignature =
@@ -982,6 +1060,9 @@ class PokemonBulkService {
       final languageSignature =
           (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
           'en';
+      final schemaVersion = (parsed['schema_version'] as num?)?.toInt() ?? 1;
+      final compatibilityVersion =
+          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
       final batchJson = parsed['batch'];
       if (batchJson is! Map) {
         return null;
@@ -992,6 +1073,8 @@ class PokemonBulkService {
       return _CanonicalSnapshotPayload(
         profile: profile,
         languageSignature: languageSignature,
+        schemaVersion: schemaVersion,
+        compatibilityVersion: compatibilityVersion,
         batch: batch,
       );
     } catch (_) {
@@ -1017,6 +1100,14 @@ class PokemonBulkService {
         .map((code) => code.trim().toLowerCase())
         .where((code) => code.isNotEmpty)
         .toSet();
+  }
+
+  int _bundleCompatibilityVersion(Map<String, dynamic> bundle) {
+    return (bundle['compatibility_version'] as num?)?.toInt() ?? 1;
+  }
+
+  bool _isSupportedHostedCompatibilityVersion(int version) {
+    return version >= _hostedBundleCompatibilityVersion;
   }
 
   List<String> _bundleRequiresList(Map<String, dynamic> bundle) {
@@ -1057,8 +1148,11 @@ class PokemonBulkService {
     final profileBundles = bundles.where((bundle) {
       final bundleProfile =
           (bundle['profile'] as String?)?.trim().toLowerCase() ?? '';
-      return bundleProfile.isEmpty ||
-          bundleProfile == profile.trim().toLowerCase();
+      return (bundleProfile.isEmpty ||
+              bundleProfile == profile.trim().toLowerCase()) &&
+          _isSupportedHostedCompatibilityVersion(
+            _bundleCompatibilityVersion(bundle),
+          );
     }).toList(growable: false);
     final byId = <String, Map<String, dynamic>>{};
     for (final bundle in profileBundles) {
@@ -1172,16 +1266,6 @@ class PokemonBulkService {
     return normalized.join(',');
   }
 
-  TcgCardLanguage? _languageFromCode(String code) {
-    final normalized = code.trim().toLowerCase();
-    for (final language in TcgCardLanguage.values) {
-      if (language.code == normalized) {
-        return language;
-      }
-    }
-    return null;
-  }
-
   CanonicalCatalogImportBatch _mergeCanonicalCatalogBatches(
     CanonicalCatalogImportBatch base,
     CanonicalCatalogImportBatch delta,
@@ -1205,15 +1289,15 @@ class PokemonBulkService {
     }
     final cardLocalizations = <String, LocalizedCardData>{
       for (final value in base.cardLocalizations)
-        '${value.cardId}:${value.language.code}': value,
+        '${value.cardId}:${value.languageCode}': value,
       for (final value in delta.cardLocalizations)
-        '${value.cardId}:${value.language.code}': value,
+        '${value.cardId}:${value.languageCode}': value,
     };
     final setLocalizations = <String, LocalizedSetData>{
       for (final value in base.setLocalizations)
-        '${value.setId}:${value.language.code}': value,
+        '${value.setId}:${value.languageCode}': value,
       for (final value in delta.setLocalizations)
-        '${value.setId}:${value.language.code}': value,
+        '${value.setId}:${value.languageCode}': value,
     };
     final providerMappings = <String, ProviderMappingRecord>{
       for (final value in base.providerMappings)
@@ -1254,6 +1338,9 @@ class PokemonBulkService {
       collectorNumber: delta.collectorNumber.trim().isNotEmpty
           ? delta.collectorNumber
           : base.collectorNumber,
+      languageCode: delta.languageCode.trim().isNotEmpty
+          ? delta.languageCode
+          : base.languageCode,
       providerMappings: providerMappings.values.toList(growable: false),
       rarity: (delta.rarity ?? '').trim().isNotEmpty ? delta.rarity : base.rarity,
       releaseDate: delta.releaseDate ?? base.releaseDate,
@@ -1350,7 +1437,7 @@ class PokemonBulkService {
   Future<int> _installFromCanonicalBatch({
     required AppDatabase database,
     required CanonicalCatalogImportBatch batch,
-    required List<TcgCardLanguage> languages,
+    required List<String> languages,
     required void Function(double progress) onProgress,
     required double progressStart,
     required double progressEnd,
@@ -1366,7 +1453,7 @@ class PokemonBulkService {
     };
     final localizedCardsByLanguage = <String, Map<String, LocalizedCardData>>{};
     for (final localized in batch.cardLocalizations) {
-      final langCode = localized.language.code.trim().toLowerCase();
+      final langCode = localized.languageCode.trim().toLowerCase();
       if (langCode.isEmpty) {
         continue;
       }
@@ -1380,7 +1467,7 @@ class PokemonBulkService {
     }
     final localizedSetsByLanguage = <String, Map<String, LocalizedSetData>>{};
     for (final localized in batch.setLocalizations) {
-      final langCode = localized.language.code.trim().toLowerCase();
+      final langCode = localized.languageCode.trim().toLowerCase();
       if (langCode.isEmpty) {
         continue;
       }
@@ -1393,11 +1480,11 @@ class PokemonBulkService {
       }
     }
     final preferredLanguageCodes = languages
-        .map((language) => language.code.trim().toLowerCase())
+        .map((language) => language.trim().toLowerCase())
         .where((code) => code.isNotEmpty && code != 'en')
         .followedBy(
           languages
-              .map((language) => language.code.trim().toLowerCase())
+              .map((language) => language.trim().toLowerCase())
               .where((code) => code.isNotEmpty && code == 'en'),
         )
         .toSet()
@@ -1415,11 +1502,16 @@ class PokemonBulkService {
           continue;
         }
         final set = setsById[printing.setId];
+        final rowLanguageCode = printing.languageCode.trim().toLowerCase();
+        final rowPreferredLanguages = <String>[
+          if (rowLanguageCode.isNotEmpty) rowLanguageCode,
+          ...preferredLanguageCodes.where((code) => code != rowLanguageCode),
+        ];
         final localizedCard =
             _selectCardLocalization(
               cardId: card.cardId,
               localizedCardsByLanguage: localizedCardsByLanguage,
-              preferredLanguageCodes: preferredLanguageCodes,
+              preferredLanguageCodes: rowPreferredLanguages,
             ) ??
             card.defaultLocalizedData;
         final localizedSet = set == null
@@ -1427,7 +1519,7 @@ class PokemonBulkService {
             : (_selectSetLocalization(
                     setId: set.setId,
                     localizedSetsByLanguage: localizedSetsByLanguage,
-                    preferredLanguageCodes: preferredLanguageCodes,
+                    preferredLanguageCodes: rowPreferredLanguages,
                   ) ??
                   set.defaultLocalizedData);
         final primaryName = (localizedCard?.name ?? card.canonicalName).trim();
@@ -1437,16 +1529,13 @@ class PokemonBulkService {
           localizedCardsByLanguage: localizedCardsByLanguage,
           primaryName: primaryName,
         );
-        final languageCode = (localizedCard?.language.code ?? 'en')
-            .trim()
-            .toLowerCase();
         final row = _canonicalPrintingToLegacyRow(
           card: card,
           printing: printing,
           set: set,
           localizedCard: localizedCard,
           localizedSet: localizedSet,
-          languageCode: languageCode.isEmpty ? 'en' : languageCode,
+          languageCode: rowLanguageCode.isEmpty ? 'en' : rowLanguageCode,
           secondarySearchName: secondaryName,
         );
         if (row != null) {
@@ -1612,10 +1701,31 @@ class PokemonBulkService {
 
   String _providerObjectIdForPrinting(CardPrintingRef printing) {
     for (final mapping in printing.providerMappings) {
+      if (mapping.objectType == 'legacy_printing') {
+        final value = mapping.providerObjectId.trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+    for (final mapping in printing.providerMappings) {
+      if (mapping.providerId == CatalogProviderId.tcgdex &&
+          mapping.objectType == 'printing_localized') {
+        final value = mapping.providerObjectId.trim();
+        if (value.isNotEmpty) {
+          return value;
+        }
+      }
+    }
+    for (final mapping in printing.providerMappings) {
       if (mapping.providerId == CatalogProviderId.tcgdex &&
           (mapping.objectType == 'printing' || mapping.objectType == 'card')) {
         final value = mapping.providerObjectId.trim();
         if (value.isNotEmpty) {
+          final languageCode = printing.languageCode.trim().toLowerCase();
+          if (languageCode.isNotEmpty && languageCode != 'en') {
+            return '$value:$languageCode';
+          }
           return value;
         }
       }
@@ -1626,6 +1736,114 @@ class PokemonBulkService {
     }
     final separator = fallback.lastIndexOf(':');
     return separator >= 0 ? fallback.substring(separator + 1) : fallback;
+  }
+
+  CanonicalCatalogImportBatch _upgradeHostedSnapshotBatchForLanguage(
+    CanonicalCatalogImportBatch batch, {
+    required String languageCode,
+  }) {
+    final normalizedLanguage = languageCode.trim().toLowerCase();
+    if (normalizedLanguage.isEmpty) {
+      return batch;
+    }
+
+    String localizedPrintingId(String printingId) {
+      final normalizedPrintingId = printingId.trim();
+      if (normalizedPrintingId.isEmpty ||
+          normalizedPrintingId.endsWith(':$normalizedLanguage')) {
+        return normalizedPrintingId;
+      }
+      return '$normalizedPrintingId:$normalizedLanguage';
+    }
+
+    ProviderMapping localizedMapping(ProviderMapping mapping) {
+      final objectType = mapping.objectType.trim().toLowerCase();
+      final objectId = mapping.providerObjectId.trim();
+      if (objectId.isEmpty) {
+        return mapping;
+      }
+      if (mapping.providerId == CatalogProviderId.tcgdex &&
+          objectType == 'printing') {
+        return ProviderMapping(
+          providerId: mapping.providerId,
+          objectType: 'printing_localized',
+          providerObjectId: '$objectId:$normalizedLanguage',
+          providerObjectVersion: mapping.providerObjectVersion,
+          mappingConfidence: mapping.mappingConfidence,
+        );
+      }
+      if (objectType == 'legacy_printing') {
+        return ProviderMapping(
+          providerId: mapping.providerId,
+          objectType: mapping.objectType,
+          providerObjectId: '$objectId:$normalizedLanguage',
+          providerObjectVersion: mapping.providerObjectVersion,
+          mappingConfidence: mapping.mappingConfidence,
+        );
+      }
+      return mapping;
+    }
+
+    final printings = batch.printings
+        .map(
+          (printing) => CardPrintingRef(
+            printingId: localizedPrintingId(printing.printingId),
+            cardId: printing.cardId,
+            setId: printing.setId,
+            gameId: printing.gameId,
+            collectorNumber: printing.collectorNumber,
+            languageCode: normalizedLanguage,
+            providerMappings: [
+              for (final mapping in printing.providerMappings)
+                localizedMapping(mapping),
+            ],
+            rarity: printing.rarity,
+            releaseDate: printing.releaseDate,
+            imageUris: printing.imageUris,
+            finishKeys: printing.finishKeys,
+            metadata: <String, Object?>{
+              ...printing.metadata,
+              'base_printing_id': printing.printingId,
+            },
+          ),
+        )
+        .toList(growable: false);
+
+    final providerMappings = batch.providerMappings
+        .map(
+          (record) => ProviderMappingRecord(
+            mapping: localizedMapping(record.mapping),
+            cardId: record.cardId,
+            printingId: record.printingId == null
+                ? null
+                : localizedPrintingId(record.printingId!),
+            setId: record.setId,
+          ),
+        )
+        .toList(growable: false);
+
+    final priceSnapshots = batch.priceSnapshots
+        .map(
+          (snapshot) => PriceSnapshot(
+            printingId: localizedPrintingId(snapshot.printingId),
+            sourceId: snapshot.sourceId,
+            currencyCode: snapshot.currencyCode,
+            amount: snapshot.amount,
+            capturedAt: snapshot.capturedAt,
+            finishKey: snapshot.finishKey,
+          ),
+        )
+        .toList(growable: false);
+
+    return CanonicalCatalogImportBatch(
+      cards: batch.cards,
+      sets: batch.sets,
+      printings: printings,
+      cardLocalizations: batch.cardLocalizations,
+      setLocalizations: batch.setLocalizations,
+      providerMappings: providerMappings,
+      priceSnapshots: priceSnapshots,
+    );
   }
 
   String _pokemonTypeLineFromMetadata(PokemonCardMetadata? metadata) {
@@ -1969,11 +2187,15 @@ class _CanonicalSnapshotPayload {
   const _CanonicalSnapshotPayload({
     required this.profile,
     required this.languageSignature,
+    required this.schemaVersion,
+    required this.compatibilityVersion,
     required this.batch,
   });
 
   final String profile;
   final String languageSignature;
+  final int schemaVersion;
+  final int compatibilityVersion;
   final CanonicalCatalogImportBatch batch;
 }
 

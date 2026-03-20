@@ -55,8 +55,11 @@ class GameRegistry {
             supportsSideboard: true,
             supportsPricing: true,
             supportsScanner: true,
-            supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
-            supportedCardLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
+            supportedUiLanguages: {TcgLanguageCodes.en, TcgLanguageCodes.it},
+            supportedCardLanguages: {
+              TcgLanguageCodes.en,
+              TcgLanguageCodes.it,
+            },
             filterKeys: {
               'query',
               'artist',
@@ -101,8 +104,11 @@ class GameRegistry {
             supportsSideboard: false,
             supportsPricing: false,
             supportsScanner: true,
-            supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
-            supportedCardLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
+            supportedUiLanguages: {TcgLanguageCodes.en, TcgLanguageCodes.it},
+            supportedCardLanguages: {
+              TcgLanguageCodes.en,
+              TcgLanguageCodes.it,
+            },
             filterKeys: {
               'query',
               'sets',
@@ -144,8 +150,8 @@ class GameRegistry {
             supportsSideboard: false,
             supportsPricing: false,
             supportsScanner: false,
-            supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
-            supportedCardLanguages: {TcgCardLanguage.en},
+            supportedUiLanguages: {TcgLanguageCodes.en, TcgLanguageCodes.it},
+            supportedCardLanguages: {TcgLanguageCodes.en},
             filterKeys: {
               'query',
               'sets',
@@ -186,8 +192,8 @@ class GameRegistry {
     supportsSideboard: false,
     supportsPricing: false,
     supportsScanner: false,
-    supportedUiLanguages: {TcgCardLanguage.en, TcgCardLanguage.it},
-    supportedCardLanguages: {TcgCardLanguage.en},
+    supportedUiLanguages: {TcgLanguageCodes.en, TcgLanguageCodes.it},
+    supportedCardLanguages: {TcgLanguageCodes.en},
     filterKeys: {},
     metadataKeys: {},
   );

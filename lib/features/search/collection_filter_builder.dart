@@ -92,6 +92,7 @@ class _CollectionFilterBuilderPageState
       TextEditingController();
 
   final Set<String> _selectedSets = {};
+  final Set<String> _selectedLanguages = {};
   final Set<String> _selectedRarities = {};
   final Set<String> _selectedColors = {};
   final Set<String> _selectedTypes = {};
@@ -134,6 +135,11 @@ class _CollectionFilterBuilderPageState
       }
       _selectedSets.addAll(
         initial.sets.map((value) => value.trim().toLowerCase()),
+      );
+      _selectedLanguages.addAll(
+        initial.languages
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty),
       );
       _selectedRarities.addAll(
         initial.rarities.map((value) => value.trim().toLowerCase()),
@@ -249,6 +255,7 @@ class _CollectionFilterBuilderPageState
       collectorNumber: _collectorNumberController.text.trim().isEmpty
           ? null
           : _collectorNumberController.text.trim(),
+      languages: _selectedLanguages,
       sets: _selectedSets,
       rarities: _selectedRarities,
       colors: _selectedColors,
@@ -272,6 +279,7 @@ class _CollectionFilterBuilderPageState
         filter.hpMin != null ||
         filter.hpMax != null ||
         (filter.collectorNumber?.trim().isNotEmpty ?? false) ||
+        filter.languages.isNotEmpty ||
         filter.sets.isNotEmpty ||
         filter.rarities.isNotEmpty ||
         filter.colors.isNotEmpty ||
@@ -388,6 +396,60 @@ class _CollectionFilterBuilderPageState
     return code.startsWith('it');
   }
 
+  List<String> _supportedLanguageCodes() {
+    return AppSettings.languageCodes
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList()
+      ..sort((a, b) => _languageLabel(a).compareTo(_languageLabel(b)));
+  }
+
+  String _languageLabel(String code) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (code.trim().toLowerCase()) {
+      case 'en':
+        return l10n.languageEnglish;
+      case 'it':
+        return l10n.languageItalian;
+      case 'fr':
+        return l10n.languageFrench;
+      case 'de':
+        return l10n.languageGerman;
+      case 'es':
+        return l10n.languageSpanish;
+      case 'pt':
+        return l10n.languagePortuguese;
+      case 'ja':
+        return l10n.languageJapanese;
+      case 'ko':
+        return l10n.languageKorean;
+      case 'ru':
+        return l10n.languageRussian;
+      case 'zh-hans':
+        return l10n.languageChineseSimplified;
+      case 'zh-hant':
+        return l10n.languageChineseTraditional;
+      case 'ar':
+        return l10n.languageArabic;
+      case 'he':
+        return l10n.languageHebrew;
+      case 'la':
+        return l10n.languageLatin;
+      case 'grc':
+      case 'el':
+        return l10n.languageGreek;
+      case 'sa':
+        return l10n.languageSanskrit;
+      case 'ph':
+      case 'x-phyr':
+        return l10n.languagePhyrexian;
+      case 'qya':
+        return l10n.languageQuenya;
+      default:
+        return code.trim().toUpperCase();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -407,6 +469,7 @@ class _CollectionFilterBuilderPageState
                     set.code.toLowerCase().contains(_setQuery.toLowerCase()),
               )
               .toList();
+    final sortedLanguages = _supportedLanguageCodes();
     final sortedRarities = _rarityOrder;
     final sortedColors = _colorOrder;
 
@@ -534,6 +597,23 @@ class _CollectionFilterBuilderPageState
                 ),
               ),
           ],
+          const SizedBox(height: 16),
+          Text(
+            l10n.searchLanguages,
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          buildChipRow<String>(
+            sortedLanguages,
+            (value) => _selectedLanguages.contains(value),
+            (value) {
+              if (!_selectedLanguages.add(value)) {
+                _selectedLanguages.remove(value);
+              }
+              _schedulePreviewUpdate();
+            },
+            _languageLabel,
+          ),
           const SizedBox(height: 16),
           Text(l10n.rarity, style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),

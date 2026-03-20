@@ -42,7 +42,7 @@ class OnePiecePilotImportService {
           .toList(growable: false),
       setLocalizations: {
         for (final item in bundles.expand((entry) => entry.set.localizedData))
-          '${item.setId}:${item.language.code}': item,
+          '${item.setId}:${item.languageCode}': item,
       }.values.toList(growable: false),
       providerMappings: bundles
           .expand(

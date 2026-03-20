@@ -19,6 +19,52 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
     return _isItalianCollectionUi() ? 'Filtri aggiuntivi' : 'Additional filters';
   }
 
+  String _languageLabel(String code) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (code.trim().toLowerCase()) {
+      case 'en':
+        return l10n.languageEnglish;
+      case 'it':
+        return l10n.languageItalian;
+      case 'fr':
+        return l10n.languageFrench;
+      case 'de':
+        return l10n.languageGerman;
+      case 'es':
+        return l10n.languageSpanish;
+      case 'pt':
+        return l10n.languagePortuguese;
+      case 'ja':
+        return l10n.languageJapanese;
+      case 'ko':
+        return l10n.languageKorean;
+      case 'ru':
+        return l10n.languageRussian;
+      case 'zh-hans':
+        return l10n.languageChineseSimplified;
+      case 'zh-hant':
+        return l10n.languageChineseTraditional;
+      case 'ar':
+        return l10n.languageArabic;
+      case 'he':
+        return l10n.languageHebrew;
+      case 'la':
+        return l10n.languageLatin;
+      case 'grc':
+      case 'el':
+        return l10n.languageGreek;
+      case 'sa':
+        return l10n.languageSanskrit;
+      case 'ph':
+      case 'x-phyr':
+        return l10n.languagePhyrexian;
+      case 'qya':
+        return l10n.languageQuenya;
+      default:
+        return code.trim().toUpperCase();
+    }
+  }
+
   List<String> _requiredCollectionFilterLabels(
     CollectionFilter filter,
     Map<String, String> availableSetCodes,
@@ -58,6 +104,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
       final max = filter.hpMax?.toString() ?? '-';
       labels.add('HP: $min-$max');
     }
+    labels.addAll(filter.languages.map(_languageLabel));
     labels.addAll(
       filter.sets.map(
         (code) =>
@@ -79,6 +126,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
     final base = _baseVisibleCards();
     final availableRarities = <String>{};
     final availableSetCodes = <String, String>{};
+    final availableLanguages = <String>{};
     final availableColors = <String>{};
     final availableTypes = <String>{};
     for (final entry in base) {
@@ -88,6 +136,10 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
       if (entry.setCode.trim().isNotEmpty) {
         availableSetCodes[entry.setCode.trim().toLowerCase()] =
             _setLabelForEntry(entry);
+      }
+      final language = entry.lang.trim().toLowerCase();
+      if (language.isNotEmpty) {
+        availableLanguages.add(language);
       }
       availableColors.addAll(_cardColors(entry));
       availableTypes.addAll(_cardTypes(entry));
@@ -116,6 +168,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
     final tempSetCodes = _selectedSetCodes
         .where((value) => !requiredSetCodes.contains(value.trim().toLowerCase()))
         .toSet();
+    final tempLanguages = _selectedLanguages.toSet();
     final tempColors = _selectedColors
         .where((value) => !requiredColors.contains(value.trim().toUpperCase()))
         .toSet();
@@ -219,6 +272,8 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                 .where((entry) => !requiredSetCodes.contains(entry.key))
                 .toList()
               ..sort((a, b) => a.value.compareTo(b.value));
+            final sortedLanguages = availableLanguages.toList()
+              ..sort((a, b) => _languageLabel(a).compareTo(_languageLabel(b)));
             final filteredSets = sortedSets.where((entry) {
               if (setQuery.isEmpty) {
                 return true;
@@ -384,6 +439,24 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                         ),
                       ),
                     ],
+                    if (sortedLanguages.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.searchLanguages,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedLanguages,
+                        (value) => tempLanguages.contains(value),
+                        (value) {
+                          if (!tempLanguages.add(value)) {
+                            tempLanguages.remove(value);
+                          }
+                        },
+                        _languageLabel,
+                      ),
+                    ],
                     if (sortedColors.isNotEmpty) ...[
                       const SizedBox(height: 16),
                       Text(
@@ -478,6 +551,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                                 setSheetState(() {
                                   tempRarities.clear();
                                   tempSetCodes.clear();
+                                  tempLanguages.clear();
                                   tempColors.clear();
                                   tempTypes.clear();
                                   minController.clear();
@@ -536,6 +610,9 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
       _selectedSetCodes
         ..clear()
         ..addAll(tempSetCodes);
+      _selectedLanguages
+        ..clear()
+        ..addAll(tempLanguages);
       _selectedColors
         ..clear()
         ..addAll(tempColors);

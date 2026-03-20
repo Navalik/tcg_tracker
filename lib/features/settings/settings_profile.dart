@@ -5,7 +5,8 @@ part of 'package:tcg_tracker/main.dart';
 extension _SettingsProfileSection on _SettingsPageState {
   Future<void> _signOut() async {
     try {
-      await GoogleSignIn().signOut();
+      await _ensureGoogleSignInInitialized();
+      await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
     } catch (_) {
       if (!mounted) {
@@ -20,16 +21,7 @@ extension _SettingsProfileSection on _SettingsPageState {
 
   Future<void> _signInWithGoogleFromSettings() async {
     try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        return;
-      }
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-        accessToken: googleAuth.accessToken,
-      );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      await _signInToFirebaseWithGoogle();
     } catch (error) {
       if (!mounted) {
         return;

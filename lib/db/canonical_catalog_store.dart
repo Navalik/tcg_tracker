@@ -100,6 +100,120 @@ class ProviderMappingRecord {
   final String? setId;
 }
 
+class CanonicalPrintingViewData {
+  const CanonicalPrintingViewData({
+    required this.printingId,
+    required this.name,
+    required this.setCode,
+    required this.setName,
+    required this.collectorNumber,
+    required this.rarity,
+    required this.typeLine,
+    required this.manaCost,
+    required this.oracleText,
+    required this.manaValue,
+    required this.lang,
+    required this.artist,
+    required this.power,
+    required this.toughness,
+    required this.loyalty,
+    required this.colors,
+    required this.colorIdentity,
+    required this.releasedAt,
+    required this.setTotal,
+    required this.imageUri,
+  });
+
+  final String printingId;
+  final String name;
+  final String setCode;
+  final String setName;
+  final String collectorNumber;
+  final String rarity;
+  final String typeLine;
+  final String manaCost;
+  final String oracleText;
+  final double? manaValue;
+  final String lang;
+  final String artist;
+  final String power;
+  final String toughness;
+  final String loyalty;
+  final String colors;
+  final String colorIdentity;
+  final String releasedAt;
+  final int? setTotal;
+  final String? imageUri;
+}
+
+class CanonicalCollectionCardData {
+  const CanonicalCollectionCardData({
+    required this.cardId,
+    required this.printingId,
+    required this.name,
+    required this.setCode,
+    required this.setName,
+    required this.setTotal,
+    required this.collectorNumber,
+    required this.rarity,
+    required this.typeLine,
+    required this.manaCost,
+    required this.oracleText,
+    required this.manaValue,
+    required this.lang,
+    required this.artist,
+    required this.power,
+    required this.toughness,
+    required this.loyalty,
+    required this.colors,
+    required this.colorIdentity,
+    required this.releasedAt,
+    required this.quantity,
+    required this.foil,
+    required this.altArt,
+    this.priceUsd,
+    this.priceUsdFoil,
+    this.priceUsdEtched,
+    this.priceEur,
+    this.priceEurFoil,
+    this.priceTix,
+    this.pricesUpdatedAt,
+    this.imageUri,
+  });
+
+  final String cardId;
+  final String printingId;
+  final String name;
+  final String setCode;
+  final String setName;
+  final int? setTotal;
+  final String collectorNumber;
+  final String rarity;
+  final String typeLine;
+  final String manaCost;
+  final String oracleText;
+  final double? manaValue;
+  final String lang;
+  final String artist;
+  final String power;
+  final String toughness;
+  final String loyalty;
+  final String colors;
+  final String colorIdentity;
+  final String releasedAt;
+  final int quantity;
+  final bool foil;
+  final bool altArt;
+  final String? priceUsd;
+  final String? priceUsdFoil;
+  final String? priceUsdEtched;
+  final String? priceEur;
+  final String? priceEurFoil;
+  final String? priceTix;
+  final int? pricesUpdatedAt;
+  final String? imageUri;
+}
+
 Map<String, Object?> _catalogCardToJson(CatalogCard card) {
   return <String, Object?>{
     'card_id': card.cardId,
@@ -197,6 +311,7 @@ Map<String, Object?> _cardPrintingRefToJson(CardPrintingRef printing) {
     'set_id': printing.setId,
     'game_id': printing.gameId.value,
     'collector_number': printing.collectorNumber,
+    'language_code': printing.languageCode,
     'provider_mappings': printing.providerMappings
         .map(_providerMappingToJson)
         .toList(growable: false),
@@ -215,6 +330,7 @@ CardPrintingRef _cardPrintingRefFromJson(Map<String, dynamic> json) {
     setId: (json['set_id'] as String?) ?? '',
     gameId: _tcgGameIdFromValue(json['game_id'] as String?),
     collectorNumber: (json['collector_number'] as String?) ?? '',
+    languageCode: _languageFromCode(json['language_code'] as String?),
     providerMappings:
         (json['provider_mappings'] as List<dynamic>? ?? const <dynamic>[])
             .whereType<Map>()
@@ -236,7 +352,7 @@ CardPrintingRef _cardPrintingRefFromJson(Map<String, dynamic> json) {
 Map<String, Object?> _localizedCardDataToJson(LocalizedCardData localized) {
   return <String, Object?>{
     'card_id': localized.cardId,
-    'language': localized.language.code,
+    'language': localized.languageCode,
     'name': localized.name,
     'subtype_line': localized.subtypeLine,
     'rules_text': localized.rulesText,
@@ -248,7 +364,7 @@ Map<String, Object?> _localizedCardDataToJson(LocalizedCardData localized) {
 LocalizedCardData _localizedCardDataFromJson(Map<String, dynamic> json) {
   return LocalizedCardData(
     cardId: (json['card_id'] as String?) ?? '',
-    language: _languageFromCode(json['language'] as String?),
+    languageCode: _languageFromCode(json['language'] as String?),
     name: (json['name'] as String?) ?? '',
     subtypeLine: json['subtype_line'] as String?,
     rulesText: json['rules_text'] as String?,
@@ -263,7 +379,7 @@ LocalizedCardData _localizedCardDataFromJson(Map<String, dynamic> json) {
 Map<String, Object?> _localizedSetDataToJson(LocalizedSetData localized) {
   return <String, Object?>{
     'set_id': localized.setId,
-    'language': localized.language.code,
+    'language': localized.languageCode,
     'name': localized.name,
     'series_name': localized.seriesName,
   };
@@ -272,7 +388,7 @@ Map<String, Object?> _localizedSetDataToJson(LocalizedSetData localized) {
 LocalizedSetData _localizedSetDataFromJson(Map<String, dynamic> json) {
   return LocalizedSetData(
     setId: (json['set_id'] as String?) ?? '',
-    language: _languageFromCode(json['language'] as String?),
+    languageCode: _languageFromCode(json['language'] as String?),
     name: (json['name'] as String?) ?? '',
     seriesName: json['series_name'] as String?,
   );
@@ -526,13 +642,12 @@ TcgGameId _tcgGameIdFromValue(String? value) {
   return TcgGameId.pokemon;
 }
 
-TcgCardLanguage _languageFromCode(String? code) {
-  for (final item in TcgCardLanguage.values) {
-    if (item.code == code) {
-      return item;
-    }
+String _languageFromCode(String? code) {
+  final normalized = code?.trim().toLowerCase() ?? '';
+  if (normalized.isEmpty) {
+    return TcgLanguageCodes.en;
   }
-  return TcgCardLanguage.en;
+  return normalized;
 }
 
 PriceSourceId _priceSourceIdFromValue(String? value) {
@@ -614,6 +729,65 @@ class CanonicalCatalogStore {
     return store;
   }
 
+  Map<String, dynamic>? fetchPokemonMetadataForLegacyPrinting(String legacyId) {
+    final normalizedId = legacyId.trim();
+    if (normalizedId.isEmpty) {
+      return null;
+    }
+    final rows = _database.select(
+      '''
+      SELECT
+        pm.category AS category,
+        pm.hp AS hp,
+        pm.stage AS stage,
+        pm.evolves_from AS evolves_from,
+        pm.regulation_mark AS regulation_mark,
+        pm.retreat_cost AS retreat_cost,
+        pm.illustrator AS illustrator,
+        pm.types_json AS types_json,
+        pm.subtypes_json AS subtypes_json,
+        pm.weaknesses_json AS weaknesses_json,
+        pm.resistances_json AS resistances_json,
+        pm.attacks_json AS attacks_json,
+        pm.abilities_json AS abilities_json
+      FROM provider_mappings legacy
+      INNER JOIN pokemon_printing_metadata pm ON pm.printing_id = legacy.printing_id
+      WHERE legacy.provider_id = ?
+        AND legacy.object_type = 'legacy_printing'
+        AND legacy.provider_object_id = ?
+      LIMIT 1
+      ''',
+      <Object?>[CatalogProviderId.pokemonTcgApi.value, normalizedId],
+    );
+    if (rows.isEmpty) {
+      return null;
+    }
+    final row = rows.first;
+    return <String, dynamic>{
+      'category': row['category'],
+      'hp': row['hp'],
+      'stage': row['stage'],
+      'evolves_from': row['evolves_from'],
+      'regulation_mark': row['regulation_mark'],
+      'retreat_cost': row['retreat_cost'],
+      'illustrator': row['illustrator'],
+      'types': _parseJsonStringList((row['types_json'] as String?) ?? '[]'),
+      'subtypes': _parseJsonStringList(
+        (row['subtypes_json'] as String?) ?? '[]',
+      ),
+      'weaknesses': _parseJsonObjectList(
+        (row['weaknesses_json'] as String?) ?? '[]',
+      ),
+      'resistances': _parseJsonObjectList(
+        (row['resistances_json'] as String?) ?? '[]',
+      ),
+      'attacks': _parseJsonObjectList((row['attacks_json'] as String?) ?? '[]'),
+      'abilities': _parseJsonObjectList(
+        (row['abilities_json'] as String?) ?? '[]',
+      ),
+    };
+  }
+
   void dispose() {
     _database.dispose();
   }
@@ -687,7 +861,7 @@ class CanonicalCatalogStore {
           card.gameId.value,
           card.canonicalName,
           card.sortName,
-          card.defaultLocalizedData?.language.code,
+          card.defaultLocalizedData?.languageCode,
           jsonEncode(_cardMetadata(card)),
           nowMs,
           nowMs,
@@ -697,8 +871,8 @@ class CanonicalCatalogStore {
 
       final insertPrinting = _database.prepare('''
         INSERT INTO card_printings (
-          id, game_id, card_id, set_id, collector_number, rarity, release_date, image_uris_json, finish_keys_json, metadata_json, created_at_ms, updated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, game_id, card_id, set_id, collector_number, language_code, rarity, release_date, image_uris_json, finish_keys_json, metadata_json, created_at_ms, updated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''');
       final insertPokemonMetadata = gameId == TcgGameId.pokemon
           ? _database.prepare('''
@@ -714,6 +888,7 @@ class CanonicalCatalogStore {
           printing.cardId,
           printing.setId,
           printing.collectorNumber,
+          printing.languageCode,
           printing.rarity,
           printing.releaseDate?.toIso8601String(),
           jsonEncode(printing.imageUris),
@@ -796,7 +971,7 @@ class CanonicalCatalogStore {
       for (final localized in batch.cardLocalizations) {
         insertCardLocalization.execute([
           localized.cardId,
-          localized.language.code,
+          localized.languageCode,
           localized.name,
           localized.subtypeLine,
           localized.rulesText,
@@ -815,7 +990,7 @@ class CanonicalCatalogStore {
       for (final localized in batch.setLocalizations) {
         insertSetLocalization.execute([
           localized.setId,
-          localized.language.code,
+          localized.languageCode,
           localized.name,
           localized.seriesName,
           nowMs,
@@ -878,6 +1053,296 @@ class CanonicalCatalogStore {
   int countTableRows(String tableName) {
     final result = _database.select('SELECT COUNT(*) AS c FROM $tableName');
     return (result.first['c'] as int?) ?? 0;
+  }
+
+  int countPrintingsForGame(TcgGameId gameId) {
+    final rows = _database.select(
+      '''
+      SELECT COUNT(*) AS c
+      FROM card_printings
+      WHERE game_id = ?
+      ''',
+      <Object?>[gameId.value],
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  bool hasCatalogForGame(TcgGameId gameId) {
+    return countPrintingsForGame(gameId) > 0;
+  }
+
+  List<CanonicalCollectionCardData> fetchCollectionCardsForGame({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    String? searchQuery,
+    bool ownedOnly = false,
+    bool missingOnly = false,
+    List<String> preferredLanguages = const <String>['en'],
+    int limit = 200,
+    int? offset,
+  }) {
+    if (gameId == TcgGameId.pokemon) {
+      return _fetchPokemonCollectionCards(
+        filter: filter,
+        ownedCollectionId: ownedCollectionId,
+        searchQuery: searchQuery,
+        ownedOnly: ownedOnly,
+        missingOnly: missingOnly,
+        preferredLanguages: preferredLanguages,
+        limit: limit,
+        offset: offset,
+      );
+    }
+    return _fetchGenericCollectionCards(
+      gameId: gameId,
+      filter: filter,
+      ownedCollectionId: ownedCollectionId,
+      searchQuery: searchQuery,
+      ownedOnly: ownedOnly,
+      missingOnly: missingOnly,
+      preferredLanguages: preferredLanguages,
+      limit: limit,
+      offset: offset,
+    );
+  }
+
+  int countCollectionCardsForGame({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    String? searchQuery,
+    bool ownedOnly = false,
+    bool missingOnly = false,
+    List<String> preferredLanguages = const <String>['en'],
+  }) {
+    if (gameId == TcgGameId.pokemon) {
+      return _countPokemonCollectionCards(
+        filter: filter,
+        ownedCollectionId: ownedCollectionId,
+        searchQuery: searchQuery,
+        ownedOnly: ownedOnly,
+        missingOnly: missingOnly,
+        preferredLanguages: preferredLanguages,
+      );
+    }
+    return _countGenericCollectionCards(
+      gameId: gameId,
+      filter: filter,
+      ownedCollectionId: ownedCollectionId,
+      searchQuery: searchQuery,
+      ownedOnly: ownedOnly,
+      missingOnly: missingOnly,
+      preferredLanguages: preferredLanguages,
+    );
+  }
+
+  Map<String, CanonicalPrintingViewData> fetchPrintingViews(
+    List<String> printingIds, {
+    List<String> preferredLanguages = const <String>['en'],
+  }) {
+    final normalizedIds = printingIds
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedIds.isEmpty) {
+      return const <String, CanonicalPrintingViewData>{};
+    }
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final cardNameParams = <Object?>[];
+    final preferredCardNameSql = _localizedCardNameSql(
+      normalizedLanguages,
+      cardNameParams,
+    );
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final subtypeParams = <Object?>[];
+    final preferredSubtypeSql = _localizedCardSubtypeSql(
+      normalizedLanguages,
+      subtypeParams,
+    );
+    final localizedRulesSql = _localizedCardRulesTextSql(normalizedLanguages);
+    final rows = _database.select(
+      '''
+      SELECT
+        cp.id AS printing_id,
+        COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
+        cs.code AS set_code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
+        cp.collector_number AS collector_number,
+        COALESCE(cp.rarity, '') AS rarity,
+        COALESCE(
+          $preferredSubtypeSql,
+          json_extract(cp.metadata_json, '\$.type_line'),
+          json_extract(cc.metadata_json, '\$.type_line'),
+          TRIM(
+            COALESCE(pm.category, '') ||
+            CASE
+              WHEN pm.subtypes_json IS NOT NULL AND pm.subtypes_json <> '[]'
+                THEN ' ' || REPLACE(REPLACE(REPLACE(pm.subtypes_json, '[', '('), ']', ')'), '"', '')
+              ELSE ''
+            END
+          ),
+          ''
+        ) AS type_line,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.mana_cost'),
+          json_extract(cc.metadata_json, '\$.mana_cost'),
+          ''
+        ) AS mana_cost,
+        COALESCE(
+          $localizedRulesSql,
+          json_extract(cp.metadata_json, '\$.oracle_text'),
+          json_extract(cc.metadata_json, '\$.oracle_text'),
+          ''
+        ) AS oracle_text,
+        CAST(
+          COALESCE(
+            json_extract(cp.metadata_json, '\$.cmc'),
+            json_extract(cc.metadata_json, '\$.cmc')
+          ) AS REAL
+        ) AS cmc,
+        COALESCE(
+          (SELECT ccl.language_code
+             FROM catalog_card_localizations ccl
+            WHERE ccl.card_id = cc.id
+              AND ccl.language_code IN (${_inClause(normalizedLanguages.length)})
+            ORDER BY CASE ccl.language_code ${_preferredLanguageCaseWhen(normalizedLanguages)} ELSE ${normalizedLanguages.length} END
+            LIMIT 1),
+          NULLIF(TRIM(cp.language_code), ''),
+          cc.default_language,
+          'en'
+        ) AS lang,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.artist'),
+          json_extract(cc.metadata_json, '\$.artist'),
+          COALESCE(pm.illustrator, ''),
+          ''
+        ) AS artist,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.power'),
+          json_extract(cc.metadata_json, '\$.power'),
+          ''
+        ) AS power,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.toughness'),
+          json_extract(cc.metadata_json, '\$.toughness'),
+          ''
+        ) AS toughness,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.loyalty'),
+          json_extract(cc.metadata_json, '\$.loyalty'),
+          ''
+        ) AS loyalty,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.colors_json'),
+          json_extract(cc.metadata_json, '\$.colors_json'),
+          pm.types_json,
+          '[]'
+        ) AS colors_json,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.color_identity_json'),
+          json_extract(cc.metadata_json, '\$.color_identity_json'),
+          pm.types_json,
+          '[]'
+        ) AS color_identity_json,
+        COALESCE(cp.release_date, cs.release_date, '') AS released_at,
+        COALESCE(
+          json_extract(cs.metadata_json, '\$.official_total'),
+          json_extract(cs.metadata_json, '\$.total')
+        ) AS set_total,
+        COALESCE(
+          json_extract(cp.image_uris_json, '\$.high_res'),
+          json_extract(cp.image_uris_json, '\$.normal'),
+          json_extract(cp.image_uris_json, '\$.default'),
+          json_extract(cp.image_uris_json, '\$.small')
+        ) AS image_uri
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN pokemon_printing_metadata pm ON pm.printing_id = cp.id
+      WHERE cp.id IN (${_inClause(normalizedIds.length)})
+      ''',
+      <Object?>[
+        ...cardNameParams,
+        ...setNameParams,
+        ...subtypeParams,
+        ...normalizedLanguages,
+        ...normalizedIds,
+      ],
+    );
+    return <String, CanonicalPrintingViewData>{
+      for (final row in rows)
+        ((row['printing_id'] as String? ?? '').trim()): CanonicalPrintingViewData(
+          printingId: (row['printing_id'] as String? ?? '').trim(),
+          name: (row['display_name'] as String? ?? '').trim(),
+          setCode: ((row['set_code'] as String? ?? '').trim().toLowerCase()),
+          setName: (row['set_name'] as String? ?? '').trim(),
+          collectorNumber: (row['collector_number'] as String? ?? '').trim(),
+          rarity: (row['rarity'] as String? ?? '').trim(),
+          typeLine: (row['type_line'] as String? ?? '').trim(),
+          manaCost: (row['mana_cost'] as String? ?? '').trim(),
+          oracleText: (row['oracle_text'] as String? ?? '').trim(),
+          manaValue: (row['cmc'] as num?)?.toDouble(),
+          lang: (row['lang'] as String? ?? '').trim(),
+          artist: (row['artist'] as String? ?? '').trim(),
+          power: (row['power'] as String? ?? '').trim(),
+          toughness: (row['toughness'] as String? ?? '').trim(),
+          loyalty: (row['loyalty'] as String? ?? '').trim(),
+          colors: _jsonColorCodesToLegacyString(row['colors_json']),
+          colorIdentity: _jsonColorCodesToLegacyString(
+            row['color_identity_json'],
+          ),
+          releasedAt: (row['released_at'] as String? ?? '').trim(),
+          setTotal: (row['set_total'] as num?)?.toInt(),
+          imageUri: (row['image_uri'] as String?)?.trim(),
+        ),
+    };
+  }
+
+  String? resolvePrintingIdForLegacyCardId(String legacyId) {
+    final normalizedId = legacyId.trim();
+    if (normalizedId.isEmpty) {
+      return null;
+    }
+    final directRows = _database.select(
+      '''
+      SELECT id AS printing_id
+      FROM card_printings
+      WHERE id = ?
+      LIMIT 1
+      ''',
+      <Object?>[normalizedId],
+    );
+    if (directRows.isNotEmpty) {
+      final direct = (directRows.first['printing_id'] as String?)?.trim();
+      if (direct != null && direct.isNotEmpty) {
+        return direct;
+      }
+    }
+    final mappedRows = _database.select(
+      '''
+      SELECT printing_id AS printing_id
+      FROM provider_mappings
+      WHERE object_type = 'legacy_printing'
+        AND provider_object_id = ?
+        AND TRIM(COALESCE(printing_id, '')) <> ''
+      LIMIT 1
+      ''',
+      <Object?>[normalizedId],
+    );
+    if (mappedRows.isEmpty) {
+      return null;
+    }
+    final printingId = (mappedRows.first['printing_id'] as String?)?.trim();
+    if (printingId == null || printingId.isEmpty) {
+      return null;
+    }
+    return printingId;
   }
 
   List<SetInfo> fetchSetsForGame({
@@ -1016,6 +1481,7 @@ class CanonicalCatalogStore {
       '''
       SELECT
         COALESCE(legacy.provider_object_id, cp.id) AS legacy_id,
+        cp.id AS printing_id,
         COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
         cs.code AS set_code,
         COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
@@ -1165,6 +1631,7 @@ class CanonicalCatalogStore {
       '''
       SELECT
         COALESCE(legacy.provider_object_id, cp.id) AS legacy_id,
+        cp.id AS printing_id,
         COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
         cs.code AS set_code,
         COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
@@ -1253,6 +1720,394 @@ class CanonicalCatalogStore {
     return (rows.first['c'] as int?) ?? 0;
   }
 
+  List<CanonicalCollectionCardData> _fetchGenericCollectionCards({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+    required List<String> preferredLanguages,
+    required int limit,
+    required int? offset,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendGenericFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    if (ownedOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) > 0');
+    } else if (missingOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) = 0');
+    }
+
+    final cardNameParams = <Object?>[];
+    final preferredCardNameSql = _localizedCardNameSql(
+      normalizedLanguages,
+      cardNameParams,
+    );
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final subtypeParams = <Object?>[];
+    final preferredSubtypeSql = _localizedCardSubtypeSql(
+      normalizedLanguages,
+      subtypeParams,
+    );
+    final localizedRulesSql = _localizedCardRulesTextSql(normalizedLanguages);
+
+    final rows = _database.select(
+      '''
+      SELECT
+        COALESCE(legacy.provider_object_id, cp.id) AS card_id,
+        cp.id AS printing_id,
+        COALESCE(owned.quantity, 0) AS quantity,
+        COALESCE(owned.foil, 0) AS foil,
+        COALESCE(owned.alt_art, 0) AS alt_art,
+        COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
+        cs.code AS set_code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
+        COALESCE(
+          json_extract(cs.metadata_json, '\$.official_total'),
+          json_extract(cs.metadata_json, '\$.total')
+        ) AS set_total,
+        cp.collector_number AS collector_number,
+        COALESCE(cp.rarity, '') AS rarity,
+        COALESCE(
+          $preferredSubtypeSql,
+          json_extract(cp.metadata_json, '\$.type_line'),
+          json_extract(cc.metadata_json, '\$.type_line'),
+          ''
+        ) AS type_line,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.mana_cost'),
+          json_extract(cc.metadata_json, '\$.mana_cost'),
+          ''
+        ) AS mana_cost,
+        COALESCE(
+          $localizedRulesSql,
+          json_extract(cp.metadata_json, '\$.oracle_text'),
+          json_extract(cc.metadata_json, '\$.oracle_text'),
+          ''
+        ) AS oracle_text,
+        CAST(
+          COALESCE(
+            json_extract(cp.metadata_json, '\$.cmc'),
+            json_extract(cc.metadata_json, '\$.cmc')
+          ) AS REAL
+        ) AS cmc,
+        LOWER(
+          COALESCE(
+            NULLIF(TRIM(cp.language_code), ''),
+            cc.default_language,
+            'en'
+          )
+        ) AS lang,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.artist'),
+          json_extract(cc.metadata_json, '\$.artist'),
+          ''
+        ) AS artist,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.power'),
+          json_extract(cc.metadata_json, '\$.power'),
+          ''
+        ) AS power,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.toughness'),
+          json_extract(cc.metadata_json, '\$.toughness'),
+          ''
+        ) AS toughness,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.loyalty'),
+          json_extract(cc.metadata_json, '\$.loyalty'),
+          ''
+        ) AS loyalty,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.colors_json'),
+          json_extract(cc.metadata_json, '\$.colors_json'),
+          '[]'
+        ) AS colors_json,
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.color_identity_json'),
+          json_extract(cc.metadata_json, '\$.color_identity_json'),
+          '[]'
+        ) AS color_identity_json,
+        COALESCE(cp.release_date, cs.release_date, '') AS released_at,
+        legacy_card.price_usd AS price_usd,
+        legacy_card.price_usd_foil AS price_usd_foil,
+        legacy_card.price_usd_etched AS price_usd_etched,
+        legacy_card.price_eur AS price_eur,
+        legacy_card.price_eur_foil AS price_eur_foil,
+        legacy_card.price_tix AS price_tix,
+        legacy_card.prices_updated_at AS prices_updated_at,
+        COALESCE(
+          json_extract(cp.image_uris_json, '\$.high_res'),
+          json_extract(cp.image_uris_json, '\$.normal'),
+          json_extract(cp.image_uris_json, '\$.default'),
+          legacy_card.image_uris,
+          json_extract(cp.image_uris_json, '\$.small')
+        ) AS image_uri
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN provider_mappings legacy
+        ON legacy.printing_id = cp.id
+       AND legacy.object_type = 'legacy_printing'
+      LEFT JOIN collection_cards owned
+        ON owned.collection_id = ?
+       AND owned.printing_id = cp.id
+      LEFT JOIN cards legacy_card
+        ON legacy_card.id = legacy.provider_object_id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
+      LIMIT ? OFFSET ?
+      ''',
+      <Object?>[
+        ...cardNameParams,
+        ...setNameParams,
+        ...subtypeParams,
+        ownedCollectionId,
+        gameId.value,
+        ...params,
+        limit,
+        offset ?? 0,
+      ],
+    );
+    return rows.map(_genericCollectionRowToData).toList(growable: false);
+  }
+
+  int _countGenericCollectionCards({
+    required TcgGameId gameId,
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+    required List<String> preferredLanguages,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendGenericFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    if (ownedOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) > 0');
+    } else if (missingOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) = 0');
+    }
+    final rows = _database.select(
+      '''
+      SELECT COUNT(*) AS c
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN collection_cards owned
+        ON owned.collection_id = ?
+       AND owned.printing_id = cp.id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ''',
+      <Object?>[ownedCollectionId, gameId.value, ...params],
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
+  List<CanonicalCollectionCardData> _fetchPokemonCollectionCards({
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+    required List<String> preferredLanguages,
+    required int limit,
+    required int? offset,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendPokemonFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    if (ownedOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) > 0');
+    } else if (missingOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) = 0');
+    }
+
+    final cardNameParams = <Object?>[];
+    final preferredCardNameSql = _localizedCardNameSql(
+      normalizedLanguages,
+      cardNameParams,
+    );
+    final setNameParams = <Object?>[];
+    final preferredSetNameSql = _localizedSetNameSql(
+      normalizedLanguages,
+      setNameParams,
+    );
+    final subtypeParams = <Object?>[];
+    final preferredSubtypeSql = _localizedCardSubtypeSql(
+      normalizedLanguages,
+      subtypeParams,
+    );
+    final localizedRulesSql = _localizedCardRulesTextSql(normalizedLanguages);
+
+    final rows = _database.select(
+      '''
+      SELECT
+        COALESCE(legacy.provider_object_id, cp.id) AS card_id,
+        cp.id AS printing_id,
+        COALESCE(owned.quantity, 0) AS quantity,
+        COALESCE(owned.foil, 0) AS foil,
+        COALESCE(owned.alt_art, 0) AS alt_art,
+        COALESCE($preferredCardNameSql, cc.canonical_name) AS display_name,
+        cs.code AS set_code,
+        COALESCE($preferredSetNameSql, cs.canonical_name) AS set_name,
+        COALESCE(
+          json_extract(cs.metadata_json, '\$.official_total'),
+          json_extract(cs.metadata_json, '\$.total')
+        ) AS set_total,
+        cp.collector_number AS collector_number,
+        COALESCE(cp.rarity, '') AS rarity,
+        COALESCE(
+          $preferredSubtypeSql,
+          TRIM(
+            COALESCE(pm.category, '') ||
+            CASE
+              WHEN pm.subtypes_json <> '[]'
+                THEN ' ' || REPLACE(REPLACE(REPLACE(pm.subtypes_json, '[', '('), ']', ')'), '"', '')
+              ELSE ''
+            END
+          ),
+          ''
+        ) AS type_line,
+        '' AS mana_cost,
+        COALESCE(
+          $localizedRulesSql,
+          json_extract(cc.metadata_json, '\$.pokemon.abilities[0].effect'),
+          ''
+        ) AS oracle_text,
+        NULL AS cmc,
+        LOWER(
+          COALESCE(
+            NULLIF(TRIM(cp.language_code), ''),
+            cc.default_language,
+            'en'
+          )
+        ) AS lang,
+        COALESCE(pm.illustrator, '') AS artist,
+        '' AS power,
+        '' AS toughness,
+        '' AS loyalty,
+        COALESCE(pm.types_json, '[]') AS colors_json,
+        COALESCE(pm.types_json, '[]') AS color_identity_json,
+        COALESCE(cp.release_date, cs.release_date, '') AS released_at,
+        legacy_card.price_usd AS price_usd,
+        legacy_card.price_usd_foil AS price_usd_foil,
+        legacy_card.price_usd_etched AS price_usd_etched,
+        legacy_card.price_eur AS price_eur,
+        legacy_card.price_eur_foil AS price_eur_foil,
+        legacy_card.price_tix AS price_tix,
+        legacy_card.prices_updated_at AS prices_updated_at,
+        COALESCE(
+          json_extract(cp.image_uris_json, '\$.high_res'),
+          json_extract(cp.image_uris_json, '\$.normal'),
+          json_extract(cp.image_uris_json, '\$.default'),
+          json_extract(cp.image_uris_json, '\$.small'),
+          legacy_card.image_uris
+        ) AS image_uri
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN pokemon_printing_metadata pm ON pm.printing_id = cp.id
+      LEFT JOIN provider_mappings legacy
+        ON legacy.printing_id = cp.id
+       AND legacy.provider_id = ?
+       AND legacy.object_type = 'legacy_printing'
+      LEFT JOIN collection_cards owned
+        ON owned.collection_id = ?
+       AND owned.printing_id = cp.id
+      LEFT JOIN cards legacy_card
+        ON legacy_card.id = legacy.provider_object_id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ORDER BY LOWER(display_name), LOWER(cs.code), LOWER(cp.collector_number)
+      LIMIT ? OFFSET ?
+      ''',
+      <Object?>[
+        ...cardNameParams,
+        ...setNameParams,
+        ...subtypeParams,
+        CatalogProviderId.pokemonTcgApi.value,
+        ownedCollectionId,
+        TcgGameId.pokemon.value,
+        ...params,
+        limit,
+        offset ?? 0,
+      ],
+    );
+    return rows.map(_pokemonCollectionRowToData).toList(growable: false);
+  }
+
+  int _countPokemonCollectionCards({
+    required CollectionFilter filter,
+    required int ownedCollectionId,
+    required String? searchQuery,
+    required bool ownedOnly,
+    required bool missingOnly,
+    required List<String> preferredLanguages,
+  }) {
+    final normalizedLanguages = _normalizedLanguageOrder(preferredLanguages);
+    final whereClauses = <String>[];
+    final params = <Object?>[];
+    _appendPokemonFilterQuery(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: normalizedLanguages,
+      whereClauses: whereClauses,
+      params: params,
+    );
+    if (ownedOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) > 0');
+    } else if (missingOnly) {
+      whereClauses.add('COALESCE(owned.quantity, 0) = 0');
+    }
+    final rows = _database.select(
+      '''
+      SELECT COUNT(*) AS c
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      INNER JOIN catalog_sets cs ON cs.id = cp.set_id
+      LEFT JOIN pokemon_printing_metadata pm ON pm.printing_id = cp.id
+      LEFT JOIN collection_cards owned
+        ON owned.collection_id = ?
+       AND owned.printing_id = cp.id
+      WHERE cp.game_id = ?
+        ${whereClauses.isEmpty ? '' : 'AND ${whereClauses.join(' AND ')}'}
+      ''',
+      <Object?>[ownedCollectionId, TcgGameId.pokemon.value, ...params],
+    );
+    return (rows.first['c'] as int?) ?? 0;
+  }
+
   void _initialize() {
     _database.execute('''
       CREATE TABLE IF NOT EXISTS catalog_cards (
@@ -1286,6 +2141,7 @@ class CanonicalCatalogStore {
         card_id TEXT NOT NULL,
         set_id TEXT NOT NULL,
         collector_number TEXT NOT NULL,
+        language_code TEXT NOT NULL DEFAULT 'en',
         rarity TEXT,
         release_date TEXT,
         image_uris_json TEXT NOT NULL DEFAULT '{}',
@@ -1372,6 +2228,8 @@ class CanonicalCatalogStore {
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_card_printings_game_set ON card_printings(game_id, set_id, collector_number)',
     );
+    _ensureCatalogCardsDefaultLanguageColumn();
+    _ensureCardPrintingsLanguageCodeColumn();
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_card_printings_game_rarity ON card_printings(game_id, rarity)',
     );
@@ -1390,6 +2248,30 @@ class CanonicalCatalogStore {
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_pokemon_metadata_illustrator ON pokemon_printing_metadata(illustrator COLLATE NOCASE)',
     );
+  }
+
+  void _ensureCatalogCardsDefaultLanguageColumn() {
+    final rows = _database.select("PRAGMA table_info('catalog_cards')");
+    final hasColumn = rows.any(
+      (row) => ((row['name'] as String?) ?? '').trim() == 'default_language',
+    );
+    if (!hasColumn) {
+      _database.execute(
+        "ALTER TABLE catalog_cards ADD COLUMN default_language TEXT NOT NULL DEFAULT 'en'",
+      );
+    }
+  }
+
+  void _ensureCardPrintingsLanguageCodeColumn() {
+    final rows = _database.select("PRAGMA table_info('card_printings')");
+    final hasColumn = rows.any(
+      (row) => ((row['name'] as String?) ?? '').trim() == 'language_code',
+    );
+    if (!hasColumn) {
+      _database.execute(
+        "ALTER TABLE card_printings ADD COLUMN language_code TEXT NOT NULL DEFAULT 'en'",
+      );
+    }
   }
 
   Map<String, Object?> _cardMetadata(CatalogCard card) {
@@ -1546,6 +2428,14 @@ class CanonicalCatalogStore {
       values: filter.colors.expand(_pokemonEnergyCodeToNames),
     );
 
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression:
+          r"LOWER(COALESCE(NULLIF(TRIM(cp.language_code), ''), cc.default_language, 'en'))",
+      values: filter.languages.map((value) => value.trim().toLowerCase()),
+    );
+
     if (filter.hpMin != null) {
       whereClauses.add('COALESCE(pm.hp, 0) >= ?');
       params.add(filter.hpMin);
@@ -1633,6 +2523,13 @@ class CanonicalCatalogStore {
       sqlExpression: 'LOWER(COALESCE(cp.rarity, \'\'))',
       values: filter.rarities.map((value) => value.trim().toLowerCase()),
     );
+    _appendInClause(
+      whereClauses: whereClauses,
+      params: params,
+      sqlExpression:
+          r"LOWER(COALESCE(NULLIF(TRIM(cp.language_code), ''), cc.default_language, 'en'))",
+      values: filter.languages.map((value) => value.trim().toLowerCase()),
+    );
 
     final normalizedTypes = filter.types
         .map((value) => value.trim().toLowerCase())
@@ -1715,6 +2612,35 @@ class CanonicalCatalogStore {
     ''';
   }
 
+  String _localizedCardRulesTextSql(List<String> languages) {
+    final orderCases = _preferredLanguageCaseWhen(languages);
+    final literalLanguages = languages.map(_sqlStringLiteral).join(', ');
+    return '''
+      (
+        SELECT ccl.rules_text
+        FROM catalog_card_localizations ccl
+        WHERE ccl.card_id = cc.id
+          AND ccl.language_code IN ($literalLanguages)
+          AND TRIM(COALESCE(ccl.rules_text, '')) <> ''
+        ORDER BY CASE ccl.language_code $orderCases ELSE 999 END
+        LIMIT 1
+      )
+    ''';
+  }
+
+  String _preferredLanguageCaseWhen(List<String> languages) {
+    final cases = <String>[];
+    for (var index = 0; index < languages.length; index += 1) {
+      cases.add('WHEN ${_sqlStringLiteral(languages[index])} THEN $index');
+    }
+    return cases.join(' ');
+  }
+
+  String _sqlStringLiteral(String value) {
+    final escaped = value.replaceAll("'", "''");
+    return "'$escaped'";
+  }
+
   String _localizedCardNameExistsSql(int languageCount) {
     return '''
       EXISTS (
@@ -1778,6 +2704,84 @@ class CanonicalCatalogStore {
     whereClauses.add('(${clauses.join(' OR ')})');
   }
 
+  CanonicalCollectionCardData _genericCollectionRowToData(
+    Map<String, Object?> row,
+  ) {
+    return CanonicalCollectionCardData(
+      cardId: (row['card_id'] as String? ?? '').trim(),
+      printingId: (row['printing_id'] as String? ?? '').trim(),
+      name: (row['display_name'] as String? ?? '').trim(),
+      setCode: ((row['set_code'] as String? ?? '').trim().toLowerCase()),
+      setName: (row['set_name'] as String? ?? '').trim(),
+      setTotal: (row['set_total'] as num?)?.toInt(),
+      collectorNumber: (row['collector_number'] as String? ?? '').trim(),
+      rarity: (row['rarity'] as String? ?? '').trim(),
+      typeLine: (row['type_line'] as String? ?? '').trim(),
+      manaCost: (row['mana_cost'] as String? ?? '').trim(),
+      oracleText: (row['oracle_text'] as String? ?? '').trim(),
+      manaValue: (row['cmc'] as num?)?.toDouble(),
+      lang: (row['lang'] as String? ?? '').trim(),
+      artist: (row['artist'] as String? ?? '').trim(),
+      power: (row['power'] as String? ?? '').trim(),
+      toughness: (row['toughness'] as String? ?? '').trim(),
+      loyalty: (row['loyalty'] as String? ?? '').trim(),
+      colors: _jsonColorCodesToLegacyString(row['colors_json']),
+      colorIdentity: _jsonColorCodesToLegacyString(row['color_identity_json']),
+      releasedAt: (row['released_at'] as String? ?? '').trim(),
+      quantity: ((row['quantity'] as num?) ?? 0).toInt(),
+      foil: ((row['foil'] as num?) ?? 0).toInt() == 1,
+      altArt: ((row['alt_art'] as num?) ?? 0).toInt() == 1,
+      priceUsd: (row['price_usd'] as String?)?.trim(),
+      priceUsdFoil: (row['price_usd_foil'] as String?)?.trim(),
+      priceUsdEtched: (row['price_usd_etched'] as String?)?.trim(),
+      priceEur: (row['price_eur'] as String?)?.trim(),
+      priceEurFoil: (row['price_eur_foil'] as String?)?.trim(),
+      priceTix: (row['price_tix'] as String?)?.trim(),
+      pricesUpdatedAt: (row['prices_updated_at'] as num?)?.toInt(),
+      imageUri: (row['image_uri'] as String?)?.trim(),
+    );
+  }
+
+  CanonicalCollectionCardData _pokemonCollectionRowToData(
+    Map<String, Object?> row,
+  ) {
+    return CanonicalCollectionCardData(
+      cardId: (row['card_id'] as String? ?? '').trim(),
+      printingId: (row['printing_id'] as String? ?? '').trim(),
+      name: (row['display_name'] as String? ?? '').trim(),
+      setCode: ((row['set_code'] as String? ?? '').trim().toLowerCase()),
+      setName: (row['set_name'] as String? ?? '').trim(),
+      setTotal: (row['set_total'] as num?)?.toInt(),
+      collectorNumber: (row['collector_number'] as String? ?? '').trim(),
+      rarity: (row['rarity'] as String? ?? '').trim(),
+      typeLine: (row['type_line'] as String? ?? '').trim(),
+      manaCost: (row['mana_cost'] as String? ?? '').trim(),
+      oracleText: (row['oracle_text'] as String? ?? '').trim(),
+      manaValue: (row['cmc'] as num?)?.toDouble(),
+      lang: (row['lang'] as String? ?? '').trim(),
+      artist: (row['artist'] as String? ?? '').trim(),
+      power: (row['power'] as String? ?? '').trim(),
+      toughness: (row['toughness'] as String? ?? '').trim(),
+      loyalty: (row['loyalty'] as String? ?? '').trim(),
+      colors: _pokemonTypesJsonToLegacyColorCode(row['colors_json']),
+      colorIdentity: _pokemonTypesJsonToLegacyColorCode(
+        row['color_identity_json'],
+      ),
+      releasedAt: (row['released_at'] as String? ?? '').trim(),
+      quantity: ((row['quantity'] as num?) ?? 0).toInt(),
+      foil: ((row['foil'] as num?) ?? 0).toInt() == 1,
+      altArt: ((row['alt_art'] as num?) ?? 0).toInt() == 1,
+      priceUsd: (row['price_usd'] as String?)?.trim(),
+      priceUsdFoil: (row['price_usd_foil'] as String?)?.trim(),
+      priceUsdEtched: (row['price_usd_etched'] as String?)?.trim(),
+      priceEur: (row['price_eur'] as String?)?.trim(),
+      priceEurFoil: (row['price_eur_foil'] as String?)?.trim(),
+      priceTix: (row['price_tix'] as String?)?.trim(),
+      pricesUpdatedAt: (row['prices_updated_at'] as num?)?.toInt(),
+      imageUri: (row['image_uri'] as String?)?.trim(),
+    );
+  }
+
   String _inClause(int count) => List<String>.filled(count, '?').join(', ');
 
   List<String> _normalizedLanguageOrder(List<String> preferredLanguages) {
@@ -1810,6 +2814,36 @@ class CanonicalCatalogStore {
     return unique;
   }
 
+  String _jsonColorCodesToLegacyString(Object? raw) {
+    if (raw is String) {
+      final trimmed = raw.trim();
+      if (trimmed.isEmpty) {
+        return '';
+      }
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded
+              .whereType<String>()
+              .map((value) => value.trim().toUpperCase())
+              .where((value) => value.isNotEmpty)
+              .join(',');
+        }
+      } catch (_) {
+        return trimmed;
+      }
+      return trimmed;
+    }
+    if (raw is List) {
+      return raw
+          .whereType<String>()
+          .map((value) => value.trim().toUpperCase())
+          .where((value) => value.isNotEmpty)
+          .join(',');
+    }
+    return '';
+  }
+
   List<String> _tokenizeSearch(String raw) {
     final normalized = raw
         .trim()
@@ -1830,6 +2864,7 @@ class CanonicalCatalogStore {
     final colorCodes = _pokemonTypeNamesToColorCodes(typeNames).join(',');
     return CardSearchResult(
       id: (row['legacy_id'] as String? ?? '').trim(),
+      printingId: (row['printing_id'] as String?)?.trim(),
       name: (row['display_name'] as String? ?? '').trim(),
       setCode: (row['set_code'] as String? ?? '').trim().toLowerCase(),
       setName: (row['set_name'] as String? ?? '').trim(),
@@ -1852,6 +2887,7 @@ class CanonicalCatalogStore {
     );
     return CardSearchResult(
       id: (row['legacy_id'] as String? ?? '').trim(),
+      printingId: (row['printing_id'] as String?)?.trim(),
       name: (row['display_name'] as String? ?? '').trim(),
       setCode: (row['set_code'] as String? ?? '').trim().toLowerCase(),
       setName: (row['set_name'] as String? ?? '').trim(),
@@ -1877,6 +2913,20 @@ class CanonicalCatalogStore {
         .whereType<String>()
         .map((value) => value.trim())
         .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  List<Map<String, dynamic>> _parseJsonObjectList(String raw) {
+    if (raw.trim().isEmpty) {
+      return const <Map<String, dynamic>>[];
+    }
+    final parsed = jsonDecode(raw);
+    if (parsed is! List) {
+      return const <Map<String, dynamic>>[];
+    }
+    return parsed
+        .whereType<Map>()
+        .map((value) => Map<String, dynamic>.from(value))
         .toList(growable: false);
   }
 
@@ -1951,5 +3001,11 @@ class CanonicalCatalogStore {
       result.add('N');
     }
     return result.toList(growable: false);
+  }
+
+  String _pokemonTypesJsonToLegacyColorCode(Object? raw) {
+    final json = (raw as String?) ?? '[]';
+    final typeNames = _parseJsonStringList(json);
+    return _pokemonTypeNamesToColorCodes(typeNames).join(',');
   }
 }

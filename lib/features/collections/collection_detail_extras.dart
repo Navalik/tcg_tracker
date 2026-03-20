@@ -487,3 +487,121 @@ Widget _raritySquare(String raw) {
     ),
   );
 }
+
+class _PokemonCardDetailsSnapshot {
+  const _PokemonCardDetailsSnapshot({
+    required this.category,
+    required this.hp,
+    required this.types,
+    required this.stage,
+    required this.evolvesFrom,
+    required this.regulationMark,
+    required this.weaknesses,
+    required this.resistances,
+    required this.retreatCost,
+  });
+
+  final String category;
+  final String hp;
+  final String types;
+  final String stage;
+  final String evolvesFrom;
+  final String regulationMark;
+  final String weaknesses;
+  final String resistances;
+  final String retreatCost;
+}
+
+_PokemonCardDetailsSnapshot? _parsePokemonCardDetails(
+  Map<String, dynamic>? payload,
+) {
+  if (payload == null) {
+    return null;
+  }
+  final rawPokemon = payload['pokemon'];
+  final pokemon = rawPokemon is Map<String, dynamic>
+      ? rawPokemon
+      : rawPokemon is Map
+      ? Map<String, dynamic>.from(rawPokemon)
+      : payload;
+  final category = (pokemon['category'] as String?)?.trim() ?? '';
+  final hp = pokemon['hp']?.toString().trim() ?? '';
+  final stage = (pokemon['stage'] as String?)?.trim() ?? '';
+  final evolvesFrom =
+      ((pokemon['evolves_from'] ?? pokemon['evolvesFrom']) as String?)
+          ?.trim() ??
+      '';
+  final regulationMark =
+      (pokemon['regulation_mark'] as String?)?.trim() ??
+      (pokemon['regulationMark'] as String?)?.trim() ??
+      '';
+  final retreatCost = pokemon['retreat_cost']?.toString().trim() ?? '';
+
+  List<String> readStringList(Object? raw) {
+    if (raw is! List) {
+      return const [];
+    }
+    return raw
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  String formatTypedValues(Object? raw) {
+    if (raw is! List) {
+      return '';
+    }
+    final values = <String>[];
+    for (final item in raw) {
+      if (item is Map) {
+        final entry = <String, dynamic>{...item};
+        final type = (entry['type'] as String?)?.trim() ?? '';
+        final value = (entry['value'] as String?)?.trim() ?? '';
+        final text = [type, value]
+            .where((part) => part.isNotEmpty)
+            .join(' ');
+        if (text.isNotEmpty) {
+          values.add(text);
+        }
+      }
+    }
+    return values.join(', ');
+  }
+
+  final types = {
+    ...readStringList(pokemon['types']),
+    ...readStringList(payload['types']),
+  }.join(', ');
+
+  if (category.isEmpty &&
+      hp.isEmpty &&
+      types.isEmpty &&
+      stage.isEmpty &&
+      evolvesFrom.isEmpty &&
+      regulationMark.isEmpty &&
+      retreatCost.isEmpty) {
+    return null;
+  }
+
+  return _PokemonCardDetailsSnapshot(
+    category: category,
+    hp: hp,
+    types: types,
+    stage: stage,
+    evolvesFrom: evolvesFrom,
+    regulationMark: regulationMark,
+    weaknesses: formatTypedValues(pokemon['weaknesses']),
+    resistances: formatTypedValues(pokemon['resistances']),
+    retreatCost: retreatCost,
+  );
+}
+
+String _localizedInlineLabel(
+  BuildContext context, {
+  required String it,
+  required String en,
+}) {
+  final code = Localizations.localeOf(context).languageCode.toLowerCase();
+  return code.startsWith('it') ? it : en;
+}

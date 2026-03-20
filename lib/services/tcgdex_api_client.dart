@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class TcgdexApiClient {
@@ -82,52 +81,24 @@ class TcgdexApiClient {
           attempt,
           retryAfter: _parseRetryAfter(response.headers['retry-after']),
         );
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'HTTP ${response.statusCode}',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on TimeoutException {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'timeout',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on SocketException {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'network',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on http.ClientException {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'client',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       }
     }
@@ -196,20 +167,5 @@ class TcgdexApiClient {
     });
     _permitQueue = next.catchError((_) {});
     return next;
-  }
-
-  void _logRetry(
-    Uri uri, {
-    required int attempt,
-    required int maxRetries,
-    required String reason,
-    required Duration delay,
-  }) {
-    if (!kDebugMode) {
-      return;
-    }
-    debugPrint(
-      'TCGdex retry $attempt/$maxRetries for $uri ($reason), waiting ${delay.inMilliseconds}ms',
-    );
   }
 }

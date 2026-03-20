@@ -34,6 +34,8 @@ class _SettingsPageState extends State<SettingsPage> {
   String _appThemeCode = 'magic';
   String _appVersion = '0.5.0';
   bool _backupBusy = false;
+  String? _latestPokemonAutoBackupName;
+  DateTime? _latestPokemonAutoBackupAt;
   bool _gamesBusy = false;
   bool _coherenceCheckBusy = false;
   TcgGame _primaryGame = TcgGame.mtg;
@@ -260,6 +262,10 @@ class _SettingsPageState extends State<SettingsPage> {
         .map((value) => value.trim().toLowerCase())
         .where((value) => value.isNotEmpty)
         .toSet();
+    final latestPokemonAutoBackup = await LocalBackupService.instance
+        .latestBackupFile(
+          prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
+        );
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -279,6 +285,12 @@ class _SettingsPageState extends State<SettingsPage> {
       _appLocaleCode = appLocaleCode;
       _appThemeCode = appThemeCode;
       _appVersion = appVersion;
+      _latestPokemonAutoBackupName = latestPokemonAutoBackup == null
+          ? null
+          : path.basename(latestPokemonAutoBackup.path);
+      _latestPokemonAutoBackupAt = latestPokemonAutoBackup == null
+          ? null
+          : latestPokemonAutoBackup.statSync().modified;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;
@@ -294,6 +306,16 @@ class _SettingsPageState extends State<SettingsPage> {
           _purchaseManager.restoringPurchases;
       _loading = false;
     });
+  }
+
+  String _formatBackupTimestamp(DateTime value) {
+    final local = value.toLocal();
+    final yyyy = local.year.toString().padLeft(4, '0');
+    final mm = local.month.toString().padLeft(2, '0');
+    final dd = local.day.toString().padLeft(2, '0');
+    final hh = local.hour.toString().padLeft(2, '0');
+    final min = local.minute.toString().padLeft(2, '0');
+    return '$dd/$mm/$yyyy $hh:$min';
   }
 
   Future<void> _changePrimaryGame(TcgGame selected) async {
@@ -392,11 +414,7 @@ class _SettingsPageState extends State<SettingsPage> {
         context,
         AppLocalizations.of(context)!.restorePurchasesTimeoutMessage,
       );
-    } catch (error, stackTrace) {
-      debugPrint('Restore purchases failed: $error');
-      if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace);
-      }
+    } catch (error) {
       if (!mounted) {
         return;
       }
@@ -487,11 +505,7 @@ class _SettingsPageState extends State<SettingsPage> {
         context,
         AppLocalizations.of(context)!.storeConnectionTimeout,
       );
-    } catch (error, stackTrace) {
-      debugPrint('Secondary game purchase flow failed: $error');
-      if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace);
-      }
+    } catch (error) {
       if (!mounted) {
         return;
       }
@@ -1094,6 +1108,66 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0x221D1712),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _isItalianUi
+                                ? 'Recovery automatico Pokemon'
+                                : 'Pokemon automatic recovery',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _latestPokemonAutoBackupName == null
+                                ? (_isItalianUi
+                                      ? 'Nessun backup automatico Pokemon disponibile.'
+                                      : 'No automatic Pokemon backup available.')
+                                : (_isItalianUi
+                                      ? 'Ultimo backup: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'
+                                      : 'Latest backup: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'),
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
+                          ),
+                          if (_latestPokemonAutoBackupName != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              _latestPokemonAutoBackupName!,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFD8C7AE)),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: _backupBusy ||
+                                      _latestPokemonAutoBackupName == null
+                                  ? null
+                                  : _restoreLatestPokemonAutomaticBackup,
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Color(0xFF5D4731)),
+                              ),
+                              icon: const Icon(Icons.restore_rounded),
+                              label: Text(
+                                _isItalianUi
+                                    ? 'Ripristina ultimo backup Pokemon'
+                                    : 'Restore latest Pokemon backup',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),

@@ -1,6 +1,7 @@
 class CardSearchResult {
   const CardSearchResult({
     required this.id,
+    this.printingId,
     required this.name,
     required this.setCode,
     required this.setName,
@@ -18,6 +19,7 @@ class CardSearchResult {
   });
 
   final String id;
+  final String? printingId;
   final String name;
   final String setCode;
   final String setName;
@@ -75,6 +77,7 @@ class CollectionInfo {
 class CollectionCardEntry {
   const CollectionCardEntry({
     required this.cardId,
+    this.printingId,
     required this.name,
     required this.setCode,
     required this.setName,
@@ -107,6 +110,7 @@ class CollectionCardEntry {
   });
 
   final String cardId;
+  final String? printingId;
   final String name;
   final String setCode;
   final String setName;

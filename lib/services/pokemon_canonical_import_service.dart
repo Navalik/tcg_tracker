@@ -36,7 +36,7 @@ class PokemonCanonicalImportService {
 
   Future<PokemonCanonicalImportReport> importProfile({
     required String profile,
-    List<TcgCardLanguage> languages = TcgdexPokemonProvider.supportedLanguages,
+    List<String> languages = TcgdexPokemonProvider.supportedLanguages,
     void Function(double progress)? onProgress,
     void Function(CanonicalCatalogImportBatch batch)? onBatchBuilt,
     void Function(String status)? onStatus,
@@ -56,7 +56,7 @@ class PokemonCanonicalImportService {
       onStatus?.call(
         'Downloading set ${setCode.toUpperCase()} (${index + 1}/$totalSets)',
       );
-      final localizedSets = <TcgCardLanguage, CatalogSet>{};
+      final localizedSets = <String, CatalogSet>{};
       for (final language in languages) {
         final localizedSet = await _provider.fetchSetByCodeLocalized(
           setCode,
@@ -112,27 +112,33 @@ class PokemonCanonicalImportService {
           setsById[bundle.set.setId],
           bundle.set,
         );
-        printingsById[bundle.printing.printingId] = bundle.printing;
         for (final localized in bundle.card.localizedData) {
           cardLocalizationsByKey[_cardLocalizationKey(localized)] = localized;
         }
         for (final localized in bundle.set.localizedData) {
           setLocalizationsByKey[_setLocalizationKey(localized)] = localized;
         }
-        for (final mapping in bundle.printing.providerMappings) {
-          providerMappings[_providerMappingKey(
-            mapping,
-            bundle,
-          )] = ProviderMappingRecord(
-            mapping: mapping,
-            cardId: bundle.card.cardId,
-            printingId: bundle.printing.printingId,
-            setId: bundle.set.setId,
-          );
-        }
-        final snapshots = _provider.extractPriceSnapshotsFromBundle(bundle);
-        for (final snapshot in snapshots) {
-          priceSnapshotsByKey[_priceSnapshotKey(snapshot)] = snapshot;
+        final expandedPrintings = _expandLocalizedPrintings(bundle);
+        final baseSnapshots = _provider.extractPriceSnapshotsFromBundle(bundle);
+        for (final printing in expandedPrintings) {
+          printingsById[printing.printingId] = printing;
+          for (final mapping in printing.providerMappings) {
+            providerMappings[_providerMappingKey(
+              mapping,
+              printing.printingId,
+            )] = ProviderMappingRecord(
+              mapping: mapping,
+              cardId: bundle.card.cardId,
+              printingId: printing.printingId,
+              setId: bundle.set.setId,
+            );
+          }
+          for (final snapshot in _remapPriceSnapshots(
+            baseSnapshots,
+            printingId: printing.printingId,
+          )) {
+            priceSnapshotsByKey[_priceSnapshotKey(snapshot)] = snapshot;
+          }
         }
       }
       final progress = (index + 1) / totalSets;
@@ -227,21 +233,142 @@ class PokemonCanonicalImportService {
   }
 
   String _cardLocalizationKey(LocalizedCardData localized) =>
-      '${localized.cardId}:${localized.language.code}';
+      '${localized.cardId}:${localized.languageCode}';
 
   String _setLocalizationKey(LocalizedSetData localized) =>
-      '${localized.setId}:${localized.language.code}';
+      '${localized.setId}:${localized.languageCode}';
 
   String _providerMappingKey(
     ProviderMapping mapping,
-    ProviderPrintingBundle bundle,
+    String printingId,
   ) =>
-      '${mapping.providerId.value}:${mapping.objectType}:${mapping.providerObjectId}:${bundle.printing.printingId}';
+      '${mapping.providerId.value}:${mapping.objectType}:${mapping.providerObjectId}:$printingId';
 
   String _priceSnapshotKey(PriceSnapshot snapshot) =>
       '${snapshot.printingId}:${snapshot.sourceId.value}:${snapshot.currencyCode}:${snapshot.finishKey ?? 'default'}';
 
   bool _isTcgdexNotFound(Object error) {
     return error.toString().toLowerCase().contains('tcgdex_http_404');
+  }
+
+  List<CardPrintingRef> _expandLocalizedPrintings(ProviderPrintingBundle bundle) {
+    final languages = <String>{
+      for (final localized in bundle.card.localizedData)
+        localized.languageCode.trim().toLowerCase(),
+      bundle.printing.languageCode.trim().toLowerCase(),
+    }.where((value) => value.isNotEmpty).toList(growable: false);
+    if (languages.isEmpty) {
+      return <CardPrintingRef>[bundle.printing];
+    }
+    return languages.map((language) {
+      final localizedPrintingId = _localizedPrintingId(
+        bundle.printing.printingId,
+        language,
+      );
+      return CardPrintingRef(
+        printingId: localizedPrintingId,
+        cardId: bundle.printing.cardId,
+        setId: bundle.printing.setId,
+        gameId: bundle.printing.gameId,
+        collectorNumber: bundle.printing.collectorNumber,
+        languageCode: language,
+        providerMappings: _localizedProviderMappings(
+          bundle.printing.providerMappings,
+          language: language,
+          canonicalLanguage: bundle.printing.languageCode.trim().toLowerCase(),
+        ),
+        rarity: bundle.printing.rarity,
+        releaseDate: bundle.printing.releaseDate,
+        imageUris: bundle.printing.imageUris,
+        finishKeys: bundle.printing.finishKeys,
+        metadata: <String, Object?>{
+          ...bundle.printing.metadata,
+          'base_printing_id': bundle.printing.printingId,
+        },
+      );
+    }).toList(growable: false);
+  }
+
+  List<ProviderMapping> _localizedProviderMappings(
+    List<ProviderMapping> mappings, {
+    required String language,
+    required String canonicalLanguage,
+  }) {
+    final normalizedLanguage = language.trim().toLowerCase();
+    final normalizedCanonical = canonicalLanguage.trim().toLowerCase();
+    final result = <ProviderMapping>[];
+    for (final mapping in mappings) {
+      if (mapping.objectType == 'legacy_printing') {
+        if (normalizedLanguage == normalizedCanonical) {
+          result.add(mapping);
+        }
+        result.add(
+          ProviderMapping(
+            providerId: mapping.providerId,
+            objectType: 'legacy_printing',
+            providerObjectId: _localizedProviderObjectId(
+              mapping.providerObjectId,
+              normalizedLanguage,
+            ),
+            providerObjectVersion: mapping.providerObjectVersion,
+            mappingConfidence: mapping.mappingConfidence,
+          ),
+        );
+        continue;
+      }
+      if (mapping.objectType == 'printing' &&
+          normalizedLanguage != normalizedCanonical) {
+        result.add(
+          ProviderMapping(
+            providerId: mapping.providerId,
+            objectType: 'printing_localized',
+            providerObjectId: _localizedProviderObjectId(
+              mapping.providerObjectId,
+              normalizedLanguage,
+            ),
+            providerObjectVersion: mapping.providerObjectVersion,
+            mappingConfidence: mapping.mappingConfidence,
+          ),
+        );
+        continue;
+      }
+      result.add(mapping);
+    }
+    return result;
+  }
+
+  List<PriceSnapshot> _remapPriceSnapshots(
+    List<PriceSnapshot> snapshots, {
+    required String printingId,
+  }) {
+    return snapshots
+        .map(
+          (snapshot) => PriceSnapshot(
+            printingId: printingId,
+            sourceId: snapshot.sourceId,
+            currencyCode: snapshot.currencyCode,
+            amount: snapshot.amount,
+            capturedAt: snapshot.capturedAt,
+            finishKey: snapshot.finishKey,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  String _localizedPrintingId(String basePrintingId, String languageCode) {
+    final normalizedLanguage = languageCode.trim().toLowerCase();
+    if (normalizedLanguage.isEmpty) {
+      return basePrintingId;
+    }
+    return '$basePrintingId:$normalizedLanguage';
+  }
+
+  String _localizedProviderObjectId(String rawId, String languageCode) {
+    final normalizedId = rawId.trim();
+    final normalizedLanguage = languageCode.trim().toLowerCase();
+    if (normalizedId.isEmpty || normalizedLanguage.isEmpty) {
+      return normalizedId;
+    }
+    return '$normalizedId:$normalizedLanguage';
   }
 }

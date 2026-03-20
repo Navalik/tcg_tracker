@@ -122,11 +122,11 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     );
   }
 
-  Future<List<String>> _collectCardIdsForFilter(
+  Future<List<CardSearchResult>> _collectCardsForFilter(
     CollectionFilter filter, {
     int pageSize = 400,
   }) async {
-    final cardIds = <String>{};
+    final cardsByPrintingKey = <String, CardSearchResult>{};
     var offset = 0;
     final gameId = _isPokemonActive ? TcgGameId.pokemon : TcgGameId.mtg;
     while (true) {
@@ -140,14 +140,15 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         break;
       }
       for (final card in batch) {
-        cardIds.add(card.id);
+        final key = card.printingId ?? '${card.id}::legacy';
+        cardsByPrintingKey[key] = card;
       }
       if (batch.length < pageSize) {
         break;
       }
       offset += batch.length;
     }
-    return cardIds.toList(growable: false);
+    return cardsByPrintingKey.values.toList(growable: false);
   }
 
   Future<void> _addCardsByFilter(
@@ -161,6 +162,7 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         builder: (_) => _CollectionFilterBuilderPage(
           name: title,
           submitLabel: l10n.addLabel,
+          initialFilter: null,
         ),
       ),
     );
@@ -176,29 +178,31 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
     );
-    List<String> cardIds = const [];
+    List<CardSearchResult> cards = const [];
     try {
-      cardIds = await _collectCardIdsForFilter(filter);
+      cards = await _collectCardsForFilter(filter);
       if (!context.mounted) {
         return;
       }
       Navigator.of(context, rootNavigator: true).pop();
-      if (cardIds.isEmpty) {
+      if (cards.isEmpty) {
         showAppSnackBar(context, AppLocalizations.of(context)!.noResultsFound);
         return;
       }
       if (_isWishlistCollection) {
-        final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
-        final ownedMap = await ScryfallDatabase.instance
-            .fetchCollectionQuantities(allCardsId, cardIds);
         var added = 0;
-        for (final cardId in cardIds) {
-          if ((ownedMap[cardId] ?? 0) > 0) {
+        for (final card in cards) {
+          final ownedQty = await _inventoryService.currentInventoryQty(
+            card.id,
+            printingId: card.printingId,
+          );
+          if (ownedQty > 0) {
             continue;
           }
           await ScryfallDatabase.instance.upsertCollectionMembership(
             widget.collectionId,
-            cardId,
+            card.id,
+            printingId: card.printingId,
           );
           added += 1;
         }
@@ -215,19 +219,21 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         return;
       }
       if (_isDirectCustomCollection) {
-        final allCardsId = _allCardsCollectionId ?? ownedCollectionId;
-        final ownedMap = await ScryfallDatabase.instance
-            .fetchCollectionQuantities(allCardsId, cardIds);
         var added = 0;
         var skipped = 0;
-        for (final cardId in cardIds) {
-          if ((ownedMap[cardId] ?? 0) <= 0) {
+        for (final card in cards) {
+          final ownedQty = await _inventoryService.currentInventoryQty(
+            card.id,
+            printingId: card.printingId,
+          );
+          if (ownedQty <= 0) {
             skipped += 1;
             continue;
           }
           await ScryfallDatabase.instance.upsertCollectionMembership(
             widget.collectionId,
-            cardId,
+            card.id,
+            printingId: card.printingId,
           );
           added += 1;
         }
@@ -244,8 +250,12 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         return;
       }
       var added = 0;
-      for (final cardId in cardIds) {
-        await _inventoryService.addToInventory(cardId, deltaQty: 1);
+      for (final card in cards) {
+        await _inventoryService.addToInventory(
+          card.id,
+          printingId: card.printingId,
+          deltaQty: 1,
+        );
         added += 1;
       }
       if (!context.mounted) {
@@ -463,14 +473,6 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
           isFoil: seed.isFoil,
         ),
         searchRepository: appRepositories.search,
-      );
-      debugPrint(
-        'Pokemon scan resolve (collection): '
-        'candidates=${resolution.metrics.candidateCount} '
-        'name=${resolution.metrics.exactNameMatches} '
-        'set=${resolution.metrics.exactSetMatches} '
-        'collector=${resolution.metrics.exactCollectorMatches} '
-        'fallbacks=${resolution.metrics.fallbackSteps.join(" > ")}',
       );
       if (!mounted || !context.mounted || resolution.candidates.isEmpty) {
         return seed;

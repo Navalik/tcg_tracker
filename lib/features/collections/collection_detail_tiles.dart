@@ -15,19 +15,29 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
       await ScryfallDatabase.instance.deleteCollectionCard(
         widget.collectionId,
         entry.cardId,
+        printingId: entry.printingId,
       );
-      await _inventoryService.addToInventory(entry.cardId, deltaQty: 1);
+      await _inventoryService.addToInventory(
+        entry.cardId,
+        printingId: entry.printingId,
+        deltaQty: 1,
+      );
     } else if (widget.isDeckCollection) {
       final nextQuantity = entry.quantity + 1;
       await ScryfallDatabase.instance.upsertCollectionCard(
         ownedCollectionId,
         entry.cardId,
+        printingId: entry.printingId,
         quantity: nextQuantity,
         foil: false,
         altArt: entry.altArt,
       );
     } else {
-      await _inventoryService.addToInventory(entry.cardId, deltaQty: 1);
+      await _inventoryService.addToInventory(
+        entry.cardId,
+        printingId: entry.printingId,
+        deltaQty: 1,
+      );
     }
     if (mounted) {
       setState(() {
@@ -61,12 +71,17 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
       await ScryfallDatabase.instance.upsertCollectionCard(
         ownedCollectionId,
         entry.cardId,
+        printingId: entry.printingId,
         quantity: nextQuantity,
         foil: false,
         altArt: nextQuantity == 0 ? false : entry.altArt,
       );
     } else {
-      await _inventoryService.removeFromInventory(entry.cardId, deltaQty: 1);
+      await _inventoryService.removeFromInventory(
+        entry.cardId,
+        printingId: entry.printingId,
+        deltaQty: 1,
+      );
     }
     if (mounted) {
       setState(() {
@@ -298,7 +313,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                                       const SizedBox(width: 6),
                                       _raritySquare(entry.rarity),
                                     ],
-                                  ],
+                                    ],
                                 );
                               },
                             ),
@@ -717,7 +732,7 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
                               const SizedBox(width: 6),
                               _raritySquare(entry.rarity),
                             ],
-                          ],
+                            ],
                         ),
                       ],
                     ),

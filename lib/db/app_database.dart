@@ -1295,7 +1295,9 @@ class ScryfallDatabase {
     });
   }
 
-  Future<Map<String, dynamic>> exportCollectionsBackupPayload() async {
+  Future<Map<String, dynamic>> exportCollectionsBackupPayload({
+    Map<String, Object?>? metadata,
+  }) async {
     final db = await open();
     final collectionRows = await (db.select(
       db.collections,
@@ -1328,6 +1330,7 @@ class ScryfallDatabase {
     return <String, dynamic>{
       'schemaVersion': 1,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      if (metadata != null) 'metadata': metadata,
       'collections': collectionRows
           .map(
             (row) => <String, dynamic>{
@@ -2885,9 +2888,15 @@ class ScryfallDatabase {
 
   Future<void> addCardToCollectionAsMissing(
     int collectionId,
-    String cardId,
+    String cardId, {
+    String? printingId,
+  }
   ) async {
-    await upsertCollectionMembership(collectionId, cardId);
+    await upsertCollectionMembership(
+      collectionId,
+      cardId,
+      printingId: printingId,
+    );
   }
 
   Future<void> claimCardFromWishlist({
@@ -3044,6 +3053,7 @@ class ScryfallDatabase {
 
   Future<CollectionCardEntry?> fetchCardEntryById(
     String cardId, {
+    String? printingId,
     int? collectionId,
   }) async {
     final db = await open();
@@ -3102,6 +3112,7 @@ class ScryfallDatabase {
     final row = rows.first;
     return CollectionCardEntry(
       cardId: row.read<String>('card_id'),
+      printingId: printingId?.trim().isEmpty ?? true ? null : printingId!.trim(),
       name: row.read<String>('name'),
       setCode: row.read<String>('set_code'),
       setName: row.readNullable<String>('set_name') ?? '',
@@ -3470,13 +3481,14 @@ class ScryfallDatabase {
   Future<void> upsertCollectionCard(
     int collectionId,
     String cardId, {
+    String? printingId,
     required int quantity,
     required bool foil,
     required bool altArt,
   }) async {
     final db = await open();
     if (quantity <= 0) {
-      await deleteCollectionCard(collectionId, cardId);
+      await deleteCollectionCard(collectionId, cardId, printingId: printingId);
       return;
     }
     await db
@@ -3496,6 +3508,9 @@ class ScryfallDatabase {
   Future<void> upsertCollectionMembership(
     int collectionId,
     String cardId,
+    {
+    String? printingId,
+  }
   ) async {
     final db = await open();
     await db
@@ -3512,7 +3527,10 @@ class ScryfallDatabase {
         );
   }
 
-  Future<int> fetchOwnedQuantityInAllCards(String cardId) async {
+  Future<int> fetchOwnedQuantityInAllCards(
+    String cardId, {
+    String? printingId,
+  }) async {
     final normalizedId = cardId.trim();
     if (normalizedId.isEmpty) {
       return 0;
@@ -3536,7 +3554,10 @@ class ScryfallDatabase {
     return row?.read<int>('qty') ?? 0;
   }
 
-  Future<void> removeCardFromDirectCustomCollections(String cardId) async {
+  Future<void> removeCardFromDirectCustomCollections(
+    String cardId, {
+    String? printingId,
+  }) async {
     final normalizedId = cardId.trim();
     if (normalizedId.isEmpty) {
       return;
@@ -3557,7 +3578,10 @@ class ScryfallDatabase {
     );
   }
 
-  Future<void> removeCardFromWishlists(String cardId) async {
+  Future<void> removeCardFromWishlists(
+    String cardId, {
+    String? printingId,
+  }) async {
     final normalizedId = cardId.trim();
     if (normalizedId.isEmpty) {
       return;
@@ -3579,6 +3603,7 @@ class ScryfallDatabase {
   Future<void> updateCollectionCard(
     int collectionId,
     String cardId, {
+    String? printingId,
     int? quantity,
     bool? foil,
     bool? altArt,
@@ -3596,13 +3621,55 @@ class ScryfallDatabase {
         .write(values);
   }
 
-  Future<void> deleteCollectionCard(int collectionId, String cardId) async {
+  Future<void> deleteCollectionCard(
+    int collectionId,
+    String cardId, {
+    String? printingId,
+  }) async {
     final db = await open();
     await (db.delete(db.collectionCards)..where(
           (tbl) =>
               tbl.collectionId.equals(collectionId) & tbl.cardId.equals(cardId),
         ))
         .go();
+  }
+
+  Future<Map<String, dynamic>?> fetchCardJsonPayload(
+    String cardId, {
+    String? printingId,
+  }) async {
+    final normalizedId = cardId.trim();
+    if (normalizedId.isEmpty) {
+      return null;
+    }
+    final db = await open();
+    final row = await db
+        .customSelect(
+          '''
+      SELECT card_json AS card_json
+      FROM cards
+      WHERE id = ?
+      LIMIT 1
+      ''',
+          variables: [Variable.withString(normalizedId)],
+        )
+        .getSingleOrNull();
+    final rawPayload = row?.readNullable<String>('card_json');
+    if (rawPayload == null || rawPayload.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(rawPayload);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return decoded.map(
+          (key, value) => MapEntry(key.toString(), value),
+        );
+      }
+    } catch (_) {}
+    return null;
   }
 
   Future<void> rebuildCardsFts() async {
@@ -3934,6 +4001,10 @@ class ScryfallDatabase {
       }
     });
     return updated;
+  }
+
+  Future<int> repairMissingPokemonColorsFromCardJson() async {
+    return 0;
   }
 
   Future<int> normalizePokemonLightningColors() async {

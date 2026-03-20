@@ -304,7 +304,7 @@ class ScryfallMtgProviderAdapter
 
     final localized = LocalizedCardData(
       cardId: cardId,
-      language: lang == 'it' ? TcgCardLanguage.it : TcgCardLanguage.en,
+      languageCode: lang == 'it' ? TcgLanguageCodes.it : TcgLanguageCodes.en,
       name: cardName,
       rulesText: (payload['oracle_text'] as String?)?.trim(),
       flavorText: (payload['flavor_text'] as String?)?.trim(),
@@ -338,13 +338,13 @@ class ScryfallMtgProviderAdapter
       releaseDate: releasedAt,
       defaultLocalizedData: LocalizedSetData(
         setId: setId,
-        language: localized.language,
+        languageCode: localized.languageCode,
         name: setName,
       ),
       localizedData: [
         LocalizedSetData(
           setId: setId,
-          language: localized.language,
+          languageCode: localized.languageCode,
           name: setName,
         ),
       ],
@@ -360,6 +360,7 @@ class ScryfallMtgProviderAdapter
       setId: setId,
       gameId: gameId,
       collectorNumber: collectorNumber,
+      languageCode: lang,
       providerMappings: [
         ProviderMapping(
           providerId: providerId,
@@ -393,7 +394,7 @@ class ScryfallMtgProviderAdapter
     final releasedAt = releasedAtRaw == null || releasedAtRaw.isEmpty
         ? null
         : DateTime.tryParse(releasedAtRaw);
-    const language = TcgCardLanguage.en;
+    const language = TcgLanguageCodes.en;
     return CatalogSet(
       setId: setId,
       gameId: gameId,
@@ -402,11 +403,15 @@ class ScryfallMtgProviderAdapter
       releaseDate: releasedAt,
       defaultLocalizedData: LocalizedSetData(
         setId: setId,
-        language: language,
+        languageCode: language,
         name: name,
       ),
       localizedData: [
-        LocalizedSetData(setId: setId, language: language, name: name),
+        LocalizedSetData(
+          setId: setId,
+          languageCode: language,
+          name: name,
+        ),
       ],
       metadata: <String, Object?>{
         'set_type': payload['set_type'],

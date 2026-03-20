@@ -71,6 +71,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   String _searchQuery = '';
   final Set<String> _selectedRarities = {};
   final Set<String> _selectedSetCodes = {};
+  final Set<String> _selectedLanguages = {};
   final Set<String> _selectedColors = {};
   final Set<String> _selectedTypes = {};
   int? _manaValueMin;
@@ -278,6 +279,21 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         .where((value) => value.isNotEmpty)
         .toSet();
     return languages.any((value) => value != 'en');
+  }
+
+  String _collectionCardsLoadFailedLabel(Object error) {
+    final raw = error.toString().toLowerCase();
+    final italian = Localizations.localeOf(
+      context,
+    ).languageCode.toLowerCase().startsWith('it');
+    if (raw.contains('sqliteexception') || raw.contains('database')) {
+      return italian
+          ? 'Errore nel caricamento dei dati locali delle carte.'
+          : 'Failed to load local card data.';
+    }
+    return italian
+        ? 'Errore nel caricamento delle carte della collezione.'
+        : 'Failed to load collection cards.';
   }
 
   Future<void> _applySetCollectionLanguage(String languageCode) async {
@@ -594,8 +610,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       await _refreshDeckLegalityForLoadedCards();
       _refreshListPrices(cards);
       _maybePrefetchIfShort();
-    } catch (_) {
-      debugPrint('CollectionDetailPage _loadMoreCards failed');
+    } catch (error) {
       if (!mounted) {
         return;
       }
@@ -604,6 +619,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         _loading = false;
         _hasMore = false;
       });
+      showAppSnackBar(context, _collectionCardsLoadFailedLabel(error));
     }
   }
 
@@ -689,6 +705,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final base = _baseVisibleCards();
     if (_selectedRarities.isEmpty &&
         _selectedSetCodes.isEmpty &&
+        _selectedLanguages.isEmpty &&
         _selectedColors.isEmpty &&
         _selectedTypes.isEmpty &&
         _manaValueMin == null &&
@@ -868,16 +885,32 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     final isFilterCollection = _isFilterCollection;
     for (final cardId in ids) {
       if (isFilterCollection || widget.isAllCards) {
-        await _inventoryService.setInventoryQty(cardId, 0);
+        final printingId = _cards
+            .cast<CollectionCardEntry?>()
+            .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+            ?.printingId;
+        await _inventoryService.setInventoryQty(
+          cardId,
+          0,
+          printingId: printingId,
+        );
       } else if (_isDirectCustomCollection) {
         await ScryfallDatabase.instance.deleteCollectionCard(
           widget.collectionId,
           cardId,
+          printingId: _cards
+              .cast<CollectionCardEntry?>()
+              .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+              ?.printingId,
         );
       } else {
         await ScryfallDatabase.instance.deleteCollectionCard(
           _isWishlistCollection ? widget.collectionId : ownedCollectionId!,
           cardId,
+          printingId: _cards
+              .cast<CollectionCardEntry?>()
+              .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+              ?.printingId,
         );
       }
     }
@@ -929,6 +962,12 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     if (_selectedSetCodes.isNotEmpty) {
       final code = entry.setCode.trim().toLowerCase();
       if (!_selectedSetCodes.contains(code)) {
+        return false;
+      }
+    }
+    if (_selectedLanguages.isNotEmpty) {
+      final language = entry.lang.trim().toLowerCase();
+      if (!_selectedLanguages.contains(language)) {
         return false;
       }
     }
@@ -1055,6 +1094,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _hasActiveAdvancedFilters() {
     return _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
+        _selectedLanguages.isNotEmpty ||
         _selectedColors.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
         _manaValueMin != null ||
@@ -1168,6 +1208,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         cardIds.map(
           (cardId) => ScryfallDatabase.instance.fetchCardEntryById(
             cardId,
+            printingId: _cards
+                .cast<CollectionCardEntry?>()
+                .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+                ?.printingId,
             collectionId: lookupCollectionId,
           ),
         ),
@@ -1207,6 +1251,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         : (_ownedCollectionId ?? -1);
     final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
       cardId,
+      printingId: _cards
+          .cast<CollectionCardEntry?>()
+          .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+          ?.printingId,
       collectionId: lookupCollectionId,
     );
     if (!mounted || refreshed == null) {

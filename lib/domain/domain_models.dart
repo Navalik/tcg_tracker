@@ -10,13 +10,9 @@ enum TcgGameId {
   final String value;
 }
 
-enum TcgCardLanguage {
-  en('en'),
-  it('it');
-
-  const TcgCardLanguage(this.code);
-
-  final String code;
+abstract final class TcgLanguageCodes {
+  static const String en = 'en';
+  static const String it = 'it';
 }
 
 enum PriceSourceId {
@@ -68,8 +64,8 @@ class GameCapabilities {
   final bool supportsSideboard;
   final bool supportsPricing;
   final bool supportsScanner;
-  final Set<TcgCardLanguage> supportedUiLanguages;
-  final Set<TcgCardLanguage> supportedCardLanguages;
+  final Set<String> supportedUiLanguages;
+  final Set<String> supportedCardLanguages;
   final Set<String> filterKeys;
   final Set<String> metadataKeys;
 }
@@ -127,6 +123,7 @@ class CardPrintingRef {
     required this.setId,
     required this.gameId,
     required this.collectorNumber,
+    required this.languageCode,
     this.providerMappings = const [],
     this.rarity,
     this.releaseDate,
@@ -140,6 +137,7 @@ class CardPrintingRef {
   final String setId;
   final TcgGameId gameId;
   final String collectorNumber;
+  final String languageCode;
   final List<ProviderMapping> providerMappings;
   final String? rarity;
   final DateTime? releaseDate;
@@ -151,7 +149,7 @@ class CardPrintingRef {
 class LocalizedCardData {
   const LocalizedCardData({
     required this.cardId,
-    required this.language,
+    required this.languageCode,
     required this.name,
     this.subtypeLine,
     this.rulesText,
@@ -160,7 +158,7 @@ class LocalizedCardData {
   });
 
   final String cardId;
-  final TcgCardLanguage language;
+  final String languageCode;
   final String name;
   final String? subtypeLine;
   final String? rulesText;
@@ -171,13 +169,13 @@ class LocalizedCardData {
 class LocalizedSetData {
   const LocalizedSetData({
     required this.setId,
-    required this.language,
+    required this.languageCode,
     required this.name,
     this.seriesName,
   });
 
   final String setId;
-  final TcgCardLanguage language;
+  final String languageCode;
   final String name;
   final String? seriesName;
 }
@@ -298,7 +296,7 @@ class CoreCardFilter {
   });
 
   final String? query;
-  final Set<TcgCardLanguage> languages;
+  final Set<String> languages;
   final Set<String> setIds;
   final Set<String> rarities;
   final String? collectorNumber;

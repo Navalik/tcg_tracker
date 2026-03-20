@@ -11,31 +11,53 @@ class LocalBackupService {
 
   static final LocalBackupService instance = LocalBackupService._();
   static const int _maxBackupFiles = 3;
+  static const String pokemonAutomaticBackupPrefix =
+      'collections_auto_backup_pokemon';
 
-  Future<LocalBackupExportResult> exportCollectionsBackup() async {
-    final payload = await ScryfallDatabase.instance
-        .exportCollectionsBackupPayload();
+  Future<LocalBackupExportResult?> exportCollectionsBackup({
+    Map<String, Object?>? metadata,
+    String filePrefix = 'collections_backup',
+    bool skipIfEmpty = false,
+  }) async {
+    final payload = await ScryfallDatabase.instance.exportCollectionsBackupPayload(
+      metadata: metadata,
+    );
+    final collections = (payload['collections'] as List?)?.length ?? 0;
+    final collectionCards = (payload['collectionCards'] as List?)?.length ?? 0;
+    final cards = (payload['cards'] as List?)?.length ?? 0;
+    if (skipIfEmpty && collections == 0 && collectionCards == 0) {
+      return null;
+    }
     final directory = await _backupDirectory();
     final now = DateTime.now().toLocal();
-    final fileName = 'collections_backup_${_stamp(now)}.json';
+    final normalizedPrefix = _normalizeFilePrefix(filePrefix);
+    final fileName = '${normalizedPrefix}_${_stamp(now)}.json';
     final target = File(path.join(directory.path, fileName));
     final encoded = const JsonEncoder.withIndent('  ').convert(payload);
     await target.writeAsString(encoded, flush: true);
-    await _pruneOldBackups();
+    await _pruneOldBackups(prefix: normalizedPrefix);
     return LocalBackupExportResult(
       file: target,
-      collections: (payload['collections'] as List?)?.length ?? 0,
-      collectionCards: (payload['collectionCards'] as List?)?.length ?? 0,
-      cards: (payload['cards'] as List?)?.length ?? 0,
+      collections: collections,
+      collectionCards: collectionCards,
+      cards: cards,
     );
   }
 
-  Future<List<File>> listBackupFiles() async {
+  Future<List<File>> listBackupFiles({String? prefix}) async {
     final directory = await _backupDirectory();
+    final normalizedPrefix = prefix == null ? null : _normalizeFilePrefix(prefix);
     final items = directory
         .listSync()
         .whereType<File>()
         .where((file) => file.path.toLowerCase().endsWith('.json'))
+        .where((file) {
+          if (normalizedPrefix == null) {
+            return true;
+          }
+          final name = path.basenameWithoutExtension(file.path).toLowerCase();
+          return name.startsWith(normalizedPrefix.toLowerCase());
+        })
         .toList(growable: false);
     items.sort((a, b) {
       final aTime = a.statSync().modified;
@@ -45,8 +67,8 @@ class LocalBackupService {
     return items;
   }
 
-  Future<void> _pruneOldBackups() async {
-    final backups = await listBackupFiles();
+  Future<void> _pruneOldBackups({String? prefix}) async {
+    final backups = await listBackupFiles(prefix: prefix);
     if (backups.length <= _maxBackupFiles) {
       return;
     }
@@ -78,6 +100,14 @@ class LocalBackupService {
     );
   }
 
+  Future<File?> latestBackupFile({String? prefix}) async {
+    final backups = await listBackupFiles(prefix: prefix);
+    if (backups.isEmpty) {
+      return null;
+    }
+    return backups.first;
+  }
+
   Future<Directory> _backupDirectory() async {
     final documents = await getApplicationDocumentsDirectory();
     final backupDir = Directory(path.join(documents.path, 'backups'));
@@ -85,6 +115,18 @@ class LocalBackupService {
       backupDir.createSync(recursive: true);
     }
     return backupDir;
+  }
+
+  String _normalizeFilePrefix(String value) {
+    final normalized = value
+        .trim()
+        .replaceAll(RegExp(r'[^A-Za-z0-9_-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    if (normalized.isEmpty) {
+      return 'collections_backup';
+    }
+    return normalized;
   }
 
   String _stamp(DateTime dt) {

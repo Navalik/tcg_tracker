@@ -177,7 +177,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         canonicalName: 'Monkey.D.Luffy',
         defaultLocalizedData: LocalizedCardData(
           cardId: 'one_piece:card:pilot:op01-001',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Monkey.D.Luffy',
           subtypeLine: 'Leader / Straw Hat Crew',
           searchAliases: <String>['luffy leader'],
@@ -185,7 +185,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         localizedData: <LocalizedCardData>[
           LocalizedCardData(
             cardId: 'one_piece:card:pilot:op01-001',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Monkey.D.Luffy',
             subtypeLine: 'Leader / Straw Hat Crew',
             searchAliases: <String>['luffy leader'],
@@ -205,13 +205,13 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         releaseDate: DateTime.utc(2022, 7, 22),
         defaultLocalizedData: LocalizedSetData(
           setId: 'one_piece:set:op01',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Romance Dawn',
         ),
         localizedData: <LocalizedSetData>[
           LocalizedSetData(
             setId: 'one_piece:set:op01',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Romance Dawn',
           ),
         ],
@@ -223,6 +223,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         setId: 'one_piece:set:op01',
         gameId: TcgGameId.onePiece,
         collectorNumber: '001',
+        languageCode: TcgLanguageCodes.en,
         rarity: 'L',
         releaseDate: DateTime.utc(2022, 7, 22),
         imageUris: <String, String>{
@@ -276,7 +277,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         canonicalName: 'Roronoa Zoro',
         defaultLocalizedData: LocalizedCardData(
           cardId: 'one_piece:card:pilot:op01-025',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Roronoa Zoro',
           subtypeLine: 'Character / Straw Hat Crew',
           searchAliases: <String>['zoro'],
@@ -284,7 +285,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         localizedData: <LocalizedCardData>[
           LocalizedCardData(
             cardId: 'one_piece:card:pilot:op01-025',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Roronoa Zoro',
             subtypeLine: 'Character / Straw Hat Crew',
             searchAliases: <String>['zoro'],
@@ -304,13 +305,13 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         releaseDate: DateTime.utc(2022, 7, 22),
         defaultLocalizedData: LocalizedSetData(
           setId: 'one_piece:set:op01',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Romance Dawn',
         ),
         localizedData: <LocalizedSetData>[
           LocalizedSetData(
             setId: 'one_piece:set:op01',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Romance Dawn',
           ),
         ],
@@ -322,6 +323,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         setId: 'one_piece:set:op01',
         gameId: TcgGameId.onePiece,
         collectorNumber: '025',
+        languageCode: TcgLanguageCodes.en,
         rarity: 'SR',
         releaseDate: DateTime.utc(2022, 7, 22),
         imageUris: <String, String>{
@@ -370,7 +372,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         canonicalName: 'Portgas.D.Ace',
         defaultLocalizedData: LocalizedCardData(
           cardId: 'one_piece:card:pilot:op02-013',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Portgas.D.Ace',
           subtypeLine: 'Character / Whitebeard Pirates',
           searchAliases: <String>['ace'],
@@ -378,7 +380,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         localizedData: <LocalizedCardData>[
           LocalizedCardData(
             cardId: 'one_piece:card:pilot:op02-013',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Portgas.D.Ace',
             subtypeLine: 'Character / Whitebeard Pirates',
             searchAliases: <String>['ace'],
@@ -398,13 +400,13 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         releaseDate: DateTime.utc(2022, 11, 4),
         defaultLocalizedData: LocalizedSetData(
           setId: 'one_piece:set:op02',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Paramount War',
         ),
         localizedData: <LocalizedSetData>[
           LocalizedSetData(
             setId: 'one_piece:set:op02',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Paramount War',
           ),
         ],
@@ -416,6 +418,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         setId: 'one_piece:set:op02',
         gameId: TcgGameId.onePiece,
         collectorNumber: '013',
+        languageCode: TcgLanguageCodes.en,
         rarity: 'SR',
         releaseDate: DateTime.utc(2022, 11, 4),
         imageUris: <String, String>{
@@ -464,7 +467,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         canonicalName: 'Boa Hancock',
         defaultLocalizedData: LocalizedCardData(
           cardId: 'one_piece:card:pilot:op02-059',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Boa Hancock',
           subtypeLine: 'Character / The Seven Warlords of the Sea',
           searchAliases: <String>['hancock'],
@@ -472,7 +475,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         localizedData: <LocalizedCardData>[
           LocalizedCardData(
             cardId: 'one_piece:card:pilot:op02-059',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Boa Hancock',
             subtypeLine: 'Character / The Seven Warlords of the Sea',
             searchAliases: <String>['hancock'],
@@ -492,13 +495,13 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         releaseDate: DateTime.utc(2022, 11, 4),
         defaultLocalizedData: LocalizedSetData(
           setId: 'one_piece:set:op02',
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Paramount War',
         ),
         localizedData: <LocalizedSetData>[
           LocalizedSetData(
             setId: 'one_piece:set:op02',
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Paramount War',
           ),
         ],
@@ -510,6 +513,7 @@ _onePieceCatalogEntries = <_OnePieceCatalogEntry>[
         setId: 'one_piece:set:op02',
         gameId: TcgGameId.onePiece,
         collectorNumber: '059',
+        languageCode: TcgLanguageCodes.en,
         rarity: 'UC',
         releaseDate: DateTime.utc(2022, 11, 4),
         imageUris: <String, String>{

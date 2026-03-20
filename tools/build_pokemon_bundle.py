@@ -32,6 +32,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 SUPPORTED_LANGS = {"en", "it", "fr", "de", "es", "pt", "ja", "ko", "zh"}
 TCGDEX_API_BASE = "https://api.tcgdex.net/v2"
+CANONICAL_SNAPSHOT_SCHEMA_VERSION = 2
+POKEMON_BUNDLE_COMPATIBILITY_VERSION = 2
 
 
 @dataclass
@@ -63,6 +65,14 @@ class PrintingRecord:
     localized_names: Dict[str, LocalizedName] = field(default_factory=dict)
     pokemon_meta: Dict[str, Any] = field(default_factory=dict)
     source_raw: Dict[str, Any] = field(default_factory=dict)
+
+
+def _canonical_card_id(provider_object_id: str) -> str:
+    return f"pokemon:card:tcgdex:{provider_object_id.lower()}"
+
+
+def _canonical_printing_id(provider_object_id: str) -> str:
+    return f"pokemon:printing:tcgdex:{provider_object_id.lower()}"
 
 
 def _json_load(path: Path) -> Any:
@@ -317,8 +327,8 @@ def _load_records(source_dir: Path, languages: List[str]) -> Dict[str, PrintingR
 
             raw_id = _normalize_text(card.get("id"))
             provider_object_id = raw_id or f"{set_code}-{collector or name.lower()}"
-            printing_id = f"tcgdex:{provider_object_id.lower()}"
-            card_id = printing_id
+            printing_id = _canonical_printing_id(provider_object_id)
+            card_id = _canonical_card_id(provider_object_id)
 
             record = records.get(printing_id)
             if record is None:
@@ -438,8 +448,8 @@ def _load_records_from_zip(zip_source: str, languages: List[str]) -> Dict[str, P
 
                     raw_id = _normalize_text(card.get("id"))
                     provider_object_id = raw_id or f"{set_code}-{collector or name.lower()}"
-                    printing_id = f"tcgdex:{provider_object_id.lower()}"
-                    card_id = printing_id
+                    printing_id = _canonical_printing_id(provider_object_id)
+                    card_id = _canonical_card_id(provider_object_id)
 
                     record = records.get(printing_id)
                     if record is None:
@@ -658,11 +668,13 @@ def _load_records_from_tcgdex_api(
                     if done % 500 == 0:
                         print(f"[api] lang={lg} details {done}/{len(ids)}")
                     continue
-                printing_id = card_id.lower()
+                provider_object_id = card_id
+                printing_id = _canonical_printing_id(provider_object_id)
+                canonical_card_id = _canonical_card_id(provider_object_id)
                 set_obj = card.get("set") if isinstance(card.get("set"), dict) else {}
                 set_code = _normalize_text(set_obj.get("id")).lower()
                 if not set_code and "-" in printing_id:
-                    set_code = printing_id.split("-", 1)[0]
+                    set_code = provider_object_id.lower().split("-", 1)[0]
                 if not set_code:
                     set_code = "unknown"
 
@@ -677,8 +689,8 @@ def _load_records_from_tcgdex_api(
                 if record is None:
                     record = PrintingRecord(
                         printing_id=printing_id,
-                        card_id=printing_id,
-                        provider_object_id=card_id,
+                        card_id=canonical_card_id,
+                        provider_object_id=provider_object_id,
                         set_code=set_code,
                         collector_number=collector,
                         rarity=_normalize_text(card.get("rarity")) or None,
@@ -713,7 +725,7 @@ def _load_records_from_tcgdex_api(
                     record.set_name_by_lang[lg] = set_name
                 localized = LocalizedName(
                     language=lg,
-                    name=_normalize_text(card.get("name")) or printing_id,
+                    name=_normalize_text(card.get("name")) or provider_object_id,
                     subtype_line=_extract_tcgdex_subtype_line(card),
                     rules_text=_extract_tcgdex_rules_text(card),
                     flavor_text=_normalize_text(card.get("description")) or None,
@@ -819,9 +831,23 @@ def _build_canonical_snapshot(
                 }
             )
 
-        mapping = {
+        card_mapping = {
+            "provider_id": "tcgdex",
+            "object_type": "card",
+            "provider_object_id": record.provider_object_id,
+            "provider_object_version": None,
+            "mapping_confidence": 1.0,
+        }
+        printing_mapping = {
             "provider_id": "tcgdex",
             "object_type": "printing",
+            "provider_object_id": record.provider_object_id,
+            "provider_object_version": None,
+            "mapping_confidence": 1.0,
+        }
+        legacy_mapping = {
+            "provider_id": "pokemon_tcg_api",
+            "object_type": "legacy_printing",
             "provider_object_id": record.provider_object_id,
             "provider_object_version": None,
             "mapping_confidence": 1.0,
@@ -833,7 +859,7 @@ def _build_canonical_snapshot(
                 "set_id": set_id,
                 "game_id": "pokemon",
                 "collector_number": record.collector_number,
-                "provider_mappings": [mapping],
+                "provider_mappings": [card_mapping, printing_mapping, legacy_mapping],
                 "rarity": record.rarity,
                 "release_date": record.set_release_date,
                 "image_uris": {
@@ -850,7 +876,23 @@ def _build_canonical_snapshot(
         )
         provider_mappings.append(
             {
-                "mapping": mapping,
+                "mapping": card_mapping,
+                "card_id": record.card_id,
+                "printing_id": record.printing_id,
+                "set_id": set_id,
+            }
+        )
+        provider_mappings.append(
+            {
+                "mapping": printing_mapping,
+                "card_id": record.card_id,
+                "printing_id": record.printing_id,
+                "set_id": set_id,
+            }
+        )
+        provider_mappings.append(
+            {
+                "mapping": legacy_mapping,
                 "card_id": record.card_id,
                 "printing_id": record.printing_id,
                 "set_id": set_id,
@@ -867,6 +909,8 @@ def _build_canonical_snapshot(
         "price_snapshots": [],
     }
     return {
+        "schema_version": CANONICAL_SNAPSHOT_SCHEMA_VERSION,
+        "compatibility_version": POKEMON_BUNDLE_COMPATIBILITY_VERSION,
         "profile": profile,
         "languages_signature": ",".join(sorted(set(languages))),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1004,7 +1048,7 @@ def _create_legacy_db(db_path: Path, records: Dict[str, PrintingRecord], languag
             VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, '', '', '', ?, ?, ?, NULL, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL)
             """,
             (
-                record.card_id,
+                record.provider_object_id,
                 name,
                 record.set_code,
                 set_name,
@@ -1211,6 +1255,8 @@ def _build_bundle_artifacts(
     manifest = {
         "bundle": "pokemon",
         "version": version,
+        "schema_version": CANONICAL_SNAPSHOT_SCHEMA_VERSION,
+        "compatibility_version": POKEMON_BUNDLE_COMPATIBILITY_VERSION,
         "profile": profile,
         "languages": sorted(set(languages)),
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -1302,6 +1348,8 @@ def main(argv: List[str]) -> int:
                     {
                         "id": f"{kind}_{lang}",
                         "kind": kind,
+                        "schema_version": payload.get("schema_version"),
+                        "compatibility_version": payload.get("compatibility_version"),
                         "language": lang,
                         "requires": requires,
                         "profile": payload.get("profile"),
@@ -1318,6 +1366,8 @@ def main(argv: List[str]) -> int:
                     {
                         "id": f"bundle_{lang}",
                         "kind": "bundle",
+                        "schema_version": payload.get("schema_version"),
+                        "compatibility_version": payload.get("compatibility_version"),
                         "language": lang,
                         "requires": [],
                         "profile": payload.get("profile"),
@@ -1331,6 +1381,8 @@ def main(argv: List[str]) -> int:
         aggregate = {
             "bundle": "pokemon",
             "version": args.version,
+            "schema_version": CANONICAL_SNAPSHOT_SCHEMA_VERSION,
+            "compatibility_version": POKEMON_BUNDLE_COMPATIBILITY_VERSION,
             "mode": aggregate_mode,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "bundles": bundle_entries,

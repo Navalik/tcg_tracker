@@ -119,16 +119,23 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
     if (ids.isEmpty) {
       return;
     }
-    unawaited(_refreshSearchResultPricesInternal(ids));
+    final printingIdsByCardId = <String, String?>{
+      for (final card in cards) card.id: card.printingId,
+    };
+    unawaited(_refreshSearchResultPricesInternal(ids, printingIdsByCardId));
   }
 
-  Future<void> _refreshSearchResultPricesInternal(List<String> cardIds) async {
+  Future<void> _refreshSearchResultPricesInternal(
+    List<String> cardIds,
+    Map<String, String?> printingIdsByCardId,
+  ) async {
     final nextData = <String, _SearchPriceData>{};
     try {
       for (final cardId in cardIds) {
         await PriceRepository.instance.ensurePricesFresh(cardId);
         final entry = await ScryfallDatabase.instance.fetchCardEntryById(
           cardId,
+          printingId: printingIdsByCardId[cardId],
           collectionId: widget.ownershipCollectionId,
         );
         if (entry == null) {
@@ -338,7 +345,7 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                                     const SizedBox(width: 6),
                                     _raritySquare(card.rarity),
                                   ],
-                                ],
+                                  ],
                               );
                             },
                           ),
@@ -581,7 +588,7 @@ extension _CardSearchResultsSection on _CardSearchSheetState {
                               const SizedBox(width: 6),
                               _raritySquare(card.rarity),
                             ],
-                          ],
+                            ],
                         ),
                       ],
                     ),

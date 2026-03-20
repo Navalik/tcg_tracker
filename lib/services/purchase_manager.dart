@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:in_app_purchase_android/in_app_purchase_android.dart';
@@ -97,6 +98,38 @@ class PurchaseManager extends ChangeNotifier {
   PlusPlanOption? get yearlyPlan => _yearlyPlan;
   bool get hasPlans => _monthlyPlan != null && _yearlyPlan != null;
 
+  Future<void> _logBillingEvent(
+    String event, {
+    Map<String, Object?> details = const <String, Object?>{},
+  }) async {
+    try {
+      final payload = <String>[
+        'event=$event',
+        'platform=${Platform.operatingSystem}',
+        'store_available=$_storeAvailable',
+        'purchase_pending=$_purchasePending',
+        'restoring=$_restoringPurchases',
+        'tier=${_tierToStorage(_userTier)}',
+        'extra_slots=$_extraTcgSlots',
+        if (_lastError != null && _lastError!.trim().isNotEmpty)
+          'last_error=${_lastError!.trim()}',
+        ...details.entries.map(
+          (entry) => '${entry.key}=${_sanitizeDiagnosticValue(entry.value)}',
+        ),
+      ];
+      FirebaseCrashlytics.instance.log('billing ${payload.join(' ')}');
+    } catch (_) {}
+  }
+
+  String _sanitizeDiagnosticValue(Object? value) {
+    final text = (value ?? '').toString().replaceAll(RegExp(r'[\r\n]+'), ' ');
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+    return trimmed.length <= 120 ? trimmed : '${trimmed.substring(0, 120)}...';
+  }
+
   Future<void> init() async {
     if (_initialized) {
       if (_supportsStore()) {
@@ -104,6 +137,7 @@ class PurchaseManager extends ChangeNotifier {
       }
       return;
     }
+    await _logBillingEvent('init_start');
     // Keep last known entitlement as fallback, then reconcile with store.
     _userTier = _tierFromStored(await AppSettings.loadUserTier());
     _ownedTcgs = await AppSettings.loadOwnedTcgs();
@@ -127,6 +161,14 @@ class PurchaseManager extends ChangeNotifier {
     }
 
     _initialized = true;
+    await _logBillingEvent(
+      'init_complete',
+      details: {
+        'owned_tcgs': _ownedTcgs.join(','),
+        'has_plans': hasPlans,
+        'has_additional_product': _additionalTcgProduct != null,
+      },
+    );
     notifyListeners();
   }
 
@@ -138,11 +180,13 @@ class PurchaseManager extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
+      await _logBillingEvent('catalog_refresh_start');
       _storeAvailable = await _inAppPurchase.isAvailable();
       if (!_storeAvailable) {
         _monthlyPlan = null;
         _yearlyPlan = null;
         _lastError = 'store_unavailable';
+        await _logBillingEvent('catalog_refresh_store_unavailable');
         return;
       }
       final response = await _inAppPurchase.queryProductDetails({
@@ -154,6 +198,10 @@ class PurchaseManager extends ChangeNotifier {
         _monthlyPlan = null;
         _yearlyPlan = null;
         _additionalTcgProduct = null;
+        await _logBillingEvent(
+          'catalog_refresh_error',
+          details: {'response_error': response.error},
+        );
       } else {
         _resolvePlansFromResponse(response);
         _additionalTcgProduct = null;
@@ -166,12 +214,25 @@ class PurchaseManager extends ChangeNotifier {
         if (!hasPlans && _additionalTcgProduct == null) {
           _lastError = 'plans_unavailable';
         }
+        await _logBillingEvent(
+          'catalog_refresh_complete',
+          details: {
+            'product_count': response.productDetails.length,
+            'has_monthly': _monthlyPlan != null,
+            'has_yearly': _yearlyPlan != null,
+            'has_additional_product': _additionalTcgProduct != null,
+          },
+        );
       }
-    } catch (_) {
+    } catch (error) {
       _lastError = 'catalog_load_failed';
       _monthlyPlan = null;
       _yearlyPlan = null;
       _additionalTcgProduct = null;
+      await _logBillingEvent(
+        'catalog_refresh_exception',
+        details: {'error': error},
+      );
     } finally {
       _loadingPlans = false;
       notifyListeners();
@@ -181,6 +242,10 @@ class PurchaseManager extends ChangeNotifier {
   Future<void> purchaseAdditionalTcgUnlock() async {
     final product = _additionalTcgProduct;
     if (!_supportsStore() || !_storeAvailable || product == null) {
+      await _logBillingEvent(
+        'purchase_additional_skipped',
+        details: {'product_missing': product == null},
+      );
       return;
     }
     _ensurePurchaseStreamListener();
@@ -190,6 +255,10 @@ class PurchaseManager extends ChangeNotifier {
     notifyListeners();
     try {
       final param = PurchaseParam(productDetails: product);
+      await _logBillingEvent(
+        'purchase_additional_start',
+        details: {'product_id': product.id, 'price': product.price},
+      );
       final started = await _inAppPurchase.buyNonConsumable(
         purchaseParam: param,
       );
@@ -197,6 +266,10 @@ class PurchaseManager extends ChangeNotifier {
         _lastError = 'purchase_start_failed';
         _purchasePending = false;
         _purchaseWatchdog?.cancel();
+        await _logBillingEvent(
+          'purchase_additional_not_started',
+          details: {'product_id': product.id},
+        );
         notifyListeners();
       }
     } catch (error) {
@@ -208,12 +281,20 @@ class PurchaseManager extends ChangeNotifier {
         if (_extraTcgSlots > 0 || _ownedTcgs.isNotEmpty) {
           _lastError = null;
         }
+        await _logBillingEvent(
+          'purchase_additional_already_owned',
+          details: {'product_id': product.id, 'error': error},
+        );
         notifyListeners();
         return;
       }
       _lastError = 'purchase_start_failed';
       _purchasePending = false;
       _purchaseWatchdog?.cancel();
+      await _logBillingEvent(
+        'purchase_additional_exception',
+        details: {'product_id': product.id, 'error': error},
+      );
       notifyListeners();
     }
   }
@@ -223,6 +304,10 @@ class PurchaseManager extends ChangeNotifier {
         ? _monthlyPlan
         : _yearlyPlan;
     if (!_supportsStore() || !_storeAvailable || selected == null) {
+      await _logBillingEvent(
+        'purchase_plus_skipped',
+        details: {'period': period.name, 'plan_missing': selected == null},
+      );
       return;
     }
     _ensurePurchaseStreamListener();
@@ -237,6 +322,13 @@ class PurchaseManager extends ChangeNotifier {
         if (offerToken == null || offerToken.isEmpty) {
           _lastError = 'missing_offer_token';
           _purchasePending = false;
+          await _logBillingEvent(
+            'purchase_plus_missing_offer_token',
+            details: {
+              'period': period.name,
+              'product_id': selected.productDetails.id,
+            },
+          );
           notifyListeners();
           return;
         }
@@ -248,6 +340,16 @@ class PurchaseManager extends ChangeNotifier {
       } else {
         param = PurchaseParam(productDetails: selected.productDetails);
       }
+      await _logBillingEvent(
+        'purchase_plus_start',
+        details: {
+          'period': period.name,
+          'product_id': selected.productDetails.id,
+          'billing_period': selected.billingPeriod,
+          'offer_token_present': (selected.offerToken ?? '').isNotEmpty,
+          'price': selected.formattedPrice,
+        },
+      );
       final started = await _inAppPurchase.buyNonConsumable(
         purchaseParam: param,
       );
@@ -255,12 +357,27 @@ class PurchaseManager extends ChangeNotifier {
         _lastError = 'purchase_start_failed';
         _purchasePending = false;
         _purchaseWatchdog?.cancel();
+        await _logBillingEvent(
+          'purchase_plus_not_started',
+          details: {
+            'period': period.name,
+            'product_id': selected.productDetails.id,
+          },
+        );
         notifyListeners();
       }
-    } catch (_) {
+    } catch (error) {
       _lastError = 'purchase_start_failed';
       _purchasePending = false;
       _purchaseWatchdog?.cancel();
+      await _logBillingEvent(
+        'purchase_plus_exception',
+        details: {
+          'period': period.name,
+          'product_id': selected.productDetails.id,
+          'error': error,
+        },
+      );
       notifyListeners();
     }
   }
@@ -269,6 +386,7 @@ class PurchaseManager extends ChangeNotifier {
     if (!_supportsStore()) {
       return;
     }
+    await _logBillingEvent('restore_start');
     try {
       _storeAvailable = await _inAppPurchase.isAvailable();
     } catch (_) {
@@ -286,8 +404,10 @@ class PurchaseManager extends ChangeNotifier {
     try {
       await _inAppPurchase.restorePurchases();
       await refreshEntitlementFromStore();
-    } catch (_) {
+      await _logBillingEvent('restore_complete');
+    } catch (error) {
       _lastError = 'restore_failed';
+      await _logBillingEvent('restore_exception', details: {'error': error});
     } finally {
       _restoringPurchases = false;
       notifyListeners();
@@ -299,9 +419,11 @@ class PurchaseManager extends ChangeNotifier {
       return;
     }
     try {
+      await _logBillingEvent('entitlement_refresh_start');
       _storeAvailable = await _inAppPurchase.isAvailable();
       if (!_storeAvailable) {
         _lastError = 'store_unavailable';
+        await _logBillingEvent('entitlement_refresh_store_unavailable');
         notifyListeners();
         return;
       }
@@ -348,16 +470,42 @@ class PurchaseManager extends ChangeNotifier {
       }
       _pokemonUnlocked = _ownedTcgs.contains(pokemonOwnershipKey);
       await AppSettings.savePokemonUnlocked(_pokemonUnlocked);
+      await _logBillingEvent(
+        'entitlement_refresh_complete',
+        details: {
+          'plus_active': plusActive,
+          'additional_tcg_unlocked': additionalTcgUnlocked,
+          'past_purchase_count': response.pastPurchases.length,
+          'owned_tcgs': _ownedTcgs.join(','),
+        },
+      );
       notifyListeners();
-    } catch (_) {
+    } catch (error) {
       _lastError = 'entitlement_refresh_failed';
       // Do not downgrade entitlements on transient store/network failures.
+      await _logBillingEvent(
+        'entitlement_refresh_exception',
+        details: {'error': error},
+      );
       notifyListeners();
     }
   }
 
   Future<void> _handlePurchaseUpdates(List<PurchaseDetails> purchases) async {
+    await _logBillingEvent(
+      'purchase_updates_received',
+      details: {'count': purchases.length},
+    );
     for (final purchase in purchases) {
+      await _logBillingEvent(
+        'purchase_update_item',
+        details: {
+          'product_id': purchase.productID,
+          'status': purchase.status.name,
+          'pending_complete': purchase.pendingCompletePurchase,
+          'error': purchase.error,
+        },
+      );
       final isKnownProduct =
           purchase.productID == plusProductId ||
           purchase.productID == additionalTcgProductId;
@@ -588,6 +736,7 @@ class PurchaseManager extends ChangeNotifier {
       }
       _lastError = 'purchase_failed';
       _purchasePending = false;
+      unawaited(_logBillingEvent('purchase_watchdog_timeout'));
       notifyListeners();
     });
   }
@@ -602,14 +751,18 @@ class PurchaseManager extends ChangeNotifier {
         _restoringPurchases = false;
         _purchaseWatchdog?.cancel();
         _purchaseSubscription = null;
+        unawaited(_logBillingEvent('purchase_stream_done'));
         notifyListeners();
       },
-      onError: (_) {
+      onError: (error) {
         _lastError = 'purchase_failed';
         _purchasePending = false;
         _restoringPurchases = false;
         _purchaseWatchdog?.cancel();
         _purchaseSubscription = null;
+        unawaited(
+          _logBillingEvent('purchase_stream_error', details: {'error': error}),
+        );
         notifyListeners();
       },
     );

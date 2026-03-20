@@ -12,6 +12,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
       await PriceRepository.instance.ensurePricesFresh(entry.cardId);
       final refreshed = await ScryfallDatabase.instance.fetchCardEntryById(
         entry.cardId,
+        printingId: entry.printingId,
         collectionId: lookupCollectionId,
       );
       if (refreshed != null) {
@@ -40,11 +41,18 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
         detailEntry.cardId,
       );
     } catch (_) {}
+    Map<String, dynamic>? cardJsonPayload;
+    try {
+      cardJsonPayload = await ScryfallDatabase.instance.fetchCardJsonPayload(
+        detailEntry.cardId,
+      );
+    } catch (_) {}
     final details = _parseCardDetails(
       l10n,
       detailEntry,
       priceCurrency,
       legalFormats,
+      cardJsonPayload,
     );
     final typeLine = detailEntry.typeLine.trim();
     final manaCost = detailEntry.manaCost.trim();
@@ -329,6 +337,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
     CollectionCardEntry entry,
     String priceCurrency,
     List<String> legalFormats,
+    Map<String, dynamic>? cardJsonPayload,
   ) {
     final setLabel = _setLabelForEntry(entry);
     final details = <_CardDetail>[
@@ -344,6 +353,36 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
     }
 
     add(l10n.detailRarity, _formatRarity(context, entry.rarity));
+    final pokemonDetails = _parsePokemonCardDetails(cardJsonPayload);
+    if (pokemonDetails != null) {
+      add(l10n.pokemonCardCategoryLabel, pokemonDetails.category);
+      add('HP', pokemonDetails.hp);
+      add(l10n.pokemonEnergyTypeLabel, pokemonDetails.types);
+      add(
+        _localizedInlineLabel(context, it: 'Stadio', en: 'Stage'),
+        pokemonDetails.stage,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Evolve da', en: 'Evolves from'),
+        pokemonDetails.evolvesFrom,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Marchio reg.', en: 'Regulation'),
+        pokemonDetails.regulationMark,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Debolezze', en: 'Weaknesses'),
+        pokemonDetails.weaknesses,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Resistenze', en: 'Resistances'),
+        pokemonDetails.resistances,
+      );
+      add(
+        _localizedInlineLabel(context, it: 'Costo ritirata', en: 'Retreat'),
+        pokemonDetails.retreatCost,
+      );
+    }
     add(l10n.detailSetName, setLabel);
     add(l10n.detailLanguage, entry.lang);
     add(l10n.detailRelease, entry.releasedAt);
@@ -538,6 +577,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                             await _inventoryService.setInventoryQty(
                               entry.cardId,
                               0,
+                              printingId: entry.printingId,
                             );
                           } else if (_isWishlistCollection ||
                               _isDirectCustomCollection) {
@@ -545,17 +585,20 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                                 .deleteCollectionCard(
                                   widget.collectionId,
                                   entry.cardId,
+                                  printingId: entry.printingId,
                                 );
                           } else if (widget.isDeckCollection) {
                             await ScryfallDatabase.instance
                                 .deleteCollectionCard(
                                   ownedCollectionId!,
                                   entry.cardId,
+                                  printingId: entry.printingId,
                                 );
                           } else {
                             await _inventoryService.setInventoryQty(
                               entry.cardId,
                               0,
+                              printingId: entry.printingId,
                             );
                           }
                           if (!context.mounted) {
@@ -591,6 +634,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                                 .upsertCollectionMembership(
                                   widget.collectionId,
                                   entry.cardId,
+                                  printingId: entry.printingId,
                                 );
                           } else if (_isDirectCustomCollection) {
                             if (quantity <= 0) {
@@ -598,16 +642,19 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                                   .deleteCollectionCard(
                                     widget.collectionId,
                                     entry.cardId,
+                                    printingId: entry.printingId,
                                   );
                             } else {
                               await _inventoryService.setInventoryQty(
                                 entry.cardId,
                                 quantity,
+                                printingId: entry.printingId,
                               );
                               await ScryfallDatabase.instance
                                   .upsertCollectionMembership(
                                     widget.collectionId,
                                     entry.cardId,
+                                    printingId: entry.printingId,
                                   );
                             }
                           } else if (widget.isDeckCollection) {
@@ -615,6 +662,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                                 .upsertCollectionCard(
                                   ownedCollectionId!,
                                   entry.cardId,
+                                  printingId: entry.printingId,
                                   quantity: quantity,
                                   foil: false,
                                   altArt: altArt,
@@ -623,6 +671,7 @@ extension _CollectionDetailDetailsStateX on _CollectionDetailPageState {
                             await _inventoryService.setInventoryQty(
                               entry.cardId,
                               quantity,
+                              printingId: entry.printingId,
                             );
                           }
                           if (!context.mounted) {

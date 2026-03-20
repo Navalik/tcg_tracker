@@ -70,6 +70,8 @@ part 'parts/ui_helpers.dart';
 
 bool _firebaseReady = false;
 bool _crashReportingReady = false;
+final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+Future<void>? _googleSignInInitialization;
 
 bool _isNonFatalUiResourceError(Object error, {String? reason}) {
   if (error is NetworkImageLoadException) {
@@ -180,6 +182,7 @@ Future<void> main() async {
     try {
       await Firebase.initializeApp().timeout(const Duration(seconds: 8));
       _firebaseReady = true;
+      _googleSignInInitialization = _googleSignIn.initialize();
       await AnalyticsService.instance.init().timeout(
         const Duration(seconds: 5),
       );
@@ -199,6 +202,56 @@ Future<void> main() async {
       ),
     );
   });
+}
+
+Future<void> _ensureGoogleSignInInitialized() async {
+  final initialization =
+      _googleSignInInitialization ??= _googleSignIn.initialize();
+  await initialization;
+}
+
+Future<void> _logAuthBreadcrumb(
+  String event, {
+  Map<String, Object?> details = const <String, Object?>{},
+}) async {
+  if (!_firebaseReady) {
+    return;
+  }
+  try {
+    final payload = <String>[
+      'event=$event',
+      ...details.entries.map(
+        (entry) =>
+            '${entry.key}=${entry.value?.toString().replaceAll(RegExp(r"[\r\n]+"), " ").trim() ?? ''}',
+      ),
+    ];
+    FirebaseCrashlytics.instance.log('auth ${payload.join(' ')}');
+  } catch (_) {}
+}
+
+Future<UserCredential> _signInToFirebaseWithGoogle() async {
+  await _logAuthBreadcrumb('google_sign_in_start');
+  await _ensureGoogleSignInInitialized();
+  final googleUser = await _googleSignIn.authenticate();
+  await _logAuthBreadcrumb(
+    'google_authenticate_success',
+    details: {'email': googleUser.email},
+  );
+  final idToken = googleUser.authentication.idToken?.trim();
+  if (idToken == null || idToken.isEmpty) {
+    await _logAuthBreadcrumb(
+      'google_id_token_missing',
+      details: {'email': googleUser.email},
+    );
+    throw const FormatException('google_id_token_missing');
+  }
+  final credential = GoogleAuthProvider.credential(idToken: idToken);
+  final result = await FirebaseAuth.instance.signInWithCredential(credential);
+  await _logAuthBreadcrumb(
+    'firebase_google_sign_in_success',
+    details: {'uid': result.user?.uid},
+  );
+  return result;
 }
 
 Future<void> _configureCrashReporting() async {
@@ -241,7 +294,9 @@ Future<void> _recordAppError(
   String? reason,
 }) async {
   if (!_crashReportingReady) {
-    debugPrint('App error (crash reporting disabled): $error');
+    if (kDebugMode) {
+      debugPrint('App error (crash reporting disabled): $error');
+    }
     return;
   }
   try {
@@ -252,7 +307,9 @@ Future<void> _recordAppError(
       reason: reason,
     );
   } catch (_) {
-    debugPrint('Failed to report error: $error');
+    if (kDebugMode) {
+      debugPrint('Failed to report error: $error');
+    }
   }
 }
 
@@ -736,6 +793,19 @@ class _AuthGateState extends State<_AuthGate> {
       }
       return l10n.authGoogleSignInFailedWithCode(error.code);
     }
+    if (error is GoogleSignInException) {
+      final blob =
+          '${error.code} ${error.description ?? ''} ${error.details ?? ''}'
+              .toLowerCase();
+      if (blob.contains('clientconfigurationerror') ||
+          blob.contains('providerconfigurationerror')) {
+        return l10n.authGoogleSignInConfigError;
+      }
+      if (blob.contains('canceled') || blob.contains('interrupted')) {
+        return l10n.authGoogleSignInCancelled;
+      }
+      return l10n.authGoogleSignInFailedTryAgain;
+    }
     if (error is PlatformException) {
       final code = error.code.toLowerCase();
       final message = (error.message ?? '').toLowerCase();
@@ -752,6 +822,10 @@ class _AuthGateState extends State<_AuthGate> {
       }
       return l10n.authGoogleSignInFailedWithCode(error.code);
     }
+    if (error is FormatException &&
+        error.message.toLowerCase().contains('google_id_token_missing')) {
+      return l10n.authGoogleSignInConfigError;
+    }
     return l10n.authGoogleSignInFailedTryAgain;
   }
 
@@ -763,17 +837,9 @@ class _AuthGateState extends State<_AuthGate> {
       _isSigningIn = true;
     });
     try {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) {
-        return;
-      }
-      final googleAuth = await googleUser.authentication;
-      final credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken,
-        accessToken: googleAuth.accessToken,
-      );
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      await _signInToFirebaseWithGoogle();
     } catch (error) {
+      await _logAuthBreadcrumb('google_sign_in_error', details: {'error': error});
       if (!mounted) {
         return;
       }

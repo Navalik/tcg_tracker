@@ -607,11 +607,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _bulkUpdatedAtRaw = null;
       });
       unawaited(_refreshPokemonUpdateStatusInBackground());
-    } catch (error, stackTrace) {
-      debugPrint('Pokemon dataset install failed: $error');
-      if (kDebugMode) {
-        debugPrintStack(stackTrace: stackTrace);
-      }
+    } catch (error) {
       if (!mounted) {
         return;
       }
@@ -660,11 +656,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<void> _repairPokemonColorsInBackground() async {
     final repairedMissing = await ScryfallDatabase.instance
         .repairMissingColorsFromTypeLine();
+    final repairedFromCardJson = await ScryfallDatabase.instance
+        .repairMissingPokemonColorsFromCardJson();
     final normalizedLightning = await ScryfallDatabase.instance
         .normalizePokemonLightningColors();
     final repairedArtists = await ScryfallDatabase.instance
         .backfillArtistsFromCardJson();
-    final updated = repairedMissing + normalizedLightning + repairedArtists;
+    final updated =
+        repairedMissing +
+        repairedFromCardJson +
+        normalizedLightning +
+        repairedArtists;
     if (!mounted || updated <= 0) {
       return;
     }
@@ -1551,12 +1553,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           AppLocalizations.of(context)!.downloadFailedGeneric,
         );
       }
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        showAppSnackBar(
-          context,
-          AppLocalizations.of(context)!.downloadFailedGeneric,
-        );
+        showAppSnackBar(context, _collectionLoadFailedLabel(error));
       }
     } finally {
       _collectionsLoadInProgress = false;
@@ -2014,6 +2013,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .ensureAllCardsCollectionId();
     final entry = await ScryfallDatabase.instance.fetchCardEntryById(
       card.id,
+      printingId: card.printingId,
       collectionId: allCardsId,
     );
     if (!mounted) {
@@ -2065,7 +2065,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return StatefulBuilder(
           builder: (context, setModalState) {
             Future<void> handleAdd() async {
-              final added = await _addCardToAllCards(card.id);
+              final added = await _addCardToAllCards(
+                card.id,
+                printingId: card.printingId,
+              );
               if (!added || !mounted) {
                 return;
               }
@@ -3350,7 +3353,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final filter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(
         builder: (_) =>
-            _CollectionFilterBuilderPage(name: name, submitLabel: l10n.create),
+            _CollectionFilterBuilderPage(
+              name: name,
+              submitLabel: l10n.create,
+              initialFilter: null,
+            ),
       ),
     );
     if (!context.mounted || filter == null) {
@@ -3479,8 +3486,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!context.mounted) {
       return;
     }
-    final selectedLanguage = await _pickSetCollectionLanguage(context);
-    if (selectedLanguage == null || !context.mounted) {
+    final selectedLanguages = await _pickSetCollectionLanguages(context);
+    if (selectedLanguages == null ||
+        selectedLanguages.isEmpty ||
+        !context.mounted) {
       return;
     }
 
@@ -3496,7 +3505,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     int id;
     final filter = CollectionFilter(
       sets: {selected.code.toLowerCase()},
-      languages: {selectedLanguage},
+      languages: selectedLanguages,
     );
     try {
       id = await ScryfallDatabase.instance.addCollection(
@@ -3955,6 +3964,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         await ScryfallDatabase.instance.upsertCollectionCard(
           targetCollectionId,
           cardId,
+          printingId: existing?.printingId,
           quantity: nextQty,
           foil: false,
           altArt: false,
@@ -4325,6 +4335,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         }
         final added = await _addCardToAllCards(
           resolved.pickedCard!.id,
+          printingId: resolved.pickedCard!.printingId,
           foil: resolved.seed.isFoil,
         );
         if (!mounted || !added) {
@@ -4398,14 +4409,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           isFoil: seed.isFoil,
         ),
         searchRepository: appRepositories.search,
-      );
-      debugPrint(
-        'Pokemon scan resolve: '
-        'candidates=${resolution.metrics.candidateCount} '
-        'name=${resolution.metrics.exactNameMatches} '
-        'set=${resolution.metrics.exactSetMatches} '
-        'collector=${resolution.metrics.exactCollectorMatches} '
-        'fallbacks=${resolution.metrics.fallbackSteps.join(" > ")}',
       );
       if (!mounted || resolution.candidates.isEmpty) {
         return _ResolvedScanSelection(seed: seed);
@@ -4656,7 +4659,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
   }
 
-  Future<bool> _addCardToAllCards(String cardId, {bool foil = false}) async {
+  Future<bool> _addCardToAllCards(
+    String cardId, {
+    String? printingId,
+    bool foil = false,
+  }) async {
     CollectionInfo? allCards = _findAllCardsCollection();
     if (allCards == null) {
       final allCardsId = await ScryfallDatabase.instance
@@ -4673,11 +4680,16 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         return false;
       }
     }
-    await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
+    await InventoryService.instance.addToInventory(
+      cardId,
+      printingId: printingId,
+      deltaQty: 1,
+    );
     if (foil) {
       await ScryfallDatabase.instance.updateCollectionCard(
         allCards.id,
         cardId,
+        printingId: printingId,
         foil: true,
       );
     }
@@ -5660,25 +5672,33 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
 
     if (selection.isBulk) {
-      for (final cardId in selection.cardIds) {
-        await InventoryService.instance.addToInventory(cardId, deltaQty: 1);
+      for (final card in selection.cards) {
+        await InventoryService.instance.addToInventory(
+          card.id,
+          printingId: card.printingId,
+          deltaQty: 1,
+        );
         if (foil) {
           await ScryfallDatabase.instance.updateCollectionCard(
             allCards.id,
-            cardId,
+            card.id,
+            printingId: card.printingId,
             foil: true,
           );
         }
       }
     } else {
+      final selectedCard = selection.cards.first;
       await InventoryService.instance.addToInventory(
-        selection.cardIds.first,
+        selectedCard.id,
+        printingId: selectedCard.printingId,
         deltaQty: 1,
       );
       if (foil) {
         await ScryfallDatabase.instance.updateCollectionCard(
           allCards.id,
-          selection.cardIds.first,
+          selectedCard.id,
+          printingId: selectedCard.printingId,
           foil: true,
         );
       }
@@ -5767,7 +5787,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
     final isSetCollection = _isSetCollection(collection);
     final isDeckCollection = collection.type == CollectionType.deck;
-    final isSmartCollection = collection.type == CollectionType.smart;
     final menuItems = <PopupMenuEntry<_CollectionAction>>[];
     if (!isSetCollection) {
       menuItems.add(
@@ -5778,20 +5797,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
               Icon(Icons.edit, size: 18),
               SizedBox(width: 8),
               Text(AppLocalizations.of(context)!.rename),
-            ],
-          ),
-        ),
-      );
-    }
-    if (isSmartCollection) {
-      menuItems.add(
-        PopupMenuItem(
-          value: _CollectionAction.editFilter,
-          child: Row(
-            children: [
-              const Icon(Icons.tune, size: 18),
-              const SizedBox(width: 8),
-              Text(_isItalianUi() ? 'Modifica filtro' : 'Edit filter'),
             ],
           ),
         ),
@@ -5858,8 +5863,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     if (selection == _CollectionAction.rename) {
       await _renameCollection(collection);
-    } else if (selection == _CollectionAction.editFilter) {
-      await _editSmartCollectionFilter(collection);
     } else if (selection == _CollectionAction.importDeckFile) {
       await _importDeckFileIntoCollection(collection);
     } else if (selection == _CollectionAction.exportDeckArena) {
@@ -5949,55 +5952,37 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     });
   }
 
-  Future<void> _editSmartCollectionFilter(CollectionInfo collection) async {
-    if (collection.type != CollectionType.smart) {
-      return;
+  Future<Set<String>?> _pickSetCollectionLanguages(BuildContext context) async {
+    final single = await _pickSetCollectionLanguage(context);
+    if (single == null || single.trim().isEmpty) {
+      return null;
     }
-    final l10n = AppLocalizations.of(context)!;
-    final updatedFilter = await Navigator.of(context).push<CollectionFilter>(
-      MaterialPageRoute(
-        builder: (_) => _CollectionFilterBuilderPage(
-          name: collection.name,
-          submitLabel: l10n.saveFilterLabel,
-          initialFilter: collection.filter,
-        ),
-      ),
-    );
-    if (!mounted || updatedFilter == null) {
-      return;
-    }
-    if (!_hasAtLeastOneSmartFilter(updatedFilter)) {
-      showAppSnackBar(context, l10n.smartCollectionNeedAtLeastOneFilter);
-      return;
-    }
-    await ScryfallDatabase.instance.updateCollectionFilter(
-      collection.id,
-      filter: updatedFilter,
-    );
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      final index = _collections.indexWhere((item) => item.id == collection.id);
-      if (index != -1) {
-        _collections[index] = CollectionInfo(
-          id: collection.id,
-          name: collection.name,
-          cardCount: collection.cardCount,
-          type: collection.type,
-          filter: updatedFilter,
-        );
+    return {single.trim().toLowerCase()};
+  }
+
+  String _collectionLoadFailedLabel(Object error) {
+    final raw = error.toString().toLowerCase();
+    if (_isItalianUi()) {
+      if (raw.contains('sqliteexception') || raw.contains('database')) {
+        return 'Errore nel caricamento dei dati locali della collezione.';
       }
-    });
-    await _loadCollections();
+      return 'Errore nel caricamento della collezione.';
+    }
+    if (raw.contains('sqliteexception') || raw.contains('database')) {
+      return 'Failed to load local collection data.';
+    }
+    return 'Failed to load collection.';
   }
 
   Future<String?> _pickSetCollectionLanguage(BuildContext context) async {
     final available = (await AppSettings.loadCardLanguagesForGame(
       _activeSettingsGame,
-    )).toSet()..add('en');
-    if (available.length <= 1) {
+    )).toSet();
+    if (available.isEmpty) {
       return 'en';
+    }
+    if (available.length == 1) {
+      return available.first;
     }
     if (!context.mounted) {
       return null;
@@ -7506,7 +7491,7 @@ class _RecentAddedCardTile extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 _buildRaritySquare(card.rarity),
                               ],
-                            ],
+                              ],
                           ),
                         ],
                       ),
@@ -7889,7 +7874,6 @@ class _ParsedDeckList {
 
 enum _CollectionAction {
   rename,
-  editFilter,
   importDeckFile,
   exportDeckArena,
   exportDeckMtgo,

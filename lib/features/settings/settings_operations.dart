@@ -396,6 +396,10 @@ extension _SettingsOperationsSection on _SettingsPageState {
       ? 'Reimport database $gameLabel completato.'
       : '$gameLabel database reimport completed.';
 
+  String _pokemonBackupCreatedLabel(String fileName) => _isItalianUi
+      ? 'Backup automatico Pokemon creato: $fileName'
+      : 'Automatic Pokemon backup created: $fileName';
+
   String _reimportFailedLabel(Object error) {
     if (_isStorageSpaceError(error)) {
       return _storageSpaceErrorMessage(italian: _isItalianUi);
@@ -586,7 +590,16 @@ extension _SettingsOperationsSection on _SettingsPageState {
     if (!mounted) {
       return;
     }
-    showAppSnackBar(context, _reimportDoneLabel(gameLabel));
+    await _refreshLatestPokemonAutomaticBackup();
+    final pokemonBackupFile =
+        game == TcgGame.pokemon
+            ? PokemonBulkService.instance.lastAutomaticCollectionsBackupFile
+            : null;
+    final doneLabel = _reimportDoneLabel(gameLabel);
+    final message = pokemonBackupFile == null
+        ? doneLabel
+        : '$doneLabel\n${_pokemonBackupCreatedLabel(path.basename(pokemonBackupFile.path))}';
+    showAppSnackBar(context, message);
     _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
   }
 
@@ -627,6 +640,9 @@ extension _SettingsOperationsSection on _SettingsPageState {
     try {
       final result = await LocalBackupService.instance
           .exportCollectionsBackup();
+      if (result == null) {
+        return;
+      }
       await AnalyticsService.instance.logBackupExported(
         collections: result.collections,
         collectionCards: result.collectionCards,
@@ -663,6 +679,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       if (shareNow == true && mounted) {
         await _shareBackupFile(result.file);
       }
+      await _refreshLatestPokemonAutomaticBackup();
     } catch (error) {
       if (!mounted) {
         return;
@@ -759,6 +776,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
           stats['collectionCards'] ?? 0,
         ),
       );
+      await _refreshLatestPokemonAutomaticBackup();
       _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
     } catch (error) {
       if (!mounted) {
@@ -793,6 +811,111 @@ extension _SettingsOperationsSection on _SettingsPageState {
         context,
         AppLocalizations.of(context)!.backupShareFailed(error),
       );
+    }
+  }
+
+  Future<void> _refreshLatestPokemonAutomaticBackup() async {
+    final latest = await LocalBackupService.instance.latestBackupFile(
+      prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _latestPokemonAutoBackupName = latest == null
+          ? null
+          : path.basename(latest.path);
+      _latestPokemonAutoBackupAt = latest == null
+          ? null
+          : latest.statSync().modified;
+    });
+  }
+
+  Future<void> _restoreLatestPokemonAutomaticBackup() async {
+    if (_backupBusy) {
+      return;
+    }
+    final latest = await LocalBackupService.instance.latestBackupFile(
+      prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
+    );
+    if (latest == null) {
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Nessun backup automatico Pokemon disponibile.'
+            : 'No automatic Pokemon backup available.',
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(
+            _isItalianUi
+                ? 'Ripristinare backup Pokemon?'
+                : 'Restore Pokemon backup?',
+          ),
+          content: Text(
+            _isItalianUi
+                ? 'Questo sostituira le collezioni correnti con l\'ultimo backup automatico Pokemon.'
+                : 'This will replace current collections with the latest automatic Pokemon backup.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(AppLocalizations.of(context)!.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(_isItalianUi ? 'Ripristina' : 'Restore'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _backupBusy = true;
+    });
+    try {
+      final stats = await LocalBackupService.instance
+          .importCollectionsBackupFromFile(latest);
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Backup Pokemon ripristinato. Collezioni: ${stats['collections'] ?? 0}, voci: ${stats['collectionCards'] ?? 0}'
+            : 'Pokemon backup restored. Collections: ${stats['collections'] ?? 0}, entries: ${stats['collectionCards'] ?? 0}',
+      );
+      _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+      await _refreshLatestPokemonAutomaticBackup();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final message = _isStorageSpaceError(error)
+          ? _storageSpaceErrorMessage(italian: _isItalianUi)
+          : AppLocalizations.of(context)!.importFailed(error);
+      showAppSnackBar(context, message);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _backupBusy = false;
+        });
+      }
     }
   }
 }

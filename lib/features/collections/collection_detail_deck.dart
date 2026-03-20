@@ -120,6 +120,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
         ? null
         : await ScryfallDatabase.instance.fetchCardEntryById(
             preferredBasicCardId,
+            printingId: null,
             collectionId: ownedCollectionId,
           );
     var existing = _findBasicLandEntryForMana(_cards, mana);
@@ -137,6 +138,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
       await ScryfallDatabase.instance.upsertCollectionCard(
         ownedCollectionId,
         entryToReduce.cardId,
+        printingId: entryToReduce.printingId,
         quantity: nextQuantity,
         foil: entryToReduce.foil,
         altArt: entryToReduce.altArt,
@@ -150,6 +152,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
       targetEntry = preferredEntry;
       targetEntry ??= await ScryfallDatabase.instance.fetchCardEntryById(
         preferredBasicCardId,
+        printingId: null,
         collectionId: ownedCollectionId,
       );
     } else {
@@ -163,6 +166,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     await ScryfallDatabase.instance.upsertCollectionCard(
       ownedCollectionId,
       targetEntry.cardId,
+      printingId: targetEntry.printingId,
       quantity: nextQuantity,
       foil: false,
       altArt: false,
@@ -322,6 +326,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     final toCollectionId = toSideboard ? sideCollectionId : mainCollectionId;
     final fromEntry = await ScryfallDatabase.instance.fetchCardEntryById(
       entry.cardId,
+      printingId: entry.printingId,
       collectionId: fromCollectionId,
     );
     final fromQty = fromEntry?.quantity ?? 0;
@@ -331,6 +336,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     final delta = moveAll ? fromQty : 1;
     final toEntry = await ScryfallDatabase.instance.fetchCardEntryById(
       entry.cardId,
+      printingId: entry.printingId,
       collectionId: toCollectionId,
     );
     final toQty = (toEntry?.quantity ?? 0) + delta;
@@ -338,6 +344,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     await ScryfallDatabase.instance.upsertCollectionCard(
       fromCollectionId,
       entry.cardId,
+      printingId: entry.printingId,
       quantity: nextFrom,
       foil: false,
       altArt: false,
@@ -345,6 +352,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     await ScryfallDatabase.instance.upsertCollectionCard(
       toCollectionId,
       entry.cardId,
+      printingId: entry.printingId,
       quantity: toQty,
       foil: false,
       altArt: false,

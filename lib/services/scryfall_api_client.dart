@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ScryfallApiClient {
@@ -75,52 +74,24 @@ class ScryfallApiClient {
         }
         final retryAfter = _parseRetryAfter(response.headers['retry-after']);
         final delay = _computeDelay(attempt, retryAfter: retryAfter);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'HTTP ${response.statusCode}',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on TimeoutException catch (_) {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'timeout',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on SocketException catch (_) {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'network',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       } on http.ClientException catch (_) {
         if (attempt >= maxRetries) {
           rethrow;
         }
         final delay = _computeDelay(attempt);
-        _logRetry(
-          uri,
-          attempt: attempt + 1,
-          maxRetries: maxRetries,
-          reason: 'client',
-          delay: delay,
-        );
         await Future<void>.delayed(delay);
       }
     }
@@ -192,20 +163,5 @@ class ScryfallApiClient {
     });
     _permitQueue = next.catchError((_) {});
     return next;
-  }
-
-  void _logRetry(
-    Uri uri, {
-    required int attempt,
-    required int maxRetries,
-    required String reason,
-    required Duration delay,
-  }) {
-    if (!kDebugMode) {
-      return;
-    }
-    debugPrint(
-      'Scryfall retry $attempt/$maxRetries for $uri ($reason), waiting ${delay.inMilliseconds}ms',
-    );
   }
 }

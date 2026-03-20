@@ -19,6 +19,52 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
     return _isItalianSearchUi() ? 'Filtri aggiuntivi' : 'Additional filters';
   }
 
+  String _languageLabel(String code) {
+    final l10n = AppLocalizations.of(context)!;
+    switch (code.trim().toLowerCase()) {
+      case 'en':
+        return l10n.languageEnglish;
+      case 'it':
+        return l10n.languageItalian;
+      case 'fr':
+        return l10n.languageFrench;
+      case 'de':
+        return l10n.languageGerman;
+      case 'es':
+        return l10n.languageSpanish;
+      case 'pt':
+        return l10n.languagePortuguese;
+      case 'ja':
+        return l10n.languageJapanese;
+      case 'ko':
+        return l10n.languageKorean;
+      case 'ru':
+        return l10n.languageRussian;
+      case 'zh-hans':
+        return l10n.languageChineseSimplified;
+      case 'zh-hant':
+        return l10n.languageChineseTraditional;
+      case 'ar':
+        return l10n.languageArabic;
+      case 'he':
+        return l10n.languageHebrew;
+      case 'la':
+        return l10n.languageLatin;
+      case 'grc':
+      case 'el':
+        return l10n.languageGreek;
+      case 'sa':
+        return l10n.languageSanskrit;
+      case 'ph':
+      case 'x-phyr':
+        return l10n.languagePhyrexian;
+      case 'qya':
+        return l10n.languageQuenya;
+      default:
+        return code.trim().toUpperCase();
+    }
+  }
+
   List<String> _requiredFilterSummaryLabels(
     CollectionFilter filter,
     Map<String, String> availableSetCodes,
@@ -58,6 +104,7 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
       final max = filter.hpMax?.toString() ?? '-';
       labels.add(_isItalianSearchUi() ? 'HP: $min-$max' : 'HP: $min-$max');
     }
+    labels.addAll(filter.languages.map(_languageLabel));
     labels.addAll(
       filter.sets.map(
         (code) =>
@@ -173,6 +220,10 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
         .map((value) => value.trim().toLowerCase())
         .where((value) => value.isNotEmpty)
         .toSet();
+    final requiredLanguages = (requiredFilter?.languages ?? const <String>{})
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
     final requiredColors = (requiredFilter?.colors ?? const <String>{})
         .map((value) => value.trim().toUpperCase())
         .where((value) => value.isNotEmpty)
@@ -201,6 +252,11 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
         .toSet();
     final tempSetCodes = _selectedSetCodes
         .where((value) => !requiredSetCodes.contains(value.trim().toLowerCase()))
+        .toSet();
+    final tempLanguages = _selectedLanguages
+        .where(
+          (value) => !requiredLanguages.contains(value.trim().toLowerCase()),
+        )
         .toSet();
     final tempColors = _selectedColors
         .where((value) => !requiredColors.contains(value.trim().toUpperCase()))
@@ -339,6 +395,16 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                 .where((entry) => !requiredSetCodes.contains(entry.key))
                 .toList()
               ..sort((a, b) => a.value.compareTo(b.value));
+            final sortedLanguages = <String>{
+              ..._effectiveLanguages()
+                  .map((value) => value.trim().toLowerCase())
+                  .where((value) => value.isNotEmpty),
+              ...requiredLanguages,
+              ..._selectedLanguages
+                  .map((value) => value.trim().toLowerCase())
+                  .where((value) => value.isNotEmpty),
+            }.where((value) => !requiredLanguages.contains(value)).toList()
+              ..sort((a, b) => _languageLabel(a).compareTo(_languageLabel(b)));
             final filteredSets = sortedSets.where((entry) {
               if (setQuery.isEmpty) {
                 return true;
@@ -551,6 +617,24 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                             (value) => value.value,
                           ),
                         ),
+                      ),
+                    ],
+                    if (sortedLanguages.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Text(
+                        l10n.searchLanguages,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      buildChipRow<String>(
+                        sortedLanguages,
+                        (value) => tempLanguages.contains(value),
+                        (value) {
+                          if (!tempLanguages.add(value)) {
+                            tempLanguages.remove(value);
+                          }
+                        },
+                        _languageLabel,
                       ),
                     ],
                     if (sortedColors.isNotEmpty) ...[
@@ -823,6 +907,7 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
                                 setSheetState(() {
                                   tempRarities.clear();
                                   tempSetCodes.clear();
+                                  tempLanguages.clear();
                                   tempColors.clear();
                                   tempTypes.clear();
                                   nameController.clear();
@@ -895,6 +980,9 @@ extension _CardSearchFiltersSection on _CardSearchSheetState {
       _selectedSetCodes
         ..clear()
         ..addAll(tempSetCodes);
+      _selectedLanguages
+        ..clear()
+        ..addAll(tempLanguages);
       _selectedColors
         ..clear()
         ..addAll(tempColors);

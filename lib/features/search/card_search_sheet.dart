@@ -2,7 +2,7 @@ part of 'package:tcg_tracker/main.dart';
 
 class _CardSearchSelection {
   _CardSearchSelection.single(CardSearchResult card)
-    : cards = const [],
+    : cards = [card],
       isBulk = false,
       count = 1,
       cardIds = [card.id];
@@ -77,6 +77,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool _pendingFilterRefresh = false;
   final Set<String> _selectedRarities = {};
   final Set<String> _selectedSetCodes = {};
+  final Set<String> _selectedLanguages = {};
   final Set<String> _selectedColors = {};
   final Set<String> _selectedTypes = {};
   final Set<String> _selectedPokemonCategories = {};
@@ -820,6 +821,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       collectorNumber: _collectorNumberQuery.trim().isEmpty
           ? null
           : _collectorNumberQuery.trim(),
+      languages: _selectedLanguages,
       sets: _selectedSetCodes,
       rarities: _selectedRarities,
       colors: _selectedColors,
@@ -843,6 +845,9 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (required == null) {
       return base;
     }
+    final effectiveLanguages = required.languages.isNotEmpty
+        ? (base.languages.isEmpty ? required.languages : base.languages)
+        : base.languages;
     return CollectionFilter(
       name: base.name ?? required.name,
       artist: base.artist ?? required.artist,
@@ -852,6 +857,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       hpMax: base.hpMax ?? required.hpMax,
       format: base.format ?? required.format,
       collectorNumber: base.collectorNumber ?? required.collectorNumber,
+      languages: effectiveLanguages,
       sets: {...required.sets, ...base.sets},
       rarities: {...required.rarities, ...base.rarities},
       colors: {...required.colors, ...base.colors},
@@ -881,6 +887,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         required.hpMin != null ||
         required.hpMax != null ||
         (required.collectorNumber?.trim().isNotEmpty ?? false) ||
+        required.languages.isNotEmpty ||
         required.sets.isNotEmpty ||
         required.rarities.isNotEmpty ||
         required.colors.isNotEmpty ||
@@ -1132,6 +1139,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   bool _hasActiveAdvancedFilters() {
     return _hasRequiredAdvancedFilters() ||
+        _selectedLanguages.isNotEmpty ||
         _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
         _selectedColors.isNotEmpty ||
@@ -1150,6 +1158,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
 
   bool _hasNarrowingFilters() {
     return _hasRequiredAdvancedFilters() ||
+        _selectedLanguages.isNotEmpty ||
         _selectedRarities.isNotEmpty ||
         _selectedSetCodes.isNotEmpty ||
         _selectedTypes.isNotEmpty ||
@@ -1974,6 +1983,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Future<bool> _ensureCardStored(CardSearchResult card) async {
     final existing = await ScryfallDatabase.instance.fetchCardEntryById(
       card.id,
+      printingId: card.printingId,
     );
     if (existing != null) {
       return true;
