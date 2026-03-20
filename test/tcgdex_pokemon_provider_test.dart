@@ -28,8 +28,8 @@ void main() {
       expect(bundle.card.pokemon?.illustrator, 'Ken Sugimori');
       expect(bundle.card.pokemon?.attacks.first.name, 'Confuse Ray');
       expect(
-        bundle.card.localizedData.map((item) => item.language),
-        containsAll(<TcgCardLanguage>[TcgCardLanguage.en, TcgCardLanguage.it]),
+        bundle.card.localizedData.map((item) => item.languageCode),
+        containsAll(<String>[TcgLanguageCodes.en, TcgLanguageCodes.it]),
       );
       expect(
         bundle.printing.providerMappings.map((item) => item.providerId),
@@ -56,9 +56,9 @@ void main() {
       );
       final report = await service.importProfile(
         profile: 'starter',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
 
@@ -86,9 +86,9 @@ void main() {
       );
       final report = await service.importProfile(
         profile: 'full',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
 
@@ -108,9 +108,9 @@ void main() {
 
     await service.importProfile(
       profile: 'starter',
-      languages: const <TcgCardLanguage>[
-        TcgCardLanguage.en,
-        TcgCardLanguage.it,
+      languages: const <String>[
+        TcgLanguageCodes.en,
+        TcgLanguageCodes.it,
       ],
       onBatchBuilt: (batch) {
         capturedBatch = batch;
@@ -136,8 +136,8 @@ void main() {
     );
     expect(decoded.cards.first.pokemon?.attacks.first.name, 'Confuse Ray');
     expect(
-      decoded.cardLocalizations.map((item) => item.language),
-      contains(TcgCardLanguage.it),
+      decoded.cardLocalizations.map((item) => item.languageCode),
+      contains(TcgLanguageCodes.it),
     );
   });
 
@@ -156,9 +156,9 @@ void main() {
       );
       await service.importProfile(
         profile: 'starter',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
 
@@ -183,7 +183,7 @@ void main() {
         ),
         preferredLanguages: const <String>['en', 'it'],
       );
-      expect(filteredCount, equals(1));
+      expect(filteredCount, equals(2));
     },
   );
 
@@ -203,9 +203,9 @@ void main() {
 
       await service.importProfile(
         profile: 'starter',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
       final firstCards = store.countTableRows('catalog_cards');
@@ -214,9 +214,9 @@ void main() {
 
       await service.importProfile(
         profile: 'starter',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
 
@@ -241,9 +241,9 @@ void main() {
       );
       await service.importProfile(
         profile: 'starter',
-        languages: const <TcgCardLanguage>[
-          TcgCardLanguage.en,
-          TcgCardLanguage.it,
+        languages: const <String>[
+          TcgLanguageCodes.en,
+          TcgLanguageCodes.it,
         ],
       );
 
@@ -308,20 +308,20 @@ CanonicalCatalogImportBatch _promoRegressionBatch() {
         canonicalName: 'Pikachu Promo',
         defaultLocalizedData: LocalizedCardData(
           cardId: cardId,
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Pikachu Promo',
           subtypeLine: 'Pokemon (Promo)',
         ),
         localizedData: <LocalizedCardData>[
           LocalizedCardData(
             cardId: cardId,
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Pikachu Promo',
             subtypeLine: 'Pokemon (Promo)',
           ),
           LocalizedCardData(
             cardId: cardId,
-            language: TcgCardLanguage.it,
+            languageCode: TcgLanguageCodes.it,
             name: 'Pikachu Promo IT',
             subtypeLine: 'Pokemon (Promo)',
           ),
@@ -357,13 +357,13 @@ CanonicalCatalogImportBatch _promoRegressionBatch() {
         canonicalName: 'Scarlet & Violet Promo',
         defaultLocalizedData: LocalizedSetData(
           setId: setId,
-          language: TcgCardLanguage.en,
+          languageCode: TcgLanguageCodes.en,
           name: 'Scarlet & Violet Promo',
         ),
         localizedData: <LocalizedSetData>[
           LocalizedSetData(
             setId: setId,
-            language: TcgCardLanguage.en,
+            languageCode: TcgLanguageCodes.en,
             name: 'Scarlet & Violet Promo',
           ),
         ],
@@ -377,6 +377,7 @@ CanonicalCatalogImportBatch _promoRegressionBatch() {
         setId: setId,
         gameId: TcgGameId.pokemon,
         collectorNumber: 'SV-P001',
+        languageCode: TcgLanguageCodes.en,
         rarity: 'Promo',
         imageUris: <String, String>{
           'normal': 'https://example.invalid/promo.png',
@@ -398,13 +399,13 @@ CanonicalCatalogImportBatch _promoRegressionBatch() {
     cardLocalizations: const <LocalizedCardData>[
       LocalizedCardData(
         cardId: cardId,
-        language: TcgCardLanguage.en,
+        languageCode: TcgLanguageCodes.en,
         name: 'Pikachu Promo',
         subtypeLine: 'Pokemon (Promo)',
       ),
       LocalizedCardData(
         cardId: cardId,
-        language: TcgCardLanguage.it,
+        languageCode: TcgLanguageCodes.it,
         name: 'Pikachu Promo IT',
         subtypeLine: 'Pokemon (Promo)',
       ),
@@ -412,7 +413,7 @@ CanonicalCatalogImportBatch _promoRegressionBatch() {
     setLocalizations: const <LocalizedSetData>[
       LocalizedSetData(
         setId: setId,
-        language: TcgCardLanguage.en,
+        languageCode: TcgLanguageCodes.en,
         name: 'Scarlet & Violet Promo',
       ),
     ],

@@ -3131,55 +3131,55 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.5.1'**
+  /// **'What\'s new in 0.5.2'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Smart collection improvements'**
+  /// **'Main updates'**
   String get whatsNewFeaturesTitle;
 
   /// No description provided for @whatsNewBugFixesTitle.
   ///
   /// In en, this message translates to:
-  /// **'Minor fixes'**
+  /// **'Fixes'**
   String get whatsNewBugFixesTitle;
 
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Search started from a smart collection now always respects the collection\'s original filter.'**
+  /// **'Improved multilingual support across search, results, and the local catalog.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Search now shows matching cards immediately when opened, avoiding empty screens before typing.'**
+  /// **'Refactored the Pokemon database layer for a more solid and maintainable foundation.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'As you type, results refresh while staying inside the smart collection scope.'**
+  /// **'Updated deck card handling with clearer legal and not legal states.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Advanced filters now show a summary of the collection\'s original filter.'**
+  /// **'Improved consistency between counts, previews, and card adding flows in filters.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'Options already enforced by the original filter are no longer duplicated in additional filters.'**
+  /// **'Deck search now shows all matching cards with legal or not legal badges.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
   ///
   /// In en, this message translates to:
-  /// **'The sync banner was visually aligned across Magic and Pokemon.'**
+  /// **'Reduced incorrect missing states inside deck-related flows.'**
   String get whatsNewLine6;
 
   /// No description provided for @whatsNewLine7.
@@ -3191,13 +3191,13 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **'Fixed the overlap between sync indicators on the home screen.'**
+  /// **'Fixed major issues across decks, smart filters, previews, and add-card flows.'**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **'Filter presentation was updated to reduce cases where adding a card looked like it had failed.'**
+  /// **'Also includes various minor UI, alignment, and stability fixes.'**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.

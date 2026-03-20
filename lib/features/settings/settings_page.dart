@@ -288,9 +288,8 @@ class _SettingsPageState extends State<SettingsPage> {
       _latestPokemonAutoBackupName = latestPokemonAutoBackup == null
           ? null
           : path.basename(latestPokemonAutoBackup.path);
-      _latestPokemonAutoBackupAt = latestPokemonAutoBackup == null
-          ? null
-          : latestPokemonAutoBackup.statSync().modified;
+      _latestPokemonAutoBackupAt =
+          latestPokemonAutoBackup?.statSync().modified;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;

@@ -1753,48 +1753,48 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewButtonLabel => 'Novita';
 
   @override
-  String get whatsNewDialogTitle => 'Novita versione 0.5.1';
+  String get whatsNewDialogTitle => 'Novita versione 0.5.2';
 
   @override
-  String get whatsNewFeaturesTitle => 'Migliorie smart collection';
+  String get whatsNewFeaturesTitle => 'Novita principali';
 
   @override
-  String get whatsNewBugFixesTitle => 'Correzioni minori';
+  String get whatsNewBugFixesTitle => 'Correzioni';
 
   @override
   String get whatsNewLine1 =>
-      'La ricerca da smart collection ora rispetta sempre il filtro originale della collection.';
+      'Supporto multilingua migliorato per ricerca, risultati e catalogo locale.';
 
   @override
   String get whatsNewLine2 =>
-      'La ricerca mostra subito carte coerenti con il filtro attivo, evitando schermate vuote all\'apertura.';
+      'Refactor del database Pokemon per una base piu solida e piu facile da mantenere.';
 
   @override
   String get whatsNewLine3 =>
-      'Mentre digiti, i risultati si aggiornano restando dentro il perimetro della smart collection.';
+      'Aggiornata la gestione delle carte nei mazzi con stato legal e not legal piu chiaro.';
 
   @override
   String get whatsNewLine4 =>
-      'Nei filtri avanzati ora compare un riepilogo del filtro originale della collection.';
+      'Migliorata la coerenza tra conteggi, anteprime e aggiunta carte nei filtri.';
 
   @override
   String get whatsNewLine5 =>
-      'Le opzioni gia fissate dal filtro originale non vengono piu duplicate tra i filtri aggiuntivi.';
+      'La ricerca nei mazzi mostra tutte le carte compatibili con badge legal o not legal.';
 
   @override
   String get whatsNewLine6 =>
-      'Il banner di sincronizzazione e stato riallineato graficamente tra Magic e Pokemon.';
+      'Ridotta la presenza di stati missing non corretti nel contesto dei mazzi.';
 
   @override
   String get whatsNewLine7 => '';
 
   @override
   String get whatsNewLine8 =>
-      'Corretta la sovrapposizione tra indicatori di sincronizzazione nella home.';
+      'Risolti bug maggiori su deck, filtri smart, preview e aggiunta carte.';
 
   @override
   String get whatsNewLine9 =>
-      'Aggiornata la presentazione dei filtri per ridurre i casi in cui sembrava che una carta non venisse aggiunta correttamente.';
+      'Incluse anche varie correzioni minori di UI, allineamento e stabilita.';
 
   @override
   String get createSmartCollectionTitle => 'Crea una smart collection';

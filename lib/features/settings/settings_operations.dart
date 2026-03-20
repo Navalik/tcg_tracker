@@ -825,9 +825,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       _latestPokemonAutoBackupName = latest == null
           ? null
           : path.basename(latest.path);
-      _latestPokemonAutoBackupAt = latest == null
-          ? null
-          : latest.statSync().modified;
+      _latestPokemonAutoBackupAt = latest?.statSync().modified;
     });
   }
 

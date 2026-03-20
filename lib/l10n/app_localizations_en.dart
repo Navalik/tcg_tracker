@@ -1732,48 +1732,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.1';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.2';
 
   @override
-  String get whatsNewFeaturesTitle => 'Smart collection improvements';
+  String get whatsNewFeaturesTitle => 'Main updates';
 
   @override
-  String get whatsNewBugFixesTitle => 'Minor fixes';
+  String get whatsNewBugFixesTitle => 'Fixes';
 
   @override
   String get whatsNewLine1 =>
-      'Search started from a smart collection now always respects the collection\'s original filter.';
+      'Improved multilingual support across search, results, and the local catalog.';
 
   @override
   String get whatsNewLine2 =>
-      'Search now shows matching cards immediately when opened, avoiding empty screens before typing.';
+      'Refactored the Pokemon database layer for a more solid and maintainable foundation.';
 
   @override
   String get whatsNewLine3 =>
-      'As you type, results refresh while staying inside the smart collection scope.';
+      'Updated deck card handling with clearer legal and not legal states.';
 
   @override
   String get whatsNewLine4 =>
-      'Advanced filters now show a summary of the collection\'s original filter.';
+      'Improved consistency between counts, previews, and card adding flows in filters.';
 
   @override
   String get whatsNewLine5 =>
-      'Options already enforced by the original filter are no longer duplicated in additional filters.';
+      'Deck search now shows all matching cards with legal or not legal badges.';
 
   @override
   String get whatsNewLine6 =>
-      'The sync banner was visually aligned across Magic and Pokemon.';
+      'Reduced incorrect missing states inside deck-related flows.';
 
   @override
   String get whatsNewLine7 => '';
 
   @override
   String get whatsNewLine8 =>
-      'Fixed the overlap between sync indicators on the home screen.';
+      'Fixed major issues across decks, smart filters, previews, and add-card flows.';
 
   @override
   String get whatsNewLine9 =>
-      'Filter presentation was updated to reduce cases where adding a card looked like it had failed.';
+      'Also includes various minor UI, alignment, and stability fixes.';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

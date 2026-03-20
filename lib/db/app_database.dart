@@ -1307,15 +1307,22 @@ class ScryfallDatabase {
     final collectionRows = await (db.select(
       db.collections,
     )..orderBy([(tbl) => OrderingTerm.asc(tbl.id)])).get();
-    final collectionCardRows =
-        await (db.select(db.collectionCards)..orderBy([
-              (tbl) => OrderingTerm.asc(tbl.collectionId),
-              (tbl) => OrderingTerm.asc(tbl.cardId),
-            ]))
-            .get();
+    final collectionCardRows = await db.customSelect(
+      '''
+      SELECT
+        collection_id,
+        card_id,
+        printing_id,
+        quantity,
+        foil,
+        alt_art
+      FROM collection_cards
+      ORDER BY collection_id ASC, card_id ASC
+      ''',
+    ).get();
 
     final cardIds = collectionCardRows
-        .map((row) => row.cardId.trim())
+        .map((row) => (row.read<String>('card_id')).trim())
         .where((id) => id.isNotEmpty)
         .toSet()
         .toList(growable: false);
@@ -1333,7 +1340,7 @@ class ScryfallDatabase {
     }
 
     return <String, dynamic>{
-      'schemaVersion': 1,
+      'schemaVersion': 2,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
       'metadata': metadata,
       'collections': collectionRows
@@ -1349,11 +1356,12 @@ class ScryfallDatabase {
       'collectionCards': collectionCardRows
           .map(
             (row) => <String, dynamic>{
-              'collectionId': row.collectionId,
-              'cardId': row.cardId,
-              'quantity': row.quantity,
-              'foil': row.foil,
-              'altArt': row.altArt,
+              'collectionId': row.read<int>('collection_id'),
+              'cardId': row.read<String>('card_id'),
+              'printingId': row.readNullable<String>('printing_id'),
+              'quantity': row.read<int>('quantity'),
+              'foil': row.read<int>('foil') == 1,
+              'altArt': row.read<int>('alt_art') == 1,
             },
           )
           .toList(growable: false),
@@ -1457,21 +1465,32 @@ class ScryfallDatabase {
         final quantity = isMembershipOnly
             ? 0
             : (_asInt(normalized['quantity']) ?? 1);
-        await db
-            .into(db.collectionCards)
-            .insertOnConflictUpdate(
-              CollectionCardsCompanion.insert(
-                collectionId: mappedCollectionId,
-                cardId: cardId,
-                quantity: Value(quantity),
-                foil: Value(
-                  isMembershipOnly ? false : _asBool(normalized['foil']),
-                ),
-                altArt: Value(
-                  isMembershipOnly ? false : _asBool(normalized['altArt']),
-                ),
-              ),
-            );
+        final printingId = _asString(normalized['printingId']).trim();
+        await db.customStatement(
+          '''
+          INSERT INTO collection_cards(
+            collection_id,
+            card_id,
+            printing_id,
+            quantity,
+            foil,
+            alt_art
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(collection_id, card_id) DO UPDATE SET
+            printing_id = excluded.printing_id,
+            quantity = excluded.quantity,
+            foil = excluded.foil,
+            alt_art = excluded.alt_art
+          ''',
+          <Object?>[
+            mappedCollectionId,
+            cardId,
+            printingId.isEmpty ? null : printingId,
+            quantity,
+            isMembershipOnly ? 0 : (_asBool(normalized['foil']) ? 1 : 0),
+            isMembershipOnly ? 0 : (_asBool(normalized['altArt']) ? 1 : 0),
+          ],
+        );
         insertedCollectionCards += 1;
       }
     });
@@ -2267,6 +2286,123 @@ class ScryfallDatabase {
     int? limit,
     int? offset,
   }) async {
+    final selectedGame = await AppSettings.loadSelectedTcgGame();
+    if (selectedGame == AppTcgGame.pokemon) {
+      final store = await _openCanonicalPokemonStore();
+      if (store != null) {
+        try {
+          final allCardsId = await fetchAllCardsCollectionId();
+          if (allCardsId == null) {
+            return const <CollectionCardEntry>[];
+          }
+          final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+            AppTcgGame.pokemon,
+          );
+          final db = await open();
+          final rawRows = await db.customSelect(
+            '''
+            SELECT
+              card_id,
+              printing_id,
+              quantity,
+              foil,
+              alt_art
+            FROM collection_cards
+            WHERE collection_id = ?
+              AND COALESCE(quantity, 0) > 0
+            ORDER BY card_id ASC
+            ''',
+            variables: <Variable>[Variable.withInt(allCardsId)],
+          ).get();
+          final normalizedQuery = searchQuery?.trim().toLowerCase() ?? '';
+          final repairedEntries = <CollectionCardEntry>[];
+          final viewCache = <String, CanonicalPrintingViewData>{};
+          for (final row in rawRows) {
+            final cardId = row.read<String>('card_id').trim();
+            final rawPrintingId = row.readNullable<String>('printing_id')?.trim();
+            final resolvedPrintingId =
+                (rawPrintingId?.isNotEmpty == true
+                    ? store.resolvePrintingIdForLegacyCardId(rawPrintingId!)
+                    : null) ??
+                store.resolvePrintingIdForLegacyCardId(cardId);
+            if (resolvedPrintingId == null || resolvedPrintingId.isEmpty) {
+              continue;
+            }
+            if (rawPrintingId != resolvedPrintingId) {
+              await db.customStatement(
+                '''
+                UPDATE collection_cards
+                SET printing_id = ?
+                WHERE collection_id = ?
+                  AND card_id = ?
+                ''',
+                <Object?>[resolvedPrintingId, allCardsId, cardId],
+              );
+            }
+            final view =
+                viewCache[resolvedPrintingId] ??
+                store.fetchPrintingViews(
+                  <String>[resolvedPrintingId],
+                  preferredLanguages: preferredLanguages,
+                )[resolvedPrintingId];
+            if (view == null) {
+              continue;
+            }
+            viewCache[resolvedPrintingId] = view;
+            if (normalizedQuery.isNotEmpty) {
+              final name = view.name.toLowerCase();
+              final collectorNumber = view.collectorNumber.toLowerCase();
+              if (!name.contains(normalizedQuery) &&
+                  !collectorNumber.contains(normalizedQuery)) {
+                continue;
+              }
+            }
+            repairedEntries.add(
+              CollectionCardEntry(
+                cardId: cardId,
+                printingId: resolvedPrintingId,
+                name: view.name,
+                setCode: view.setCode,
+                setName: view.setName,
+                setTotal: view.setTotal,
+                collectorNumber: view.collectorNumber,
+                rarity: view.rarity,
+                typeLine: view.typeLine,
+                manaCost: view.manaCost,
+                oracleText: view.oracleText,
+                manaValue: view.manaValue,
+                lang: view.lang,
+                artist: view.artist,
+                power: view.power,
+                toughness: view.toughness,
+                loyalty: view.loyalty,
+                colors: view.colors,
+                colorIdentity: view.colorIdentity,
+                releasedAt: view.releasedAt,
+                quantity: row.read<int>('quantity'),
+                foil: row.read<int>('foil') == 1,
+                altArt: row.read<int>('alt_art') == 1,
+                imageUri: view.imageUri,
+              ),
+            );
+          }
+          repairedEntries.sort(
+            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+          );
+          final normalizedOffset = offset ?? 0;
+          if (normalizedOffset >= repairedEntries.length) {
+            return const <CollectionCardEntry>[];
+          }
+          final sliced = repairedEntries.sublist(normalizedOffset);
+          if (limit == null) {
+            return sliced;
+          }
+          return sliced.take(limit).toList(growable: false);
+        } finally {
+          store.dispose();
+        }
+      }
+    }
     final db = await open();
     final allCardsId = await fetchAllCardsCollectionId();
     if (allCardsId == null) {

@@ -447,7 +447,7 @@ String _formatRarity(BuildContext context, String raw) {
   return value[0].toUpperCase() + value.substring(1);
 }
 
-const String _latestReleaseNotesId = '0.5.1+11-smart-collection-fixes';
+const String _latestReleaseNotesId = '0.5.2+12-pre-release-fixes';
 
 String _whatsNewLabel(BuildContext context) {
   final l10n = AppLocalizations.of(context)!;
