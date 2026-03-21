@@ -19,9 +19,16 @@ class _CollectionFilterBuilderPage extends StatefulWidget {
 class _CollectionFilterBuilderPageState
     extends State<_CollectionFilterBuilderPage> {
   static const int _countDebounceMs = 350;
+  static const int _pokemonCountDebounceMs = 550;
 
   bool get _isPokemonActive =>
       TcgEnvironmentController.instance.currentGame == TcgGame.pokemon;
+
+  Duration get _countDebounceDuration => Duration(
+    milliseconds: _isPokemonActive
+        ? _pokemonCountDebounceMs
+        : _countDebounceMs,
+  );
 
   List<String> get _knownTypes => _isPokemonActive
       ? const [
@@ -202,7 +209,20 @@ class _CollectionFilterBuilderPageState
 
   void _scheduleCountUpdate() {
     _countDebounce?.cancel();
-    _countDebounce = Timer(const Duration(milliseconds: _countDebounceMs), () async {
+    final filter = _buildFilter();
+    if (_hasCriteria(filter)) {
+      if (!_impactCountLoading) {
+        setState(() {
+          _impactCountLoading = true;
+        });
+      }
+    } else if (_impactCountLoading || _impactCount != null) {
+      setState(() {
+        _impactCountLoading = false;
+        _impactCount = null;
+      });
+    }
+    _countDebounce = Timer(_countDebounceDuration, () async {
       await _refreshImpactCount();
     });
   }
@@ -295,7 +315,10 @@ class _CollectionFilterBuilderPageState
     final name = filter.name?.trim() ?? '';
     final collector = filter.collectorNumber?.trim() ?? '';
     final artist = filter.artist?.trim() ?? '';
-    if (name.length >= 2 || collector.isNotEmpty || artist.length >= 2) {
+    final minNameLength = _isPokemonActive ? 3 : 2;
+    if (name.length >= minNameLength ||
+        collector.isNotEmpty ||
+        artist.length >= 2) {
       return true;
     }
     return filter.sets.isNotEmpty ||
@@ -322,9 +345,6 @@ class _CollectionFilterBuilderPageState
       });
       return;
     }
-    setState(() {
-      _impactCountLoading = true;
-    });
     final total = await ScryfallDatabase.instance.countCardsForFilter(filter);
     if (!mounted) {
       return;
@@ -588,21 +608,33 @@ class _CollectionFilterBuilderPageState
                 ),
               ),
               const SizedBox(width: 12),
-              _impactCountLoading
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      _isItalianUi()
-                          ? 'Carte nel filtro: ${_impactCount?.toString() ?? "-"}'
-                          : 'Cards in filter: ${_impactCount?.toString() ?? "-"}',
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: const Color(0xFFE9C46A),
-                        fontWeight: FontWeight.w700,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _isItalianUi()
+                        ? 'Carte nel filtro: ${_impactCount?.toString() ?? "-"}'
+                        : 'Cards in filter: ${_impactCount?.toString() ?? "-"}',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: const Color(0xFFE9C46A),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (_impactCountLoading) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Color(0xFFE9C46A),
+                        ),
                       ),
                     ),
+                  ],
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 8),
