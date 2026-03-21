@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BinderVault &mdash; Loading Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Cinzel+Decorative:wght@400;700;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            surface: "#161311",
+            "surface-container-lowest": "#110d0c",
+            "surface-container-low": "#1f1b19",
+            "surface-container": "#231f1d",
+            "surface-container-high": "#2e2927",
+            "surface-container-highest": "#393431",
+            primary: "#f2ca50",
+            "primary-container": "#d4af37",
+            "on-primary": "#3c2f00",
+            "on-surface": "#eae1dd",
+            "on-surface-variant": "#d0c5af",
+            outline: "#99907c",
+            "outline-variant": "#4d4635"
+          },
+          fontFamily: {
+            headline: ["Space Grotesk", "sans-serif"],
+            body: ["Manrope", "sans-serif"],
+            magic: ["Cinzel Decorative", "serif"]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    body {
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at top left, rgba(192, 111, 34, 0.16), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(242, 202, 80, 0.08), transparent 24%),
+        linear-gradient(180deg, #1b1512 0%, #15110f 52%, #100d0b 100%);
+    }
+
+    .card-pattern {
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(242, 202, 80, 0.035) 0,
+        rgba(242, 202, 80, 0.035) 1px,
+        transparent 1px,
+        transparent 12px
+      );
+      background-size: 24px 24px;
+    }
+
+    .vault-grid {
+      background-image: linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+    }
+
+    .bv-logo-text {
+      font-family: "Cinzel Decorative", serif;
+      font-weight: 900;
+      background: linear-gradient(180deg, #e8d08a 0%, #c8952a 32%, #7a4a0a 62%, #3d1f00 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: drop-shadow(0 0 5px rgba(180, 100, 10, 0.45)) drop-shadow(2px 3px 0 #1a0800);
+      letter-spacing: 0.04em;
+      line-height: 0.92;
+    }
+
+    .ghost-card {
+      border: 1px solid rgba(234, 225, 221, 0.16);
+      background: rgba(255, 255, 255, 0.01);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.015);
+    }
+
+    .binder-card {
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    .binder-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 40%, rgba(0, 0, 0, 0.22) 90%);
+      pointer-events: none;
+    }
+
+    .binder-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.24;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: 18px 18px;
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    .card-ruby {
+      background:
+        radial-gradient(circle at top left, rgba(255, 221, 197, 0.22), transparent 32%),
+        linear-gradient(180deg, #8a6662 0%, #6d4e4a 100%);
+    }
+
+    .card-emerald {
+      background:
+        radial-gradient(circle at top left, rgba(222, 244, 211, 0.18), transparent 34%),
+        linear-gradient(180deg, #6f876d 0%, #556a53 100%);
+    }
+
+    .card-sapphire {
+      background:
+        radial-gradient(circle at top left, rgba(204, 224, 255, 0.18), transparent 34%),
+        linear-gradient(180deg, #657d9f 0%, #4c627e 100%);
+    }
+
+    .card-inner-stroke {
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 0 0 2px rgba(20, 12, 8, 0.18);
+    }
+
+    .sigil {
+      box-shadow: 0 0 0 3px rgba(37, 22, 10, 0.9), 0 16px 28px rgba(0, 0, 0, 0.5);
+    }
+
+    .status-track {
+      overflow: hidden;
+    }
+
+    .status-bar {
+      animation: load 2.6s ease-in-out infinite;
+      transform-origin: left center;
+    }
+
+    @keyframes load {
+      0% { transform: translateX(-110%); }
+      55% { transform: translateX(30%); }
+      100% { transform: translateX(220%); }
+    }
+  </style>
+</head>
+<body class="text-on-surface font-body overflow-hidden">
+  <div class="fixed inset-0 card-pattern pointer-events-none opacity-60"></div>
+  <div class="vault-grid fixed inset-0 pointer-events-none opacity-30"></div>
+
+  <div class="pointer-events-none fixed inset-0 overflow-hidden opacity-80">
+    <div class="ghost-card absolute left-[8%] top-[8%] h-44 w-28 rotate-[-18deg] rounded-[1.5rem]"></div>
+    <div class="ghost-card absolute left-[4%] top-[28%] h-52 w-32 rotate-[-4deg] rounded-[1.6rem]"></div>
+    <div class="ghost-card absolute left-[18%] top-[56%] h-44 w-28 rotate-[8deg] rounded-[1.5rem]"></div>
+    <div class="ghost-card absolute left-[34%] top-[72%] h-40 w-24 rotate-[-7deg] rounded-[1.4rem]"></div>
+    <div class="ghost-card absolute right-[12%] top-[10%] h-44 w-28 rotate-[16deg] rounded-[1.5rem]"></div>
+    <div class="ghost-card absolute right-[20%] top-[24%] h-40 w-24 rotate-[13deg] rounded-[1.4rem]"></div>
+    <div class="ghost-card absolute right-[36%] top-[34%] h-36 w-24 rotate-[9deg] rounded-[1.4rem]"></div>
+    <div class="ghost-card absolute right-[10%] top-[62%] h-44 w-28 rotate-[-10deg] rounded-[1.5rem]"></div>
+    <div class="ghost-card absolute right-[22%] top-[78%] h-36 w-24 rotate-[4deg] rounded-[1.4rem]"></div>
+  </div>
+
+  <main class="relative min-h-dvh flex items-center justify-center px-4 py-10 sm:px-6">
+    <div class="w-full max-w-md sm:max-w-lg">
+      <div class="flex flex-col items-center text-center">
+        <div class="mb-6 flex items-center gap-2 text-primary font-headline text-[0.66rem] sm:text-xs uppercase tracking-[0.3em]">
+          <span class="h-px w-8 sm:w-12 bg-primary/35"></span>
+          Archive. Protect. Prosper.
+          <span class="h-px w-8 sm:w-12 bg-primary/35"></span>
+        </div>
+
+        <h1 class="bv-logo-text text-[2.55rem] sm:text-[3.7rem] md:text-[4.6rem]">
+          BinderVault
+        </h1>
+
+        <div class="relative mt-10 sm:mt-12 flex items-center justify-center w-full h-[25rem] sm:h-[27rem]">
+          <div class="absolute inset-x-0 top-[46%] -translate-y-1/2 mx-auto h-44 w-44 rounded-full bg-primary/10 blur-3xl sm:h-56 sm:w-56"></div>
+
+          <div class="relative h-[17rem] w-[17rem] sm:h-[19rem] sm:w-[20rem]">
+            <div class="absolute bottom-8 left-1/2 h-14 w-48 -translate-x-1/2 rounded-full bg-black/45 blur-2xl sm:w-60"></div>
+
+            <div class="binder-card card-ruby absolute bottom-12 left-1/2 z-10 h-[12rem] w-[7.8rem] -translate-x-[94%] rotate-[-12deg] rounded-[0.82rem] border border-white/10 sm:h-[14rem] sm:w-[9rem]">
+              <div class="card-inner-stroke absolute inset-[0.24rem] rounded-[0.62rem]"></div>
+            </div>
+
+            <div class="binder-card card-emerald absolute bottom-[3.5rem] left-1/2 z-20 h-[13.5rem] w-[8.5rem] -translate-x-1/2 rounded-[0.86rem] border border-white/10 sm:h-[15.7rem] sm:w-[9.8rem]">
+              <div class="card-inner-stroke absolute inset-[0.24rem] rounded-[0.66rem]"></div>
+            </div>
+
+            <div class="binder-card card-sapphire absolute bottom-12 left-1/2 z-10 h-[12rem] w-[7.8rem] translate-x-[2%] rotate-[12deg] rounded-[0.82rem] border border-white/10 sm:h-[14rem] sm:w-[9rem] sm:translate-x-[12%]">
+              <div class="card-inner-stroke absolute inset-[0.24rem] rounded-[0.62rem]"></div>
+            </div>
+
+            <div class="sigil absolute bottom-[2.6rem] left-1/2 z-30 h-9 w-9 -translate-x-1/2 rotate-45 border border-[#c88d24] bg-[linear-gradient(180deg,#f6d872_0%,#efc74c_100%)] sm:h-11 sm:w-11 sm:bottom-[2.9rem]"></div>
+          </div>
+        </div>
+
+        <div class="mt-1 flex flex-col items-center gap-5">
+          <div class="status-track relative h-[2px] w-48 rounded-full bg-outline-variant/40 sm:w-64">
+            <div class="status-bar absolute inset-y-0 w-24 rounded-full bg-primary shadow-[0_0_20px_rgba(242,202,80,0.45)]"></div>
+          </div>
+
+          <div class="text-[0.72rem] uppercase tracking-[0.26em] text-on-surface-variant sm:text-xs">
+            Opening the vault
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

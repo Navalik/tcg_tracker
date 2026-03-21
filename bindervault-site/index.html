@@ -3,8 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
-  <title>BinderVault — Archive. Protect. Prosper.</title>
-  <meta name="description" content="BinderVault is the premium sanctuary for your Trading Card Game collection. Track every card, build decks, and keep your vault under control.">
+  <title>BinderVault &mdash; TCG Collection Tracker and Deck Builder for Magic and Pok&eacute;mon</title>
+  <meta name="description" content="BinderVault is a TCG collection tracker and deck builder app for Magic: The Gathering and Pok&eacute;mon. Track cards, scan cards, manage sets, and organize your collection in one premium app.">
+  <meta name="theme-color" content="#161311">
+  <link rel="canonical" href="https://bindervault.app/">
+  <meta name="robots" content="index,follow">
+  <meta property="og:title" content="BinderVault &mdash; TCG Collection Tracker and Deck Builder for Magic and Pok&eacute;mon">
+  <meta property="og:description" content="Track cards, build decks, scan cards, and manage your Magic and Pok&eacute;mon collection with BinderVault.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://bindervault.app/">
+  <meta property="og:site_name" content="BinderVault">
+  <meta property="og:image" content="https://bindervault.app/Screen1.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BinderVault &mdash; TCG Collection Tracker and Deck Builder for Magic and Pok&eacute;mon">
+  <meta name="twitter:description" content="Track cards, build decks, scan cards, and manage your Magic and Pok&eacute;mon collection with BinderVault.">
+  <meta name="twitter:image" content="https://bindervault.app/Screen1.jpg">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Cinzel+Decorative:wght@400;700;900&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
@@ -53,6 +66,40 @@
     .bv-logo-text-hero { font-size: clamp(2.8rem, 8vw, 6.5rem); line-height: 1.05; }
     .bv-logo-text-footer { font-size: 1.3rem; }
   </style>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "BinderVault",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Android",
+      "description": "BinderVault is a TCG collection tracker and deck builder app for Magic: The Gathering and Pokemon. Track cards, scan cards, manage sets, and organize your collection in one premium app.",
+      "url": "https://bindervault.app/",
+      "image": "https://bindervault.app/Screen1.jpg",
+      "screenshot": [
+        "https://bindervault.app/Screen1.jpg",
+        "https://bindervault.app/Screen2.jpg"
+      ],
+      "offers": [
+        {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "EUR",
+          "category": "Free"
+        },
+        {
+          "@type": "Offer",
+          "price": "2.39",
+          "priceCurrency": "EUR",
+          "billingDuration": "P1M",
+          "category": "Subscription"
+        }
+      ],
+      "sameAs": [
+        "https://play.google.com/store/apps/details?id=com.navalik.bindervault"
+      ]
+    }
+  </script>
 </head>
 <body class="bg-surface text-on-surface font-body selection:bg-primary/30 relative">
   <div class="fixed inset-0 card-pattern pointer-events-none -z-20"></div>
@@ -60,151 +107,151 @@
 
   <!-- NAVBAR -->
   <nav class="fixed top-0 w-full z-50 bg-stone-950/80 backdrop-blur-xl border-b border-primary/10 h-20">
-    <div class="flex justify-between items-center px-8 h-full w-full max-w-screen-2xl mx-auto">
-      <span class="bv-logo-text bv-logo-text-nav">BinderVault</span>
+    <div class="flex justify-between items-center gap-3 px-4 sm:px-6 md:px-8 h-full w-full max-w-screen-2xl mx-auto">
+      <span class="bv-logo-text bv-logo-text-nav shrink-0">BinderVault</span>
 
       <div class="hidden md:flex items-center gap-8 font-headline tracking-tight">
         <a class="text-amber-400 font-bold border-b-2 border-amber-500 pb-1 hover:text-amber-200 transition-all duration-300" href="#features">Vault</a>
         <a class="text-stone-400 font-medium hover:text-amber-200 transition-all duration-300" href="#pricing">Pricing</a>
       </div>
 
-      <a href="https://play.google.com/store/apps/details?id=com.navalik.bindervault" target="_blank" rel="noopener">
-        <button class="gold-gradient text-on-primary px-6 py-2.5 rounded-lg font-bold text-sm tracking-wide active:scale-95 transition-transform duration-200 shadow-lg shadow-primary/20">
-          Download App
-        </button>
+      <a
+        class="gold-gradient inline-flex items-center justify-center text-on-primary px-4 sm:px-6 py-2.5 rounded-lg font-bold text-xs sm:text-sm tracking-wide text-center active:scale-95 transition-transform duration-200 shadow-lg shadow-primary/20"
+        href="https://play.google.com/store/apps/details?id=com.navalik.bindervault"
+        target="_blank"
+        rel="noopener"
+      >
+        Download App
       </a>
     </div>
   </nav>
 
   <main>
     <!-- HERO -->
-    <section class="relative min-h-screen flex flex-col items-center justify-center pt-32 pb-24 overflow-hidden">
+    <section class="relative min-h-screen flex flex-col items-center justify-center pt-28 sm:pt-32 pb-20 sm:pb-24 overflow-hidden">
       <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(242,202,80,0.07),transparent_70%)] -z-10"></div>
 
-      <div class="max-w-7xl mx-auto px-8 text-center">
-        <span class="text-primary font-headline tracking-widest uppercase text-xs mb-6 flex items-center justify-center gap-3">
-          <span class="h-px w-8 bg-primary/40"></span>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 text-center">
+        <span class="text-primary font-headline tracking-[0.22em] uppercase text-[0.65rem] sm:text-xs mb-6 flex items-center justify-center gap-2 sm:gap-3">
+          <span class="h-px w-5 sm:w-8 bg-primary/40"></span>
           Archive. Protect. Prosper.
-          <span class="h-px w-8 bg-primary/40"></span>
+          <span class="h-px w-5 sm:w-8 bg-primary/40"></span>
         </span>
 
         <h1 class="bv-logo-text bv-logo-text-hero mb-4">BinderVault</h1>
-        <p class="text-on-surface-variant font-headline text-xl md:text-2xl font-light mb-4 tracking-wide">The Archivist for Collectors</p>
-        <p class="text-on-surface-variant text-lg max-w-2xl mx-auto mb-10 font-light">
-          The premium sanctuary for your Trading Card Game collection.
-          Track every card, build your decks, never miss what you need.
+        <p class="text-on-surface-variant font-headline text-lg sm:text-xl md:text-2xl font-light mb-4 tracking-wide">The Archivist for Collectors</p>
+        <p class="text-on-surface-variant text-base sm:text-lg max-w-2xl mx-auto mb-8 font-light">
+          The premium TCG collection tracker for Magic: The Gathering and Pok&eacute;mon.
+          Track every card, build decks, scan cards, and never miss what you need.
         </p>
 
+        <ul class="max-w-3xl mx-auto mb-10 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm sm:text-[0.95rem] text-on-surface-variant">
+          <li class="rounded-2xl border border-primary/10 bg-surface-container/70 px-4 py-3">Track full set collections</li>
+          <li class="rounded-2xl border border-primary/10 bg-surface-container/70 px-4 py-3">Build decks and import deck lists</li>
+          <li class="rounded-2xl border border-primary/10 bg-surface-container/70 px-4 py-3">Scan trading cards offline</li>
+        </ul>
+
         <!-- Google Play button -->
-        <div class="flex flex-col sm:flex-row gap-4 justify-center mb-20">
-          <a href="https://play.google.com/store/apps/details?id=com.navalik.bindervault" target="_blank" rel="noopener">
-            <button
-              class="px-8 py-4 rounded-2xl bg-primary text-on-primary
-                     font-semibold text-base tracking-wide
-                     hover:bg-primary-container transition-colors
-                     shadow-lg shadow-primary/25 active:scale-98">
-              Download on Google Play
-            </button>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center mb-14 sm:mb-20">
+          <a
+            class="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-primary text-on-primary
+                   font-semibold text-base tracking-wide
+                   hover:bg-primary-container transition-colors
+                   shadow-lg shadow-primary/25 active:scale-98"
+            href="https://play.google.com/store/apps/details?id=com.navalik.bindervault"
+            target="_blank"
+            rel="noopener"
+          >
+            Download on Google Play
           </a>
         </div>
 
         <!-- SCREENSHOTS -->
-        <div class="relative max-w-4xl mx-auto flex justify-center gap-8">
+        <div class="relative max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8">
           <div class="absolute inset-0 bg-amber-500 blur-[120px] opacity-[0.07] -z-10 rounded-full scale-75"></div>
-          <div class="relative w-56 h-[480px] bg-stone-900 rounded-[2.5rem] border-4 border-stone-700 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden self-start rotate-[-5deg] z-20">
+          <div class="relative w-[min(78vw,14rem)] sm:w-56 h-[420px] sm:h-[480px] bg-stone-900 rounded-[2.5rem] border-4 border-stone-700 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden sm:self-start rotate-[-3deg] sm:rotate-[-5deg] z-20">
             <div class="absolute top-0 w-20 h-4 bg-stone-800 left-1/2 -translate-x-1/2 rounded-b-xl z-10"></div>
-            <img alt="BinderVault — Home screen" class="w-full h-full object-cover object-top" src="Screen1.jpg">
+            <img alt="BinderVault &mdash; Home screen" class="w-full h-full object-cover object-top" src="Screen1.jpg">
           </div>
-          <div class="relative w-56 h-[480px] bg-stone-900 rounded-[2.5rem] border-4 border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden mt-16 rotate-[5deg] z-10">
+          <div class="relative w-[min(78vw,14rem)] sm:w-56 h-[420px] sm:h-[480px] bg-stone-900 rounded-[2.5rem] border-4 border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden sm:mt-16 rotate-[3deg] sm:rotate-[5deg] z-10">
             <div class="absolute top-0 w-20 h-4 bg-stone-800 left-1/2 -translate-x-1/2 rounded-b-xl z-10"></div>
-            <img alt="BinderVault — Deck Builder" class="w-full h-full object-cover object-top" src="Screen2.jpg">
+            <img alt="BinderVault &mdash; Deck Builder" class="w-full h-full object-cover object-top" src="Screen2.jpg">
           </div>
         </div>
       </div>
     </section>
 
     <!-- FEATURES -->
-    <section class="py-32 px-8 bg-surface-container-low/50 relative" id="features">
+    <section class="py-24 sm:py-32 px-4 sm:px-6 md:px-8 bg-surface-container-low/50 relative" id="features">
       <div class="max-w-7xl mx-auto">
-        <div class="mb-20 text-center">
-          <h2 class="text-4xl md:text-5xl font-headline font-bold mb-4 tracking-tight">Engineered for Collectors</h2>
-          <p class="text-on-surface-variant text-lg">Every tool you need to own your collection.</p>
+        <div class="mb-14 sm:mb-20 text-center">
+          <h2 class="text-3xl sm:text-4xl md:text-5xl font-headline font-bold mb-4 tracking-tight">A TCG Collection Tracker Built for Collectors</h2>
+          <p class="text-on-surface-variant text-base sm:text-lg">Every core tool you need to track cards, manage sets, and build decks.</p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8">
+          <div class="group p-6 sm:p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container">
             <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-primary">inventory_2</span>
             </div>
             <h3 class="text-2xl font-headline font-bold mb-4">Set Collection Tracker</h3>
             <p class="text-on-surface-variant leading-relaxed">
-              Track every set card by card. Instantly see what you own, what you're missing, and how close you are to completing your collection.
+              Track every set card by card. Instantly see what you own, what you're missing, and how close you are to completing your Magic or Pok&eacute;mon collection.
             </p>
           </div>
 
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-secondary/20 hover:border-secondary/50 card-container">
+          <div class="group p-6 sm:p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-secondary/20 hover:border-secondary/50 card-container">
             <div class="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-secondary">layers</span>
             </div>
             <h3 class="text-2xl font-headline font-bold mb-4">Deck Builder</h3>
             <p class="text-on-surface-variant leading-relaxed">
-              Build and manage your decks with sideboard support. Import directly from Magic Arena and MTGO. Track lands, creatures and more at a glance.
+              Build and manage your decks with sideboard support. Import directly from Magic Arena and MTGO. A deck builder that keeps your lists and collection in one place.
             </p>
           </div>
 
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container">
+          <div class="group p-6 sm:p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container">
             <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
               <span class="material-symbols-outlined text-primary">camera</span>
             </div>
             <h3 class="text-2xl font-headline font-bold mb-4">OCR Card Scanner</h3>
             <p class="text-on-surface-variant leading-relaxed">
-              Point your camera at any card and add it instantly to your collection. Fast, accurate, and works offline — no internet required.
+              Point your camera at any trading card and add it instantly to your collection. Fast, accurate, and works offline &mdash; no internet required.
             </p>
           </div>
+        </div>
 
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container">
-            <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-primary">favorite</span>
+        <div class="mt-8 sm:mt-10 rounded-2xl bg-surface-container/70 border border-primary/10 card-container p-6 sm:p-8">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div>
+              <p class="text-primary uppercase text-xs tracking-[0.22em] font-bold mb-3">Also Included</p>
+              <ul class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-on-surface-variant text-sm sm:text-base">
+                <li class="flex items-center gap-3"><span class="material-symbols-outlined text-primary text-xl">favorite</span><span>Wishlist tracking</span></li>
+                <li class="flex items-center gap-3"><span class="material-symbols-outlined text-primary text-xl">filter_list</span><span>Smart collections</span></li>
+                <li class="flex items-center gap-3"><span class="material-symbols-outlined text-primary text-xl">backup</span><span>Local backup support</span></li>
+                <li class="flex items-center gap-3"><span class="material-symbols-outlined text-primary text-xl">schedule</span><span>Cloud sync coming soon</span></li>
+                <li class="flex items-center gap-3"><span class="material-symbols-outlined text-primary text-xl">trending_up</span><span>Live prices coming soon</span></li>
+              </ul>
             </div>
-            <h3 class="text-2xl font-headline font-bold mb-4">Wishlist</h3>
-            <p class="text-on-surface-variant leading-relaxed">
-              Keep track of cards you want. When you add a card to your collection, it disappears from your wishlist automatically.
-            </p>
-          </div>
-
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-secondary/20 hover:border-secondary/50 card-container">
-            <div class="w-12 h-12 rounded-lg bg-secondary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-secondary">filter_list</span>
+            <div class="lg:max-w-xs">
+              <p class="text-on-surface-variant text-sm sm:text-base leading-relaxed">
+                Built for collectors who want one clean vault for sets, decks, card scans, and future collection insights.
+              </p>
             </div>
-            <h3 class="text-2xl font-headline font-bold mb-4">Smart Collections</h3>
-            <p class="text-on-surface-variant leading-relaxed">
-              Set a filter once — format, color, rarity, type — and your smart collection stays up to date automatically as you add cards.
-            </p>
-          </div>
-
-          <div class="group p-8 rounded-xl bg-surface-container hover:bg-surface-bright transition-all duration-500 border border-primary/10 hover:border-primary/40 card-container relative">
-            <span class="coming-soon-badge absolute top-6 right-6">Coming Soon</span>
-            <div class="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform">
-              <span class="material-symbols-outlined text-primary">trending_up</span>
-            </div>
-            <h3 class="text-2xl font-headline font-bold mb-4">Live Market Prices</h3>
-            <p class="text-on-surface-variant leading-relaxed">
-              Real-time prices from Cardmarket and TCGPlayer. Know the value of your entire collection at any moment.
-            </p>
           </div>
         </div>
       </div>
     </section>
 
     <!-- SHOWCASE -->
-    <section class="py-32 px-8">
-      <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-20">
+    <section class="py-20 sm:py-24 px-4 sm:px-6 md:px-8">
+      <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-12 md:gap-20">
         <div class="flex-1 space-y-8">
-          <h2 class="text-4xl md:text-6xl font-headline font-bold tracking-tight leading-tight">
-            Your Collection,<br><span class="text-primary italic">Evolved.</span>
+          <h2 class="text-3xl sm:text-4xl md:text-5xl font-headline font-bold tracking-tight leading-tight">
+            Your Collection,<br><span class="text-primary italic">In One Vault.</span>
           </h2>
-          <p class="text-on-surface-variant text-xl leading-relaxed font-light">
-            One app for Magic: The Gathering and Pokémon. More games coming soon. Your entire TCG life, in one vault.
+          <p class="text-on-surface-variant text-lg sm:text-xl leading-relaxed font-light">
+            One app for Magic: The Gathering and Pok&eacute;mon collection tracking, deck building, and card scanning. More games coming soon.
           </p>
           <ul class="space-y-4">
             <li class="flex items-center gap-4 text-lg">
@@ -217,7 +264,7 @@
             </li>
             <li class="flex items-center gap-4 text-lg">
               <span class="material-symbols-outlined text-primary">check_circle</span>
-              <span>Offline first — no internet required</span>
+              <span>Offline first &mdash; no internet required</span>
             </li>
             <li class="flex items-center gap-4 text-lg">
               <span class="material-symbols-outlined text-primary">check_circle</span>
@@ -230,12 +277,12 @@
           </ul>
         </div>
 
-        <div class="flex-1 flex justify-center gap-8 relative">
-          <div class="relative w-64 h-[500px] bg-stone-900 rounded-[2.5rem] border-[6px] border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden self-start rotate-[-5deg] z-20">
+        <div class="flex-1 flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8 relative w-full">
+          <div class="relative w-[min(82vw,16rem)] sm:w-64 h-[440px] sm:h-[500px] bg-stone-900 rounded-[2.5rem] border-[6px] border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden sm:self-start rotate-[-3deg] sm:rotate-[-5deg] z-20">
             <div class="absolute top-0 w-14 h-5 bg-stone-800 left-1/3 rounded-b-xl z-10"></div>
             <img alt="BinderVault Home Screen" class="w-full h-full object-cover object-top" src="Screen1.jpg">
           </div>
-          <div class="relative w-64 h-[500px] bg-stone-900 rounded-[2.5rem] border-[6px] border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden mt-20 rotate-[5deg] z-10">
+          <div class="relative w-[min(82vw,16rem)] sm:w-64 h-[440px] sm:h-[500px] bg-stone-900 rounded-[2.5rem] border-[6px] border-stone-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)] overflow-hidden sm:mt-20 rotate-[3deg] sm:rotate-[5deg] z-10">
             <div class="absolute top-0 w-14 h-5 bg-stone-800 left-1/3 rounded-b-xl z-10"></div>
             <img alt="BinderVault Deck Builder" class="w-full h-full object-cover object-top" src="Screen2.jpg">
           </div>
@@ -243,31 +290,49 @@
       </div>
     </section>
 
+    <section class="px-4 sm:px-6 md:px-8 pb-20 sm:pb-24">
+      <div class="max-w-5xl mx-auto rounded-[2rem] border border-primary/10 bg-surface-container/70 card-container p-6 sm:p-8 md:p-10 text-center">
+        <p class="text-primary uppercase text-xs tracking-[0.22em] font-bold mb-4">Why BinderVault</p>
+        <h2 class="text-2xl sm:text-3xl md:text-4xl font-headline font-bold tracking-tight mb-4">Built for trading card collectors, not spreadsheets.</h2>
+        <p class="text-on-surface-variant text-base sm:text-lg max-w-3xl mx-auto leading-relaxed mb-8">
+          BinderVault keeps collection tracking, deck building, card scanning, and pricing upgrades inside one premium experience instead of scattering your TCG collection across different tools.
+        </p>
+        <a
+          class="inline-flex items-center justify-center px-8 py-4 rounded-2xl bg-primary text-on-primary font-semibold text-base tracking-wide hover:bg-primary-container transition-colors shadow-lg shadow-primary/25 active:scale-98"
+          href="https://play.google.com/store/apps/details?id=com.navalik.bindervault"
+          target="_blank"
+          rel="noopener"
+        >
+          Download on Google Play
+        </a>
+      </div>
+    </section>
+
     <!-- PRICING -->
-    <section class="py-32 px-8 bg-surface-container-low/50" id="pricing">
+    <section class="py-24 sm:py-32 px-4 sm:px-6 md:px-8 bg-surface-container-low/50" id="pricing">
       <div class="max-w-4xl mx-auto text-center">
-        <h2 class="text-4xl md:text-5xl font-headline font-bold mb-4 tracking-tight">Simple Pricing</h2>
-        <p class="text-on-surface-variant text-lg mb-16">Start free. Upgrade when you're ready.</p>
+        <h2 class="text-3xl sm:text-4xl md:text-5xl font-headline font-bold mb-4 tracking-tight">Simple Pricing</h2>
+        <p class="text-on-surface-variant text-base sm:text-lg mb-12 sm:mb-16">Start free. Upgrade when you're ready.</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
-          <div class="p-10 rounded-2xl bg-surface-container card-container">
+          <div class="p-6 sm:p-10 rounded-2xl bg-surface-container card-container">
             <p class="text-on-surface-variant uppercase text-xs tracking-widest font-bold mb-4">Free</p>
-            <p class="text-5xl font-headline font-bold mb-2">€0</p>
+            <p class="text-5xl font-headline font-bold mb-2">&euro;0</p>
             <p class="text-on-surface-variant mb-8">Forever free, no card required.</p>
             <ul class="space-y-3 text-on-surface-variant">
-              <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>1 TCG (Magic or Pokémon)</li>
+              <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>1 TCG included (Magic or Pok&eacute;mon)</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>All collection types</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Deck builder &amp; import</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Limited daily scans</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Local backup</li>
             </ul>
           </div>
-          <div class="p-10 rounded-2xl bg-surface-container card-container border border-primary/40 relative">
+          <div class="p-6 sm:p-10 rounded-2xl bg-surface-container card-container border border-primary/40 relative">
             <span class="coming-soon-badge absolute top-6 right-6">Best Value</span>
             <p class="text-primary uppercase text-xs tracking-widest font-bold mb-4">Plus</p>
-            <p class="text-5xl font-headline font-bold mb-1">€2.39<span class="text-xl font-normal text-on-surface-variant">/mo</span></p>
-            <p class="text-on-surface-variant text-sm mb-8">or €23,99/year</p>
+            <p class="text-5xl font-headline font-bold mb-1">&euro;2.39<span class="text-xl font-normal text-on-surface-variant">/mo</span></p>
+            <p class="text-on-surface-variant text-sm mb-8">or &euro;23.99/year</p>
             <ul class="space-y-3 text-on-surface-variant">
-              <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>All TCGs unlocked</li>
+              <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Plus benefits across every TCG you own</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Unlimited daily scans</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Unlimited collections</li>
               <li class="flex gap-3"><span class="material-symbols-outlined text-primary text-xl">check</span>Cloud sync <span class="coming-soon-badge ml-1">Soon</span></li>
@@ -275,17 +340,20 @@
             </ul>
           </div>
         </div>
+        <p class="mt-6 text-sm sm:text-base text-on-surface-variant">
+          Additional TCGs are available as separate purchases. Plus applies across all TCGs you own.
+        </p>
       </div>
     </section>
 
     <!-- CTA -->
-    <section class="py-32 px-8 mb-16">
+    <section class="py-24 sm:py-32 px-4 sm:px-6 md:px-8 mb-16">
       <div class="max-w-5xl mx-auto rounded-[3rem] gold-gradient p-[1px]">
-        <div class="bg-surface-container-lowest rounded-[2.9rem] py-24 px-8 text-center relative overflow-hidden">
+        <div class="bg-surface-container-lowest rounded-[2.9rem] py-16 sm:py-24 px-5 sm:px-8 text-center relative overflow-hidden">
           <div class="absolute top-0 left-0 w-96 h-96 bg-primary/10 blur-[120px] rounded-full -translate-x-12 -translate-y-12"></div>
           <div class="absolute bottom-0 right-0 w-96 h-96 bg-primary/5 blur-[120px] rounded-full translate-x-12 translate-y-12"></div>
 
-          <h2 class="text-4xl md:text-6xl font-headline font-bold mb-8 relative z-10">
+          <h2 class="text-3xl sm:text-4xl md:text-6xl font-headline font-bold mb-8 relative z-10">
             Start your vault today
           </h2>
           <p class="text-on-surface-variant text-lg md:text-xl max-w-xl mx-auto mb-12 relative z-10 font-light">
@@ -293,10 +361,13 @@
           </p>
 
           <div class="flex justify-center relative z-10">
-            <a href="https://play.google.com/store/apps/details?id=com.navalik.bindervault" target="_blank" rel="noopener">
-              <button class="px-10 py-5 rounded-2xl bg-primary text-on-primary font-semibold text-lg tracking-wide hover:bg-primary-container transition-colors shadow-lg shadow-primary/25 active:scale-98">
-                Download on Google Play
-              </button>
+            <a
+              class="inline-flex items-center justify-center px-10 py-5 rounded-2xl bg-primary text-on-primary font-semibold text-lg tracking-wide hover:bg-primary-container transition-colors shadow-lg shadow-primary/25 active:scale-98"
+              href="https://play.google.com/store/apps/details?id=com.navalik.bindervault"
+              target="_blank"
+              rel="noopener"
+            >
+              Download on Google Play
             </a>
           </div>
         </div>
@@ -306,7 +377,7 @@
 
   <!-- FOOTER -->
   <footer class="bg-stone-950 w-full py-20 border-t border-primary/5">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 px-12 max-w-7xl mx-auto font-body text-sm tracking-wide">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 px-4 sm:px-6 md:px-12 max-w-7xl mx-auto font-body text-sm tracking-wide">
       <div>
         <div class="mb-6">
           <span class="bv-logo-text bv-logo-text-footer">BinderVault</span>
@@ -319,7 +390,7 @@
         </a>
       </div>
 
-      <div class="grid grid-cols-2 gap-8">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-8">
         <div class="flex flex-col gap-4">
           <span class="text-amber-400 font-bold mb-2 uppercase text-xs tracking-widest">Platform</span>
           <a class="text-stone-500 hover:text-amber-400 transition-colors" href="https://play.google.com/store/apps/details?id=com.navalik.bindervault" target="_blank" rel="noopener">
@@ -329,7 +400,7 @@
 
         <div class="flex flex-col gap-4">
           <span class="text-amber-400 font-bold mb-2 uppercase text-xs tracking-widest">Company</span>
-          <a class="text-stone-500 hover:text-amber-400 transition-colors" href="privacy/privacy.html">
+          <a class="text-stone-500 hover:text-amber-400 transition-colors" href="privacy.html">
             Privacy Policy
           </a>
           <a class="text-stone-500 hover:text-amber-400 transition-colors" href="mailto:navalik78@hotmail.com">
