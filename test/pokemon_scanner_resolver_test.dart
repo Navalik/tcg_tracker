@@ -23,6 +23,38 @@ void main() {
       expect(seed.isFoil, isTrue);
     });
 
+    test('ignores invalid scanner language payload values', () {
+      const rawPayload =
+          '__SCAN_PAYLOAD__{"raw":"Kissara\\nSV3 182/197","lockedName":"Kissara","lockedSet":"SV3 182","selectedLanguageCode":"__SCAN_PAYLOAD__{\\"raw\\":\\"oops\\"}","foil":false}';
+
+      final seed = PokemonScannerResolver.parseSeed(
+        rawPayload,
+        knownSetCodes: const <String>{'sv3'},
+      );
+
+      expect(seed, isNotNull);
+      expect(seed!.cardName, 'Kissara');
+      expect(seed.setCode, 'sv3');
+      expect(seed.collectorNumber, '182');
+      expect(seed.scannerLanguageCode, isNull);
+    });
+
+    test(
+      'extracts scanner language from nested payload values when recoverable',
+      () {
+        const rawPayload =
+            '__SCAN_PAYLOAD__{"raw":"Kissara\\nSV3 182/197","lockedName":"Kissara","lockedSet":"SV3 182","selectedLanguageCode":"{\\"selectedLanguageCode\\":\\"it\\"}","foil":false}';
+
+        final seed = PokemonScannerResolver.parseSeed(
+          rawPayload,
+          knownSetCodes: const <String>{'sv3'},
+        );
+
+        expect(seed, isNotNull);
+        expect(seed!.scannerLanguageCode, 'it');
+      },
+    );
+
     test(
       'ranks exact set and collector above ambiguous same-name printings',
       () async {

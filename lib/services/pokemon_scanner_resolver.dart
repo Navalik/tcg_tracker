@@ -51,6 +51,38 @@ class PokemonScannerResolution {
 class PokemonScannerResolver {
   const PokemonScannerResolver._();
 
+  static const Set<String> _supportedScannerLanguages = <String>{'en', 'it'};
+
+  static String? normalizeScannerLanguageCode(Object? value) {
+    if (value is! String) {
+      return null;
+    }
+    final normalized = value.trim();
+    if (normalized.isEmpty) {
+      return null;
+    }
+    if (normalized.startsWith('__SCAN_PAYLOAD__')) {
+      try {
+        final payload = jsonMap(
+          normalized.substring('__SCAN_PAYLOAD__'.length).trim(),
+        );
+        return normalizeScannerLanguageCode(payload['selectedLanguageCode']);
+      } catch (_) {
+        return null;
+      }
+    }
+    if (normalized.startsWith('{')) {
+      try {
+        final payload = jsonMap(normalized);
+        return normalizeScannerLanguageCode(payload['selectedLanguageCode']);
+      } catch (_) {
+        return null;
+      }
+    }
+    final lowered = normalized.toLowerCase();
+    return _supportedScannerLanguages.contains(lowered) ? lowered : null;
+  }
+
   static ScannerOcrSeed? parseSeed(
     String rawInput, {
     required Set<String> knownSetCodes,
@@ -74,7 +106,7 @@ class PokemonScannerResolver {
         final lockedName = _normalizedText(payload['lockedName']);
         final lockedSet = _normalizedText(payload['lockedSet']);
         final payloadSet = _normalizedText(payload['selectedSetCode']);
-        final payloadLanguage = _normalizedText(
+        final payloadLanguage = normalizeScannerLanguageCode(
           payload['selectedLanguageCode'],
         );
         final payloadFoil = payload['foil'];
@@ -280,7 +312,7 @@ class PokemonScannerResolver {
   }
 
   static List<String> _preferredLanguages(String? scannerLanguageCode) {
-    final normalized = scannerLanguageCode?.trim().toLowerCase();
+    final normalized = normalizeScannerLanguageCode(scannerLanguageCode);
     if (normalized == null || normalized.isEmpty) {
       return const <String>['en', 'it'];
     }

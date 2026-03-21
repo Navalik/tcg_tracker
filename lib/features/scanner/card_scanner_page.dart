@@ -309,6 +309,7 @@ class _PickPrintingSheet extends StatelessWidget {
     final media = MediaQuery.of(context);
     final sheetMargin = _bottomSheetMenuMargin(context);
     final maxHeight = media.size.height - sheetMargin.top - sheetMargin.bottom;
+    final availableListHeight = (maxHeight - 96).clamp(180.0, maxHeight);
     return Container(
       margin: sheetMargin,
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -326,47 +327,58 @@ class _PickPrintingSheet extends StatelessWidget {
       child: SafeArea(
         top: false,
         bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Choose printing',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              cardName,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: (candidates.length * 74.0).clamp(220.0, maxHeight),
-              child: ListView(
-                children: [
-                  if (localCandidates.isNotEmpty) ...[
-                    _buildSectionHeader(context, 'Local'),
-                    for (final card in localCandidates)
-                      _buildPrintingTile(context, card),
-                  ],
-                  if (onlineCandidates.isNotEmpty) ...[
-                    if (localCandidates.isNotEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Divider(height: 1),
-                      ),
-                    _buildSectionHeader(context, 'Online'),
-                    for (final card in onlineCandidates)
-                      _buildPrintingTile(context, card),
-                  ],
-                  if (localCandidates.isEmpty && onlineCandidates.isEmpty)
-                    for (final card in candidates)
-                      _buildPrintingTile(context, card),
-                ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Choose printing',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                cardName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: const Color(0xFFBFAE95)),
+              ),
+              const SizedBox(height: 10),
+              Flexible(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: 180,
+                    maxHeight: availableListHeight,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      if (localCandidates.isNotEmpty) ...[
+                        _buildSectionHeader(context, 'Local'),
+                        for (final card in localCandidates)
+                          _buildPrintingTile(context, card),
+                      ],
+                      if (onlineCandidates.isNotEmpty) ...[
+                        if (localCandidates.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8),
+                            child: Divider(height: 1),
+                          ),
+                        _buildSectionHeader(context, 'Online'),
+                        for (final card in onlineCandidates)
+                          _buildPrintingTile(context, card),
+                      ],
+                      if (localCandidates.isEmpty && onlineCandidates.isEmpty)
+                        for (final card in candidates)
+                          _buildPrintingTile(context, card),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -564,9 +576,9 @@ class _CardScannerPageState extends State<_CardScannerPage>
         _selectedLanguageFilterCode = 'en';
         return;
       }
-      final selected = (saved ?? _selectedLanguageFilterCode)
-          ?.trim()
-          .toLowerCase();
+      final selected = PokemonScannerResolver.normalizeScannerLanguageCode(
+        saved ?? _selectedLanguageFilterCode,
+      );
       if (selected == null || selected.isEmpty || !options.contains(selected)) {
         _selectedLanguageFilterCode = null;
       } else {
@@ -629,7 +641,7 @@ class _CardScannerPageState extends State<_CardScannerPage>
     }
     final nextSelected = selected.isEmpty
         ? null
-        : selected.trim().toLowerCase();
+        : PokemonScannerResolver.normalizeScannerLanguageCode(selected);
     final game =
         TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
         ? AppTcgGame.pokemon
@@ -1005,12 +1017,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
       _handled = true;
       await controller.stopImageStream();
       if (mounted) {
+        final selectedLanguageCode =
+            PokemonScannerResolver.normalizeScannerLanguageCode(
+              _selectedLanguageFilterCode,
+            );
         final payload = jsonEncode({
           'raw': _bestStableRawText.isNotEmpty ? _bestStableRawText : rawText,
           'lockedName': _lockedName,
           'lockedSet': _lockedSet,
           'selectedSetCode': _selectedSetFilterCode,
-          'selectedLanguageCode': _selectedLanguageFilterCode,
+          'selectedLanguageCode': selectedLanguageCode,
           'foil': _foilSelected,
         });
         Navigator.of(context).pop('__SCAN_PAYLOAD__$payload');
@@ -1515,13 +1531,16 @@ class _CardScannerPageState extends State<_CardScannerPage>
                         onPressed: _pickLanguageFilter,
                         icon: const Icon(Icons.translate_rounded, size: 16),
                         label: Text(
-                          _selectedLanguageFilterCode == null
+                          PokemonScannerResolver.normalizeScannerLanguageCode(
+                                    _selectedLanguageFilterCode,
+                                  ) ==
+                                  null
                               ? (Localizations.localeOf(context).languageCode
                                         .toLowerCase()
                                         .startsWith('it')
                                     ? 'Lang: tutte'
                                     : 'Lang: any')
-                              : 'Lang: ${_selectedLanguageFilterCode!.toUpperCase()}',
+                              : 'Lang: ${PokemonScannerResolver.normalizeScannerLanguageCode(_selectedLanguageFilterCode)!.toUpperCase()}',
                         ),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFFE9C46A),

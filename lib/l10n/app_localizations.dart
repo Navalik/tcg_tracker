@@ -2669,7 +2669,7 @@ abstract class AppLocalizations {
   /// No description provided for @homeSmartHelp.
   ///
   /// In en, this message translates to:
-  /// **'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.'**
+  /// **'Save a dynamic filter: smart collections automatically show all cards matching your criteria, whether owned or not.'**
   String get homeSmartHelp;
 
   /// No description provided for @homeWishHelp.
@@ -3131,7 +3131,7 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.5.2'**
+  /// **'What\'s new in 0.5.3'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.

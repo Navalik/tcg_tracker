@@ -1,13 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:tcg_tracker/db/canonical_catalog_store.dart';
 import 'package:tcg_tracker/domain/domain_models.dart';
 import 'package:tcg_tracker/models.dart';
 import 'package:tcg_tracker/providers/tcgdex_pokemon_provider.dart';
+import 'package:tcg_tracker/repositories/game_aware_repository_adapter.dart';
 import 'package:tcg_tracker/services/pokemon_canonical_import_service.dart';
 import 'package:tcg_tracker/services/tcgdex_api_client.dart';
 
@@ -56,10 +59,7 @@ void main() {
       );
       final report = await service.importProfile(
         profile: 'starter',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
 
       expect(report.cardsImported, greaterThan(0));
@@ -86,10 +86,7 @@ void main() {
       );
       final report = await service.importProfile(
         profile: 'full',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
 
       expect(report.setsImported, greaterThan(0));
@@ -108,10 +105,7 @@ void main() {
 
     await service.importProfile(
       profile: 'starter',
-      languages: const <String>[
-        TcgLanguageCodes.en,
-        TcgLanguageCodes.it,
-      ],
+      languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       onBatchBuilt: (batch) {
         capturedBatch = batch;
       },
@@ -156,10 +150,7 @@ void main() {
       );
       await service.importProfile(
         profile: 'starter',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
 
       final localizedResults = store.searchPokemonCards(
@@ -203,10 +194,7 @@ void main() {
 
       await service.importProfile(
         profile: 'starter',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
       final firstCards = store.countTableRows('catalog_cards');
       final firstPrintings = store.countTableRows('card_printings');
@@ -214,10 +202,7 @@ void main() {
 
       await service.importProfile(
         profile: 'starter',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
 
       expect(store.countTableRows('catalog_cards'), equals(firstCards));
@@ -241,10 +226,7 @@ void main() {
       );
       await service.importProfile(
         profile: 'starter',
-        languages: const <String>[
-          TcgLanguageCodes.en,
-          TcgLanguageCodes.it,
-        ],
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
       );
 
       final italianFirst = store.searchPokemonCards(
@@ -266,6 +248,52 @@ void main() {
       expect(englishFirst.first.name, equals('Alakazam IT'));
     },
   );
+
+  test('Game-aware Pokemon name search returns localized display name', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'pokemon_game_aware_search_',
+    );
+    SharedPreferences.setMockInitialValues(const <String, Object>{
+      'app_locale': 'it',
+      'card_languages_pokemon': <String>['en', 'it'],
+    });
+    CanonicalCatalogStore.debugDefaultPathOverride =
+        '${tempDir.path}${Platform.pathSeparator}${CanonicalCatalogStore.defaultFileName}';
+    addTearDown(() async {
+      CanonicalCatalogStore.debugDefaultPathOverride = null;
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    final provider = TcgdexPokemonProvider(
+      apiClient: TcgdexApiClient(httpClient: _fakeTcgdexClient()),
+    );
+    final store = await CanonicalCatalogStore.openDefault();
+    try {
+      final service = PokemonCanonicalImportService(
+        provider: provider,
+        store: store,
+      );
+      await service.importProfile(
+        profile: 'starter',
+        languages: const <String>[TcgLanguageCodes.en, TcgLanguageCodes.it],
+      );
+    } finally {
+      store.dispose();
+    }
+
+    final adapter = GameAwareRepositoryAdapter();
+    final results = await adapter.searchCardsByName(
+      'alakazam',
+      gameId: TcgGameId.pokemon,
+      languages: const <String>['it'],
+      limit: 20,
+    );
+
+    expect(results, isNotEmpty);
+    expect(results.first.name, equals('Alakazam IT'));
+  });
 
   test(
     'Pokemon promo and special cards support collector and subtype regressions',

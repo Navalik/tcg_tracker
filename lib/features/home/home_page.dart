@@ -3352,12 +3352,11 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     final filter = await Navigator.of(context).push<CollectionFilter>(
       MaterialPageRoute(
-        builder: (_) =>
-            _CollectionFilterBuilderPage(
-              name: name,
-              submitLabel: l10n.create,
-              initialFilter: null,
-            ),
+        builder: (_) => _CollectionFilterBuilderPage(
+          name: name,
+          submitLabel: l10n.create,
+          initialFilter: null,
+        ),
       ),
     );
     if (!context.mounted || filter == null) {
@@ -3434,11 +3433,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final cardsByPrintingKey = <String, CardSearchResult>{};
     var offset = 0;
     while (true) {
-      final entries = await ScryfallDatabase.instance.fetchFilteredCollectionCards(
-        filter,
-        limit: pageSize,
-        offset: offset,
-      );
+      final entries = await ScryfallDatabase.instance
+          .fetchFilteredCollectionCards(
+            filter,
+            limit: pageSize,
+            offset: offset,
+          );
       if (entries.isEmpty) {
         break;
       }
@@ -3540,7 +3540,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       builder: (dialogContext) {
         final l10n = AppLocalizations.of(dialogContext)!;
         final theme = Theme.of(dialogContext);
-        final isItalian = Localizations.localeOf(dialogContext).languageCode == 'it';
+        final isItalian =
+            Localizations.localeOf(dialogContext).languageCode == 'it';
         final summary = isItalian
             ? 'Carte nel filtro: ${cards.length}'
             : 'Cards in filter: ${cards.length}';
@@ -3570,7 +3571,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                     child: Container(
                       decoration: BoxDecoration(
                         border: Border.all(
-                          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -3601,14 +3604,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                   child: Container(
                                     width: 36,
                                     height: 50,
-                                    color: theme.colorScheme.surfaceContainerHighest,
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest,
                                     child: Image.network(
                                       imageUrl,
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, _, _) => Icon(
                                         Icons.style,
                                         size: 18,
-                                        color: theme.colorScheme.onSurfaceVariant,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
                                     ),
                                   ),
@@ -4663,9 +4669,18 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final picked = await _pickCardPrintingForName(
         context,
         cardName,
-        languages: seed.scannerLanguageCode == null
+        languages:
+            PokemonScannerResolver.normalizeScannerLanguageCode(
+                  seed.scannerLanguageCode,
+                ) ==
+                null
             ? const <String>['en']
-            : <String>[seed.scannerLanguageCode!.trim().toLowerCase(), 'en'],
+            : <String>[
+                PokemonScannerResolver.normalizeScannerLanguageCode(
+                  seed.scannerLanguageCode,
+                )!,
+                'en',
+              ],
         preferredSetCode: seed.setCode,
         preferredCollectorNumber: seed.collectorNumber,
         candidatesOverride: resolution.candidates,
@@ -4702,9 +4717,15 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _activeSettingsGame,
     );
     final effectiveScanLanguages =
-        (seed.scannerLanguageCode != null &&
-            seed.scannerLanguageCode!.trim().isNotEmpty)
-        ? <String>[seed.scannerLanguageCode!.trim().toLowerCase()]
+        (PokemonScannerResolver.normalizeScannerLanguageCode(
+              seed.scannerLanguageCode,
+            ) !=
+            null)
+        ? <String>[
+            PokemonScannerResolver.normalizeScannerLanguageCode(
+              seed.scannerLanguageCode,
+            )!,
+          ]
         : activeLanguages;
     final fallbackScanLanguages = _scannerOnlineFallbackLanguages(
       effectiveScanLanguages,
@@ -5004,8 +5025,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           if (payloadSet != null && payloadSet.isNotEmpty) {
             selectedSetCode = payloadSet;
           }
-          final payloadLanguage = (payload['selectedLanguageCode'] as String?)
-              ?.trim();
+          final payloadLanguage =
+              PokemonScannerResolver.normalizeScannerLanguageCode(
+                payload['selectedLanguageCode'],
+              );
           if (payloadLanguage != null && payloadLanguage.isNotEmpty) {
             selectedLanguageCode = payloadLanguage;
           }
@@ -5185,9 +5208,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         .countCardsForFilterWithSearch(
           CollectionFilter(
             sets: {setCode},
-            languages: seed.scannerLanguageCode == null
+            languages:
+                PokemonScannerResolver.normalizeScannerLanguageCode(
+                      seed.scannerLanguageCode,
+                    ) ==
+                    null
                 ? const <String>{}
-                : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+                : <String>{
+                    PokemonScannerResolver.normalizeScannerLanguageCode(
+                      seed.scannerLanguageCode,
+                    )!,
+                  },
           ),
           searchQuery: query,
         );
@@ -5198,9 +5229,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             .countCardsForFilterWithSearch(
               CollectionFilter(
                 sets: {setCode},
-                languages: seed.scannerLanguageCode == null
+                languages:
+                    PokemonScannerResolver.normalizeScannerLanguageCode(
+                          seed.scannerLanguageCode,
+                        ) ==
+                        null
                     ? const <String>{}
-                    : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+                    : <String>{
+                        PokemonScannerResolver.normalizeScannerLanguageCode(
+                          seed.scannerLanguageCode,
+                        )!,
+                      },
               ),
               searchQuery: fallbackName,
             );
@@ -5229,9 +5268,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           .countCardsForFilterWithSearch(
             CollectionFilter(
               sets: {setCode},
-              languages: seed.scannerLanguageCode == null
+              languages:
+                  PokemonScannerResolver.normalizeScannerLanguageCode(
+                        seed.scannerLanguageCode,
+                      ) ==
+                      null
                   ? const <String>{}
-                  : <String>{seed.scannerLanguageCode!.trim().toLowerCase()},
+                  : <String>{
+                      PokemonScannerResolver.normalizeScannerLanguageCode(
+                        seed.scannerLanguageCode,
+                      )!,
+                    },
             ),
             searchQuery: fallbackName,
           );
@@ -5329,7 +5376,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         normalized.add(language);
       }
     }
-    final scanner = scannerLanguageCode?.trim().toLowerCase();
+    final scanner = PokemonScannerResolver.normalizeScannerLanguageCode(
+      scannerLanguageCode,
+    );
     if (scanner != null && scanner.isNotEmpty) {
       normalized.add(scanner);
     }
@@ -7738,7 +7787,7 @@ class _RecentAddedCardTile extends StatelessWidget {
                                 const SizedBox(width: 6),
                                 _buildRaritySquare(card.rarity),
                               ],
-                              ],
+                            ],
                           ),
                         ],
                       ),

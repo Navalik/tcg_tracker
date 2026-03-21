@@ -711,9 +711,9 @@ class ScryfallDatabase {
 
   Future<void> _rebuildPrintedNameSearchIndex(AppDatabase db) async {
     const displayExpr =
-        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.printed_name')), ''), name)";
+        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.printed_name')), ''), NULLIF(TRIM(json_extract(card_json, '\$.card_json.printed_name')), ''), name)";
     const aliasesExpr =
-        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.search_aliases_flat')), ''), '')";
+        "COALESCE(NULLIF(TRIM(json_extract(card_json, '\$.search_aliases_flat')), ''), NULLIF(TRIM(json_extract(card_json, '\$.card_json.search_aliases_flat')), ''), '')";
     const foldedExpr =
         "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER($displayExpr || ' ' || $aliasesExpr), ',', ''), ' ', ''), '-', ''), CHAR(39), ''), CHAR(8217), ''), CHAR(34), '')";
     await db.customStatement('DELETE FROM cards_printed_search');
@@ -1417,8 +1417,7 @@ class ScryfallDatabase {
     final collectionRows = await (db.select(
       db.collections,
     )..orderBy([(tbl) => OrderingTerm.asc(tbl.id)])).get();
-    final collectionCardRows = await db.customSelect(
-      '''
+    final collectionCardRows = await db.customSelect('''
       SELECT
         collection_id,
         card_id,
@@ -1428,8 +1427,7 @@ class ScryfallDatabase {
         alt_art
       FROM collection_cards
       ORDER BY collection_id ASC, card_id ASC
-      ''',
-    ).get();
+      ''').get();
 
     final cardIds = collectionCardRows
         .map((row) => (row.read<String>('card_id')).trim())
@@ -2409,8 +2407,9 @@ class ScryfallDatabase {
             AppTcgGame.pokemon,
           );
           final db = await open();
-          final rawRows = await db.customSelect(
-            '''
+          final rawRows = await db
+              .customSelect(
+                '''
             SELECT
               card_id,
               printing_id,
@@ -2422,14 +2421,17 @@ class ScryfallDatabase {
               AND COALESCE(quantity, 0) > 0
             ORDER BY card_id ASC
             ''',
-            variables: <Variable>[Variable.withInt(allCardsId)],
-          ).get();
+                variables: <Variable>[Variable.withInt(allCardsId)],
+              )
+              .get();
           final normalizedQuery = searchQuery?.trim().toLowerCase() ?? '';
           final repairedEntries = <CollectionCardEntry>[];
           final viewCache = <String, CanonicalPrintingViewData>{};
           for (final row in rawRows) {
             final cardId = row.read<String>('card_id').trim();
-            final rawPrintingId = row.readNullable<String>('printing_id')?.trim();
+            final rawPrintingId = row
+                .readNullable<String>('printing_id')
+                ?.trim();
             final resolvedPrintingId =
                 (rawPrintingId?.isNotEmpty == true
                     ? store.resolvePrintingIdForLegacyCardId(rawPrintingId!)
@@ -2451,10 +2453,9 @@ class ScryfallDatabase {
             }
             final view =
                 viewCache[resolvedPrintingId] ??
-                store.fetchPrintingViews(
-                  <String>[resolvedPrintingId],
-                  preferredLanguages: preferredLanguages,
-                )[resolvedPrintingId];
+                store.fetchPrintingViews(<String>[
+                  resolvedPrintingId,
+                ], preferredLanguages: preferredLanguages)[resolvedPrintingId];
             if (view == null) {
               continue;
             }
@@ -3079,16 +3080,18 @@ class ScryfallDatabase {
         allCardsId: allCardsId,
         rows: collapsedRows,
       );
-      final filteredRows = collapsedRows.where((row) {
-        final state = _ownedStateForCanonicalPokemonRow(row, ownedState);
-        if (ownedOnly) {
-          return state.quantity > 0;
-        }
-        if (missingOnly) {
-          return state.quantity == 0;
-        }
-        return true;
-      }).toList(growable: false);
+      final filteredRows = collapsedRows
+          .where((row) {
+            final state = _ownedStateForCanonicalPokemonRow(row, ownedState);
+            if (ownedOnly) {
+              return state.quantity > 0;
+            }
+            if (missingOnly) {
+              return state.quantity == 0;
+            }
+            return true;
+          })
+          .toList(growable: false);
       final resolvedOffset = offset ?? 0;
       if (resolvedOffset >= filteredRows.length) {
         debugPrint('[pokemon-multilang] canonical fetch success rows=0');
@@ -3111,9 +3114,7 @@ class ScryfallDatabase {
           )
           .toList(growable: false);
     } catch (error, stackTrace) {
-      debugPrint(
-        '[pokemon-multilang] canonical fetch failed: $error',
-      );
+      debugPrint('[pokemon-multilang] canonical fetch failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       rethrow;
     } finally {
@@ -3242,8 +3243,7 @@ class ScryfallDatabase {
     }
     whereClauses.add('(${lookupClauses.join(' OR ')})');
     final db = await open();
-    final ownedRows = await db.customSelect(
-      '''
+    final ownedRows = await db.customSelect('''
       SELECT
         card_id AS card_id,
         printing_id AS printing_id,
@@ -3252,9 +3252,7 @@ class ScryfallDatabase {
         alt_art AS alt_art
       FROM collection_cards
       WHERE ${whereClauses.join(' AND ')}
-      ''',
-      variables: variables,
-    ).get();
+      ''', variables: variables).get();
     final result = <String, ({int quantity, bool foil, bool altArt})>{};
     for (final row in ownedRows) {
       final state = (
@@ -3316,7 +3314,8 @@ class ScryfallDatabase {
     if (_canonicalPokemonRowsCache.length >= _canonicalPokemonRowsCacheLimit) {
       _canonicalPokemonRowsCache.remove(_canonicalPokemonRowsCache.keys.first);
     }
-    _canonicalPokemonRowsCache[cacheKey] = List<CanonicalCollectionCardData>.unmodifiable(rows);
+    _canonicalPokemonRowsCache[cacheKey] =
+        List<CanonicalCollectionCardData>.unmodifiable(rows);
     return _canonicalPokemonRowsCache[cacheKey]!;
   }
 
@@ -3325,11 +3324,12 @@ class ScryfallDatabase {
     required String? searchQuery,
     required List<String> preferredLanguages,
   }) {
-    List<String> normalizeSet(Set<String> values) => values
-        .map((value) => value.trim().toLowerCase())
-        .where((value) => value.isNotEmpty)
-        .toList(growable: false)
-      ..sort();
+    List<String> normalizeSet(Set<String> values) =>
+        values
+            .map((value) => value.trim().toLowerCase())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false)
+          ..sort();
 
     List<String> normalizeList(Iterable<String> values) => values
         .map((value) => value.trim().toLowerCase())
@@ -3377,7 +3377,8 @@ class ScryfallDatabase {
         .toList(growable: false);
   }
 
-  List<CanonicalCollectionCardData> _collapseCanonicalPokemonRowsByPreferredLanguage(
+  List<CanonicalCollectionCardData>
+  _collapseCanonicalPokemonRowsByPreferredLanguage(
     List<CanonicalCollectionCardData> rows, {
     required List<String> preferredLanguages,
   }) {
@@ -3410,9 +3411,7 @@ class ScryfallDatabase {
         bestByBasePrinting[baseKey] = row;
       }
     }
-    return order
-        .map((key) => bestByBasePrinting[key]!)
-        .toList(growable: false);
+    return order.map((key) => bestByBasePrinting[key]!).toList(growable: false);
   }
 
   String _canonicalPokemonBasePrintingKey(String printingId) {
@@ -3645,8 +3644,7 @@ class ScryfallDatabase {
     int collectionId,
     String cardId, {
     String? printingId,
-  }
-  ) async {
+  }) async {
     await upsertCollectionMembership(
       collectionId,
       cardId,
@@ -3878,7 +3876,9 @@ class ScryfallDatabase {
     final row = rows.first;
     return CollectionCardEntry(
       cardId: row.read<String>('card_id'),
-      printingId: printingId?.trim().isEmpty ?? true ? null : printingId!.trim(),
+      printingId: printingId?.trim().isEmpty ?? true
+          ? null
+          : printingId!.trim(),
       name: row.read<String>('name'),
       setCode: row.read<String>('set_code'),
       setName: row.readNullable<String>('set_name') ?? '',
@@ -4296,11 +4296,9 @@ class ScryfallDatabase {
 
   Future<void> upsertCollectionMembership(
     int collectionId,
-    String cardId,
-    {
+    String cardId, {
     String? printingId,
-  }
-  ) async {
+  }) async {
     final db = await open();
     final normalizedCardId = cardId.trim();
     final normalizedPrintingId = printingId?.trim();
@@ -4337,8 +4335,9 @@ class ScryfallDatabase {
     }
     final db = await open();
     final allCardsId = await ensureAllCardsCollectionId();
-    final row = await db.customSelect(
-      '''
+    final row = await db
+        .customSelect(
+          '''
       SELECT COALESCE(quantity, 0) AS qty
       FROM collection_cards
       WHERE collection_id = ?
@@ -4349,14 +4348,15 @@ class ScryfallDatabase {
       ORDER BY CASE WHEN printing_id = ? THEN 0 ELSE 1 END
       LIMIT 1
       ''',
-      variables: <Variable>[
-        Variable.withInt(allCardsId),
-        Variable.withString(normalizedId),
-        if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty)
-          Variable.withString(normalizedPrintingId),
-        Variable.withString(normalizedPrintingId ?? ''),
-      ],
-    ).getSingleOrNull();
+          variables: <Variable>[
+            Variable.withInt(allCardsId),
+            Variable.withString(normalizedId),
+            if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty)
+              Variable.withString(normalizedPrintingId),
+            Variable.withString(normalizedPrintingId ?? ''),
+          ],
+        )
+        .getSingleOrNull();
     return row?.read<int>('qty') ?? 0;
   }
 
@@ -4525,9 +4525,7 @@ class ScryfallDatabase {
         return decoded;
       }
       if (decoded is Map) {
-        return decoded.map(
-          (key, value) => MapEntry(key.toString(), value),
-        );
+        return decoded.map((key, value) => MapEntry(key.toString(), value));
       }
     } catch (_) {}
     return null;
@@ -4546,10 +4544,9 @@ class ScryfallDatabase {
       final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
         AppTcgGame.pokemon,
       );
-      final view = store.fetchPrintingViews(
-        <String>[printingId],
-        preferredLanguages: preferredLanguages,
-      )[printingId];
+      final view = store.fetchPrintingViews(<String>[
+        printingId,
+      ], preferredLanguages: preferredLanguages)[printingId];
       if (view == null) {
         return null;
       }
@@ -4558,8 +4555,9 @@ class ScryfallDatabase {
       var altArt = false;
       if (collectionId != null) {
         final db = await open();
-        final row = await db.customSelect(
-          '''
+        final row = await db
+            .customSelect(
+              '''
           SELECT
             COALESCE(quantity, 0) AS quantity,
             COALESCE(foil, 0) AS foil,
@@ -4570,13 +4568,14 @@ class ScryfallDatabase {
           ORDER BY CASE WHEN printing_id = ? THEN 0 ELSE 1 END
           LIMIT 1
           ''',
-          variables: <Variable>[
-            Variable.withInt(collectionId),
-            Variable.withString(cardId.trim()),
-            Variable.withString(printingId),
-            Variable.withString(printingId),
-          ],
-        ).getSingleOrNull();
+              variables: <Variable>[
+                Variable.withInt(collectionId),
+                Variable.withString(cardId.trim()),
+                Variable.withString(printingId),
+                Variable.withString(printingId),
+              ],
+            )
+            .getSingleOrNull();
         if (row != null) {
           quantity = row.read<int>('quantity');
           foil = row.read<int>('foil') == 1;
@@ -4739,8 +4738,9 @@ class ScryfallDatabase {
         final id = row.read<int>('id');
         final name = row.read<String>('name');
         final filterJson = row.read<String?>('filter_json');
-        final inventoryRow = await db.customSelect(
-          '''
+        final inventoryRow = await db
+            .customSelect(
+              '''
           SELECT 1 AS has_inventory
           FROM collection_cards
           WHERE collection_id = ?
@@ -4751,15 +4751,14 @@ class ScryfallDatabase {
             )
           LIMIT 1
           ''',
-          variables: <Variable>[Variable.withInt(id)],
-        ).getSingleOrNull();
+              variables: <Variable>[Variable.withInt(id)],
+            )
+            .getSingleOrNull();
         if (_looksLikeMisclassifiedDeck(
           filterJson: filterJson,
           collectionName: name,
           collectionId: id,
-          collectionsWithDirectInventory: {
-            if (inventoryRow != null) id,
-          },
+          collectionsWithDirectInventory: {if (inventoryRow != null) id},
         )) {
           smartIdsToRecoverAsDeck.add(id);
         }
@@ -5117,6 +5116,29 @@ class ScryfallDatabase {
     if (foldedQuery.isEmpty || ftsQuery.isEmpty) {
       return const [];
     }
+    final resolvedOffset = offset != null && offset > 0 ? offset : 0;
+    final fetchLimit = limit + resolvedOffset;
+
+    CardSearchResult mapRowToSearchResult(QueryRow row) => CardSearchResult(
+      id: row.read<String>('id'),
+      name: row.read<String>('name'),
+      setCode: row.read<String>('set_code'),
+      setName: row.readNullable<String>('set_name') ?? '',
+      setTotal: row.readNullable<int>('set_total'),
+      collectorNumber: row.read<String>('collector_number'),
+      rarity: row.readNullable<String>('rarity') ?? '',
+      typeLine: row.readNullable<String>('type_line') ?? '',
+      colors: row.readNullable<String>('colors') ?? '',
+      colorIdentity: row.readNullable<String>('color_identity') ?? '',
+      priceUsd: _readOptionalPrice(row, 'price_usd'),
+      priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
+      priceEur: _readOptionalPrice(row, 'price_eur'),
+      priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
+      imageUri: _extractImageUrl(
+        row.readNullable<String>('image_uris'),
+        row.readNullable<String>('card_faces'),
+      ),
+    );
 
     Future<List<CardSearchResult>> runSearchWithLanguages(
       List<String>? activeLanguages,
@@ -5184,58 +5206,136 @@ class ScryfallDatabase {
         ..add(Variable.withString(foldedQuery))
         ..add(Variable.withString('$foldedQuery%'))
         ..add(Variable.withString(preferredLang))
-        ..add(Variable.withInt(limit));
-      if (offset != null && offset > 0) {
-        sql.write(' OFFSET ?');
-        args.add(Variable.withInt(offset));
-      }
+        ..add(Variable.withInt(fetchLimit));
       final rows = await db.customSelect(sql.toString(), variables: args).get();
-      return rows
-          .map(
-            (row) => CardSearchResult(
-              id: row.read<String>('id'),
-              name: row.read<String>('name'),
-              setCode: row.read<String>('set_code'),
-              setName: row.readNullable<String>('set_name') ?? '',
-              setTotal: row.readNullable<int>('set_total'),
-              collectorNumber: row.read<String>('collector_number'),
-              rarity: row.readNullable<String>('rarity') ?? '',
-              typeLine: row.readNullable<String>('type_line') ?? '',
-              colors: row.readNullable<String>('colors') ?? '',
-              colorIdentity: row.readNullable<String>('color_identity') ?? '',
-              priceUsd: _readOptionalPrice(row, 'price_usd'),
-              priceUsdFoil: _readOptionalPrice(row, 'price_usd_foil'),
-              priceEur: _readOptionalPrice(row, 'price_eur'),
-              priceEurFoil: _readOptionalPrice(row, 'price_eur_foil'),
-              imageUri: _extractImageUrl(
-                row.readNullable<String>('image_uris'),
-                row.readNullable<String>('card_faces'),
-              ),
-            ),
-          )
-          .toList(growable: false);
+      return rows.map(mapRowToSearchResult).toList(growable: false);
     }
 
-    final primary = await runSearchWithLanguages(languages);
-    if (primary.isNotEmpty || languages == null || languages.isEmpty) {
-      return primary;
+    Future<List<CardSearchResult>> runAliasFallbackWithLanguages(
+      List<String>? activeLanguages,
+    ) async {
+      final preferredLang = (activeLanguages ?? const <String>[])
+          .map((item) => item.trim().toLowerCase())
+          .firstWhere(
+            (item) => item.isNotEmpty && item != 'en',
+            orElse: () => 'en',
+          );
+      final whereClauses = <String>['search.folded_name LIKE ?'];
+      final args = <Variable>[Variable.withString('%$foldedQuery%')];
+      if (activeLanguages != null && activeLanguages.isNotEmpty) {
+        final placeholders = List.filled(
+          activeLanguages.length,
+          '?',
+        ).join(', ');
+        whereClauses.add('search.lang IN ($placeholders)');
+        args.addAll(
+          activeLanguages.map(
+            (lang) => Variable.withString(lang.trim().toLowerCase()),
+          ),
+        );
+      }
+      final sql =
+          '''
+      SELECT
+        cards.id AS id,
+        search.display_name AS name,
+        cards.set_code AS set_code,
+        cards.set_name AS set_name,
+        cards.set_total AS set_total,
+        cards.collector_number AS collector_number,
+        cards.rarity AS rarity,
+        cards.type_line AS type_line,
+        cards.colors AS colors,
+        cards.color_identity AS color_identity,
+        cards.price_usd AS price_usd,
+        cards.price_usd_foil AS price_usd_foil,
+        cards.price_eur AS price_eur,
+        cards.price_eur_foil AS price_eur_foil,
+        cards.image_uris AS image_uris,
+        cards.card_faces AS card_faces
+      FROM cards_printed_search search
+      JOIN cards ON cards.id = search.card_id
+      WHERE ${whereClauses.join(' AND ')}
+      ORDER BY
+        CASE
+          WHEN search.folded_name = ? THEN 0
+          WHEN search.folded_name LIKE ? THEN 1
+          ELSE 4
+        END ASC,
+        CASE
+          WHEN search.lang = ? THEN 0
+          WHEN search.lang = 'en' THEN 2
+          ELSE 1
+        END ASC,
+        search.display_name ASC,
+        LOWER(cards.set_code) ASC,
+        LOWER(cards.collector_number) ASC
+      LIMIT ?
+      ''';
+      args
+        ..add(Variable.withString(foldedQuery))
+        ..add(Variable.withString('$foldedQuery%'))
+        ..add(Variable.withString(preferredLang))
+        ..add(Variable.withInt(fetchLimit));
+      final rows = await db.customSelect(sql, variables: args).get();
+      return rows.map(mapRowToSearchResult).toList(growable: false);
     }
-    final fallback = await runSearchWithLanguages(null);
+
+    List<CardSearchResult> mergeUniqueResults(
+      List<CardSearchResult> primary,
+      List<CardSearchResult> secondary,
+    ) {
+      final merged = <String, CardSearchResult>{};
+      for (final row in primary) {
+        merged[row.id] = row;
+      }
+      for (final row in secondary) {
+        merged.putIfAbsent(row.id, () => row);
+      }
+      return merged.values.toList(growable: false);
+    }
+
+    Future<List<CardSearchResult>> runCombinedSearch(
+      List<String>? activeLanguages,
+    ) async {
+      final primary = await runSearchWithLanguages(activeLanguages);
+      if (primary.length >= fetchLimit) {
+        return primary;
+      }
+      final aliasFallback = await runAliasFallbackWithLanguages(
+        activeLanguages,
+      );
+      return mergeUniqueResults(primary, aliasFallback);
+    }
+
+    List<CardSearchResult> trimToPage(List<CardSearchResult> rows) {
+      if (resolvedOffset >= rows.length) {
+        return const [];
+      }
+      final end = (resolvedOffset + limit).clamp(0, rows.length);
+      return rows.sublist(resolvedOffset, end);
+    }
+
+    final primary = await runCombinedSearch(languages);
+    if (primary.isNotEmpty || languages == null || languages.isEmpty) {
+      return trimToPage(primary);
+    }
+    final fallback = await runCombinedSearch(null);
     if (fallback.isNotEmpty) {
-      return fallback;
+      return trimToPage(fallback);
     }
     final shouldTrySelfHeal =
         (offset == null || offset <= 0) && !_printedNameIndexSelfHealTried;
     if (!shouldTrySelfHeal) {
-      return fallback;
+      return const [];
     }
     _printedNameIndexSelfHealTried = true;
     await _rebuildPrintedNameSearchIndex(db);
-    final healedPrimary = await runSearchWithLanguages(languages);
+    final healedPrimary = await runCombinedSearch(languages);
     if (healedPrimary.isNotEmpty) {
-      return healedPrimary;
+      return trimToPage(healedPrimary);
     }
-    return runSearchWithLanguages(null);
+    return trimToPage(await runCombinedSearch(null));
   }
 
   Future<List<String>> fetchAvailableLanguages() async {

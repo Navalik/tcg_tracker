@@ -1458,7 +1458,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get homeSmartHelp =>
-      'Save a dynamic filter: smart collections automatically show only owned cards matching your criteria.';
+      'Save a dynamic filter: smart collections automatically show all cards matching your criteria, whether owned or not.';
 
   @override
   String get homeWishHelp =>
@@ -1732,7 +1732,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.2';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.3';
 
   @override
   String get whatsNewFeaturesTitle => 'Main updates';

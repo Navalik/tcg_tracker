@@ -134,11 +134,12 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     final cardsByPrintingKey = <String, CardSearchResult>{};
     var offset = 0;
     while (true) {
-      final entries = await ScryfallDatabase.instance.fetchFilteredCollectionCards(
-        filter,
-        limit: pageSize,
-        offset: offset,
-      );
+      final entries = await ScryfallDatabase.instance
+          .fetchFilteredCollectionCards(
+            filter,
+            limit: pageSize,
+            offset: offset,
+          );
       if (entries.isEmpty) {
         break;
       }
@@ -251,8 +252,7 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
     List<CardSearchResult> cards,
   ) async {
     final deckFormat = _deckSearchFormatConstraint();
-    final deckLegalityByCardId =
-        deckFormat == null || cards.isEmpty
+    final deckLegalityByCardId = deckFormat == null || cards.isEmpty
         ? const <String, bool>{}
         : await ScryfallDatabase.instance.fetchCardLegalityForFormat(
             cards.map((card) => card.id).toList(growable: false),
@@ -271,167 +271,109 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         };
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) => AlertDialog(
-          title: Text(l10n.addAllResultsTitle),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l10n.addAllResultsBody(cards.length)),
-                const SizedBox(height: 12),
-                Text(
-                  _filterSelectionSummary(
-                    dialogContext,
-                    selectedKeys.length,
-                    cards.length,
+            title: Text(l10n.addAllResultsTitle),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(l10n.addAllResultsBody(cards.length)),
+                  const SizedBox(height: 12),
+                  Text(
+                    _filterSelectionSummary(
+                      dialogContext,
+                      selectedKeys.length,
+                      cards.length,
+                    ),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: selectedKeys.length == cards.length
-                          ? null
-                          : () {
-                              setDialogState(() {
-                                selectedKeys
-                                  ..clear()
-                                  ..addAll(
-                                    cards.map((card) => card.printingId ?? card.id),
-                                  );
-                              });
-                            },
-                      child: Text(
-                        Localizations.localeOf(dialogContext).languageCode == 'it'
-                            ? 'Seleziona tutto'
-                            : 'Select all',
-                      ),
-                    ),
-                    OutlinedButton(
-                      onPressed: selectedKeys.isEmpty
-                          ? null
-                          : () {
-                              setDialogState(() {
-                                selectedKeys.clear();
-                              });
-                            },
-                      child: Text(
-                        Localizations.localeOf(dialogContext).languageCode == 'it'
-                            ? 'Deseleziona tutto'
-                            : 'Clear all',
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: theme.colorScheme.outline.withValues(alpha: 0.25),
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Scrollbar(
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: cards.length,
-                        separatorBuilder: (_, _) => Divider(
-                          height: 1,
-                          color: theme.dividerColor.withValues(alpha: 0.35),
-                        ),
-                        itemBuilder: (itemContext, index) {
-                          final card = cards[index];
-                          final key = card.printingId ?? card.id;
-                          final isSelected = selectedKeys.contains(key);
-                          final imageUrl = _normalizeCardImageUrlForDisplay(
-                            card.imageUri,
-                          );
-                          final isLegal = deckLegalityByCardId[card.id];
-                          final legalityLabel = isLegal == null
-                              ? null
-                              : (isLegal
-                                    ? l10n.legalLabel
-                                    : l10n.notLegalLabel);
-                          final legalityColor = isLegal == null
-                              ? null
-                              : (isLegal
-                                    ? const Color(0xFFE9C46A)
-                                    : const Color(0xFFD06D5F));
-                          return ListTile(
-                            dense: true,
-                            onTap: () {
-                              setDialogState(() {
-                                if (isSelected) {
-                                  selectedKeys.remove(key);
-                                } else {
-                                  selectedKeys.add(key);
-                                }
-                              });
-                            },
-                            leading: GestureDetector(
-                              onTap: () async {
-                                await _showFilterCardImagePreview(
-                                  dialogContext,
-                                  card,
-                                );
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton(
+                        onPressed: selectedKeys.length == cards.length
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  selectedKeys
+                                    ..clear()
+                                    ..addAll(
+                                      cards.map(
+                                        (card) => card.printingId ?? card.id,
+                                      ),
+                                    );
+                                });
                               },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  width: 36,
-                                  height: 50,
-                                  color: theme.colorScheme.surfaceContainerHighest,
-                                  child: Image.network(
-                                    imageUrl,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, _, _) => Icon(
-                                      Icons.style,
-                                      size: 18,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            title: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  card.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                if (legalityLabel != null)
-                                  Text(
-                                    legalityLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.labelMedium?.copyWith(
-                                      fontSize: 13.5,
-                                      color: legalityColor,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            subtitle: Text(
-                              '${card.setName} • ${card.collectorProgressLabel}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: Checkbox(
-                              value: isSelected,
-                              onChanged: (_) {
+                        child: Text(
+                          Localizations.localeOf(dialogContext).languageCode ==
+                                  'it'
+                              ? 'Seleziona tutto'
+                              : 'Select all',
+                        ),
+                      ),
+                      OutlinedButton(
+                        onPressed: selectedKeys.isEmpty
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  selectedKeys.clear();
+                                });
+                              },
+                        child: Text(
+                          Localizations.localeOf(dialogContext).languageCode ==
+                                  'it'
+                              ? 'Deseleziona tutto'
+                              : 'Clear all',
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Flexible(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: theme.colorScheme.outline.withValues(
+                            alpha: 0.25,
+                          ),
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Scrollbar(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: cards.length,
+                          separatorBuilder: (_, _) => Divider(
+                            height: 1,
+                            color: theme.dividerColor.withValues(alpha: 0.35),
+                          ),
+                          itemBuilder: (itemContext, index) {
+                            final card = cards[index];
+                            final key = card.printingId ?? card.id;
+                            final isSelected = selectedKeys.contains(key);
+                            final imageUrl = _normalizeCardImageUrlForDisplay(
+                              card.imageUri,
+                            );
+                            final isLegal = deckLegalityByCardId[card.id];
+                            final legalityLabel = isLegal == null
+                                ? null
+                                : (isLegal
+                                      ? l10n.legalLabel
+                                      : l10n.notLegalLabel);
+                            final legalityColor = isLegal == null
+                                ? null
+                                : (isLegal
+                                      ? const Color(0xFFE9C46A)
+                                      : const Color(0xFFD06D5F));
+                            return ListTile(
+                              dense: true,
+                              onTap: () {
                                 setDialogState(() {
                                   if (isSelected) {
                                     selectedKeys.remove(key);
@@ -440,25 +382,93 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
                                   }
                                 });
                               },
-                            ),
-                          );
-                        },
+                              leading: GestureDetector(
+                                onTap: () async {
+                                  await _showFilterCardImagePreview(
+                                    dialogContext,
+                                    card,
+                                  );
+                                },
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    width: 36,
+                                    height: 50,
+                                    color: theme
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                    child: Image.network(
+                                      imageUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, _, _) => Icon(
+                                        Icons.style,
+                                        size: 18,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              title: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    card.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (legalityLabel != null)
+                                    Text(
+                                      legalityLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelMedium
+                                          ?.copyWith(
+                                            fontSize: 13.5,
+                                            color: legalityColor,
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 0.2,
+                                          ),
+                                    ),
+                                ],
+                              ),
+                              subtitle: Text(
+                                '${card.setName} • ${card.collectorProgressLabel}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              trailing: Checkbox(
+                                value: isSelected,
+                                onChanged: (_) {
+                                  setDialogState(() {
+                                    if (isSelected) {
+                                      selectedKeys.remove(key);
+                                    } else {
+                                      selectedKeys.add(key);
+                                    }
+                                  });
+                                },
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: selectedKeys.isEmpty
-                  ? null
-                  : () => Navigator.of(dialogContext).pop(
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(null),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: selectedKeys.isEmpty
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(
                         cards
                             .where(
                               (card) => selectedKeys.contains(
@@ -467,10 +477,11 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
                             )
                             .toList(growable: false),
                       ),
-              child: Text(l10n.addLabel),
-            ),
-          ],
-        ));
+                child: Text(l10n.addLabel),
+              ),
+            ],
+          ),
+        );
       },
     );
     return result;
@@ -582,11 +593,12 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       var added = 0;
       for (final card in cards) {
         if (widget.isDeckCollection) {
-          final currentEntry = await ScryfallDatabase.instance.fetchCardEntryById(
-            card.id,
-            printingId: card.printingId,
-            collectionId: ownedCollectionId,
-          );
+          final currentEntry = await ScryfallDatabase.instance
+              .fetchCardEntryById(
+                card.id,
+                printingId: card.printingId,
+                collectionId: ownedCollectionId,
+              );
           await ScryfallDatabase.instance.upsertCollectionCard(
             ownedCollectionId,
             card.id,
@@ -829,9 +841,18 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       final picked = await _pickCardPrintingForName(
         context,
         cardName,
-        languages: seed.scannerLanguageCode == null
+        languages:
+            PokemonScannerResolver.normalizeScannerLanguageCode(
+                  seed.scannerLanguageCode,
+                ) ==
+                null
             ? const <String>['en']
-            : <String>[seed.scannerLanguageCode!.trim().toLowerCase(), 'en'],
+            : <String>[
+                PokemonScannerResolver.normalizeScannerLanguageCode(
+                  seed.scannerLanguageCode,
+                )!,
+                'en',
+              ],
         preferredSetCode: seed.setCode,
         preferredCollectorNumber: seed.collectorNumber,
         candidatesOverride: resolution.candidates,
@@ -963,7 +984,9 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
         normalized.add(language);
       }
     }
-    final scanner = scannerLanguageCode?.trim().toLowerCase();
+    final scanner = PokemonScannerResolver.normalizeScannerLanguageCode(
+      scannerLanguageCode,
+    );
     if (scanner != null && scanner.isNotEmpty) {
       normalized.add(scanner);
     }
