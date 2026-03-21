@@ -504,6 +504,9 @@ class ScryfallDatabase {
   bool _appMigrationsEnsured = false;
   Future<void>? _appMigrationsTask;
   bool _printedNameIndexSelfHealTried = false;
+  final Map<String, List<CanonicalCollectionCardData>>
+  _canonicalPokemonRowsCache = <String, List<CanonicalCollectionCardData>>{};
+  static const int _canonicalPokemonRowsCacheLimit = 24;
 
   String get databaseFileName => _dbFileName;
 
@@ -532,6 +535,7 @@ class ScryfallDatabase {
     _appMigrationsEnsured = false;
     _appMigrationsTask = null;
     _printedNameIndexSelfHealTried = false;
+    _canonicalPokemonRowsCache.clear();
   }
 
   Future<T> runWithDatabaseFileName<T>(
@@ -564,6 +568,7 @@ class ScryfallDatabase {
     _appMigrationsEnsured = false;
     _appMigrationsTask = null;
     _printedNameIndexSelfHealTried = false;
+    _canonicalPokemonRowsCache.clear();
   }
 
   Future<void> _ensureSchemaCompatibility(AppDatabase db) async {
@@ -1126,13 +1131,21 @@ class ScryfallDatabase {
     )..orderBy([(tbl) => OrderingTerm.asc(tbl.id)])).get();
     final allCardsId = _resolveAllCardsId(rows);
     final counts = await _fetchOwnedCountsByCollection(db, rows, allCardsId);
+    final collectionsWithDirectInventory =
+        await _fetchCollectionsWithDirectInventory(db);
     return rows
         .map(
           (row) => CollectionInfo(
             id: row.id,
             name: row.name,
             cardCount: counts[row.id] ?? 0,
-            type: collectionTypeFromDb(row.type),
+            type: _normalizedCollectionType(
+              rawType: row.type,
+              filterJson: row.filterJson,
+              collectionName: row.name,
+              collectionId: row.id,
+              collectionsWithDirectInventory: collectionsWithDirectInventory,
+            ),
             filter: row.filterJson == null
                 ? null
                 : CollectionFilter.fromJson(
@@ -1187,6 +1200,10 @@ class ScryfallDatabase {
       rowCountByCollection[id] = grouped.read<int>('row_count');
       zeroCountByCollection[id] = grouped.read<int>('zero_count');
     }
+    final collectionsWithDirectInventory = qtyByCollection.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => entry.key)
+        .toSet();
     if (allCardsId == null) {
       for (final row in rows) {
         counts[row.id] = 0;
@@ -1198,7 +1215,13 @@ class ScryfallDatabase {
       if (row.id == allCardsId) {
         continue;
       }
-      final type = collectionTypeFromDb(row.type);
+      final type = _normalizedCollectionType(
+        rawType: row.type,
+        filterJson: row.filterJson,
+        collectionName: row.name,
+        collectionId: row.id,
+        collectionsWithDirectInventory: collectionsWithDirectInventory,
+      );
       if (type == CollectionType.wishlist) {
         counts[row.id] = zeroCountByCollection[row.id] ?? 0;
         continue;
@@ -1231,6 +1254,93 @@ class ScryfallDatabase {
       }
     }
     return counts;
+  }
+
+  Future<Set<int>> _fetchCollectionsWithDirectInventory(AppDatabase db) async {
+    final rows = await db.customSelect('''
+      SELECT DISTINCT collection_id AS collection_id
+      FROM collection_cards
+      WHERE COALESCE(quantity, 0) > 0
+         OR COALESCE(CAST(foil AS INTEGER), 0) != 0
+         OR COALESCE(CAST(alt_art AS INTEGER), 0) != 0
+    ''').get();
+    return rows.map((row) => row.read<int>('collection_id')).toSet();
+  }
+
+  CollectionType _normalizedCollectionType({
+    required String? rawType,
+    required String? filterJson,
+    required String collectionName,
+    required int collectionId,
+    required Set<int> collectionsWithDirectInventory,
+  }) {
+    final baseType = collectionTypeFromDb(rawType);
+    if (baseType == CollectionType.smart &&
+        _looksLikeMisclassifiedDeck(
+          filterJson: filterJson,
+          collectionName: collectionName,
+          collectionId: collectionId,
+          collectionsWithDirectInventory: collectionsWithDirectInventory,
+        )) {
+      return CollectionType.deck;
+    }
+    return baseType;
+  }
+
+  bool _looksLikeMisclassifiedDeck({
+    required String? filterJson,
+    required String collectionName,
+    required int collectionId,
+    required Set<int> collectionsWithDirectInventory,
+  }) {
+    if (!_isFormatOnlyCollectionFilterJson(filterJson)) {
+      return false;
+    }
+    if (collectionsWithDirectInventory.contains(collectionId)) {
+      return true;
+    }
+    return _looksLikeDeckCollectionName(collectionName);
+  }
+
+  bool _isFormatOnlyCollectionFilterJson(String? filterJson) {
+    if (filterJson == null || filterJson.trim().isEmpty) {
+      return false;
+    }
+    try {
+      final filter = CollectionFilter.fromJson(
+        jsonDecode(filterJson) as Map<String, dynamic>,
+      );
+      return (filter.format?.trim().isNotEmpty ?? false) &&
+          !(filter.name?.trim().isNotEmpty ?? false) &&
+          !(filter.artist?.trim().isNotEmpty ?? false) &&
+          filter.manaMin == null &&
+          filter.manaMax == null &&
+          filter.hpMin == null &&
+          filter.hpMax == null &&
+          !(filter.collectorNumber?.trim().isNotEmpty ?? false) &&
+          filter.languages.isEmpty &&
+          filter.sets.isEmpty &&
+          filter.rarities.isEmpty &&
+          filter.colors.isEmpty &&
+          filter.types.isEmpty &&
+          filter.pokemonCategories.isEmpty &&
+          filter.pokemonSubtypes.isEmpty &&
+          filter.pokemonRegulationMarks.isEmpty &&
+          filter.pokemonStages.isEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _looksLikeDeckCollectionName(String name) {
+    final normalized = name.trim().toLowerCase();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    return normalized == 'deck' ||
+        normalized.startsWith('deck ') ||
+        normalized == 'mazzo' ||
+        normalized.startsWith('mazzo ');
   }
 
   Future<int> addCollection(
@@ -3170,6 +3280,15 @@ class ScryfallDatabase {
     required String? searchQuery,
     required List<String> preferredLanguages,
   }) {
+    final cacheKey = _canonicalPokemonRowsCacheKey(
+      filter: filter,
+      searchQuery: searchQuery,
+      preferredLanguages: preferredLanguages,
+    );
+    final cached = _canonicalPokemonRowsCache[cacheKey];
+    if (cached != null) {
+      return cached;
+    }
     final rows = <CanonicalCollectionCardData>[];
     var offset = 0;
     const batchSize = 400;
@@ -3194,7 +3313,51 @@ class ScryfallDatabase {
       }
       offset += batch.length;
     }
-    return rows;
+    if (_canonicalPokemonRowsCache.length >= _canonicalPokemonRowsCacheLimit) {
+      _canonicalPokemonRowsCache.remove(_canonicalPokemonRowsCache.keys.first);
+    }
+    _canonicalPokemonRowsCache[cacheKey] = List<CanonicalCollectionCardData>.unmodifiable(rows);
+    return _canonicalPokemonRowsCache[cacheKey]!;
+  }
+
+  String _canonicalPokemonRowsCacheKey({
+    required CollectionFilter filter,
+    required String? searchQuery,
+    required List<String> preferredLanguages,
+  }) {
+    List<String> normalizeSet(Set<String> values) => values
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false)
+      ..sort();
+
+    List<String> normalizeList(Iterable<String> values) => values
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+
+    final keyData = <String, Object?>{
+      'q': searchQuery?.trim().toLowerCase() ?? '',
+      'preferred': normalizeList(preferredLanguages),
+      'name': filter.name?.trim().toLowerCase(),
+      'artist': filter.artist?.trim().toLowerCase(),
+      'collector': filter.collectorNumber?.trim().toLowerCase(),
+      'format': filter.format?.trim().toLowerCase(),
+      'manaMin': filter.manaMin,
+      'manaMax': filter.manaMax,
+      'hpMin': filter.hpMin,
+      'hpMax': filter.hpMax,
+      'languages': normalizeSet(filter.languages),
+      'sets': normalizeSet(filter.sets),
+      'rarities': normalizeSet(filter.rarities),
+      'colors': normalizeSet(filter.colors),
+      'types': normalizeSet(filter.types),
+      'pokemonCategories': normalizeSet(filter.pokemonCategories),
+      'pokemonSubtypes': normalizeSet(filter.pokemonSubtypes),
+      'pokemonRegulationMarks': normalizeSet(filter.pokemonRegulationMarks),
+      'pokemonStages': normalizeSet(filter.pokemonStages),
+    };
+    return jsonEncode(keyData);
   }
 
   List<String> _canonicalPokemonPreferredRowLanguages(
@@ -4560,11 +4723,54 @@ class ScryfallDatabase {
       await db.customStatement('''
         UPDATE collections
         SET type = 'smart'
-        WHERE type != 'smart'
+        WHERE type = 'custom'
           AND filter_json IS NOT NULL
           AND trim(filter_json) != ''
         ''');
       repairedEntries += await readChanges();
+
+      final smartRows = await db.customSelect('''
+        SELECT id, name, filter_json
+        FROM collections
+        WHERE type = 'smart'
+      ''').get();
+      final smartIdsToRecoverAsDeck = <int>[];
+      for (final row in smartRows) {
+        final id = row.read<int>('id');
+        final name = row.read<String>('name');
+        final filterJson = row.read<String?>('filter_json');
+        final inventoryRow = await db.customSelect(
+          '''
+          SELECT 1 AS has_inventory
+          FROM collection_cards
+          WHERE collection_id = ?
+            AND (
+              COALESCE(quantity, 0) > 0
+              OR COALESCE(CAST(foil AS INTEGER), 0) != 0
+              OR COALESCE(CAST(alt_art AS INTEGER), 0) != 0
+            )
+          LIMIT 1
+          ''',
+          variables: <Variable>[Variable.withInt(id)],
+        ).getSingleOrNull();
+        if (_looksLikeMisclassifiedDeck(
+          filterJson: filterJson,
+          collectionName: name,
+          collectionId: id,
+          collectionsWithDirectInventory: {
+            if (inventoryRow != null) id,
+          },
+        )) {
+          smartIdsToRecoverAsDeck.add(id);
+        }
+      }
+      for (final id in smartIdsToRecoverAsDeck) {
+        await db.customStatement(
+          'UPDATE collections SET type = ? WHERE id = ?',
+          <Object?>['deck', id],
+        );
+        repairedEntries += await readChanges();
+      }
 
       // Ensure canonical all-cards exists and merge duplicates.
       await db.customStatement('''

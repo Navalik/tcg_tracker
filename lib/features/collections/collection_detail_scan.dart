@@ -628,6 +628,8 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
       backgroundColor: Colors.transparent,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
+        final showBulkFilterOption =
+            !widget.isSetCollection && !_isFilterCollection;
         return SafeArea(
           top: false,
           bottom: false,
@@ -667,13 +669,14 @@ extension _CollectionDetailScanStateX on _CollectionDetailPageState {
                   onTap: () =>
                       Navigator.of(context).pop(_AddCardEntryMode.byScan),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.tune_rounded),
-                  title: Text(l10n.addMultipleCardsByFilterTitle),
-                  subtitle: Text(l10n.addMultipleCardsByFilterSubtitle),
-                  onTap: () =>
-                      Navigator.of(context).pop(_AddCardEntryMode.byFilter),
-                ),
+                if (showBulkFilterOption)
+                  ListTile(
+                    leading: const Icon(Icons.tune_rounded),
+                    title: Text(l10n.addMultipleCardsByFilterTitle),
+                    subtitle: Text(l10n.addMultipleCardsByFilterSubtitle),
+                    onTap: () =>
+                        Navigator.of(context).pop(_AddCardEntryMode.byFilter),
+                  ),
               ],
             ),
           ),
