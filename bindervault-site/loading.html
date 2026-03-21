@@ -133,17 +133,43 @@
 
     .status-track {
       overflow: hidden;
+      --track-width: 10rem;
+      --beam-width: 3.5rem;
+      width: var(--track-width);
+      height: 3px;
+      border-radius: 9999px;
     }
 
     .status-bar {
-      animation: load 2.6s ease-in-out infinite;
-      transform-origin: left center;
+      animation: scan 2.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      border-radius: 9999px;
+      width: var(--beam-width);
+      background: linear-gradient(
+        90deg,
+        rgba(242, 202, 80, 0) 0%,
+        rgba(242, 202, 80, 0.18) 18%,
+        rgba(255, 232, 150, 0.95) 48%,
+        rgba(242, 202, 80, 0.22) 82%,
+        rgba(242, 202, 80, 0) 100%
+      );
+      box-shadow:
+        0 0 10px rgba(242, 202, 80, 0.35),
+        0 0 18px rgba(242, 202, 80, 0.28),
+        0 0 28px rgba(242, 202, 80, 0.18);
     }
 
-    @keyframes load {
-      0% { transform: translateX(-110%); }
-      55% { transform: translateX(30%); }
-      100% { transform: translateX(220%); }
+    @keyframes scan {
+      0% { transform: translateX(calc(var(--beam-width) * -1.15)); }
+      52% { transform: translateX(calc((var(--track-width) - var(--beam-width)) / 2)); }
+      62% { transform: translateX(calc((var(--track-width) - var(--beam-width)) / 2 - (var(--beam-width) * 0.28))); }
+      100% { transform: translateX(calc(var(--track-width) + (var(--beam-width) * 0.18))); }
+    }
+
+    @media (min-width: 640px) {
+      .status-track {
+        --track-width: 14rem;
+        --beam-width: 4rem;
+      }
     }
   </style>
 </head>
@@ -166,15 +192,15 @@
   <main class="relative min-h-dvh flex items-center justify-center px-4 py-10 sm:px-6">
     <div class="w-full max-w-md sm:max-w-lg">
       <div class="flex flex-col items-center text-center">
-        <div class="mb-6 flex items-center gap-2 text-primary font-headline text-[0.66rem] sm:text-xs uppercase tracking-[0.3em]">
+        <h1 class="bv-logo-text text-[2.55rem] sm:text-[3.7rem] md:text-[4.6rem]">
+          BinderVault
+        </h1>
+
+        <div class="mt-4 flex items-center gap-2 text-primary font-headline text-[0.66rem] sm:text-xs uppercase tracking-[0.3em]">
           <span class="h-px w-8 sm:w-12 bg-primary/35"></span>
           Archive. Protect. Prosper.
           <span class="h-px w-8 sm:w-12 bg-primary/35"></span>
         </div>
-
-        <h1 class="bv-logo-text text-[2.55rem] sm:text-[3.7rem] md:text-[4.6rem]">
-          BinderVault
-        </h1>
 
         <div class="relative mt-10 sm:mt-12 flex items-center justify-center w-full h-[25rem] sm:h-[27rem]">
           <div class="absolute inset-x-0 top-[46%] -translate-y-1/2 mx-auto h-44 w-44 rounded-full bg-primary/10 blur-3xl sm:h-56 sm:w-56"></div>
@@ -199,8 +225,8 @@
         </div>
 
         <div class="mt-1 flex flex-col items-center gap-5">
-          <div class="status-track relative h-[2px] w-48 rounded-full bg-outline-variant/40 sm:w-64">
-            <div class="status-bar absolute inset-y-0 w-24 rounded-full bg-primary shadow-[0_0_20px_rgba(242,202,80,0.45)]"></div>
+          <div class="status-track relative bg-outline-variant/40">
+            <div class="status-bar absolute inset-y-0"></div>
           </div>
 
           <div class="text-[0.72rem] uppercase tracking-[0.26em] text-on-surface-variant sm:text-xs">
