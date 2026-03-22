@@ -4548,66 +4548,145 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted || recognizedText == null) {
         return;
       }
-      final consumed = await _consumeFreeScanIfNeeded();
-      if (!consumed || !mounted) {
-        return;
-      }
-      final setCodes = await _fetchKnownSetCodes();
-      if (!mounted) {
-        return;
-      }
-      final ocrSeed = _buildOcrSearchSeed(
-        recognizedText,
-        knownSetCodes: setCodes,
+      final l10n = AppLocalizations.of(context)!;
+      final hideProgress = _showScanProgressOverlay(
+        l10n.nameRecognizedOpeningSearchStatus,
       );
-      if (ocrSeed == null) {
-        showAppSnackBar(
-          context,
-          'No card text recognized. Try better light and focus.',
-        );
-        return;
-      }
-      final refinedSeed = await _refineOcrSeed(ocrSeed);
-      if (!mounted) {
-        return;
-      }
-      final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
-      if (!mounted) {
-        return;
-      }
-      if (resolved.pickedCard != null) {
-        final action = await _showScannedCardPreview(resolved.pickedCard!);
+      await _yieldToUi();
+      try {
+        final consumed = await _consumeFreeScanIfNeeded();
+        if (!consumed || !mounted) {
+          return;
+        }
+        final setCodes = await _fetchKnownSetCodes();
         if (!mounted) {
           return;
         }
-        if (action == _ScanPreviewAction.retry) {
-          continue;
-        }
-        if (action != _ScanPreviewAction.add) {
+        final ocrSeed = _buildOcrSearchSeed(
+          recognizedText,
+          knownSetCodes: setCodes,
+        );
+        if (ocrSeed == null) {
+          showAppSnackBar(
+            context,
+            'No card text recognized. Try better light and focus.',
+          );
           return;
         }
-        final added = await _addCardToAllCards(
-          resolved.pickedCard!.id,
-          printingId: resolved.pickedCard!.printingId,
+        final refinedSeed = await _refineOcrSeed(ocrSeed);
+        if (!mounted) {
+          return;
+        }
+        final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
+        if (!mounted) {
+          return;
+        }
+        hideProgress();
+        if (resolved.pickedCard != null) {
+          final action = await _showScannedCardPreview(resolved.pickedCard!);
+          if (!mounted) {
+            return;
+          }
+          if (action == _ScanPreviewAction.retry) {
+            continue;
+          }
+          if (action != _ScanPreviewAction.add) {
+            return;
+          }
+          final added = await _addCardToAllCards(
+            resolved.pickedCard!.id,
+            printingId: resolved.pickedCard!.printingId,
+            foil: resolved.seed.isFoil,
+          );
+          if (!mounted || !added) {
+            return;
+          }
+          keepScanning = true;
+          continue;
+        }
+        final added = await _openScannedCardSearch(
+          query: resolved.seed.query,
+          initialSetCode: resolved.seed.setCode,
+          initialCollectorNumber: resolved.seed.collectorNumber,
           foil: resolved.seed.isFoil,
         );
         if (!mounted || !added) {
           return;
         }
         keepScanning = true;
-        continue;
+      } finally {
+        hideProgress();
       }
-      final added = await _openScannedCardSearch(
-        query: resolved.seed.query,
-        initialSetCode: resolved.seed.setCode,
-        initialCollectorNumber: resolved.seed.collectorNumber,
-        foil: resolved.seed.isFoil,
-      );
-      if (!mounted || !added) {
+    }
+  }
+
+  Future<void> _yieldToUi() async {
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  VoidCallback _showScanProgressOverlay(String message) {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late final OverlayEntry entry;
+    var removed = false;
+    entry = OverlayEntry(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return IgnorePointer(
+          ignoring: true,
+          child: Stack(
+            children: [
+              Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    return () {
+      if (removed) {
         return;
       }
-      keepScanning = true;
-    }
+      removed = true;
+      entry.remove();
+    };
   }
 
   Future<bool> _canStartScanSession() async {
