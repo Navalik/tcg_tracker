@@ -8,6 +8,7 @@ extension _SettingsProfileSection on _SettingsPageState {
       await _ensureGoogleSignInInitialized();
       await _googleSignIn.signOut();
       await FirebaseAuth.instance.signOut();
+      await _signInAnonymouslyIfNeeded();
     } catch (_) {
       if (!mounted) {
         return;
@@ -68,7 +69,7 @@ extension _SettingsProfileSection on _SettingsPageState {
     final email = user?.email?.trim();
     final hasDisplayName = displayName != null && displayName.isNotEmpty;
     final hasEmail = email != null && email.isNotEmpty;
-    final isGuest = user == null;
+    final isGuest = user == null || user.isAnonymous;
     final l10n = AppLocalizations.of(context)!;
     final title = hasDisplayName
         ? displayName
@@ -83,10 +84,10 @@ extension _SettingsProfileSection on _SettingsPageState {
       leading: CircleAvatar(
         radius: 22,
         backgroundColor: const Color(0xFF2D241B),
-        foregroundImage: (user?.photoURL?.isNotEmpty ?? false)
+        foregroundImage: (user?.photoURL?.isNotEmpty == true)
             ? NetworkImage(user!.photoURL!)
             : null,
-        child: (user?.photoURL?.isNotEmpty ?? false)
+        child: (user?.photoURL?.isNotEmpty == true)
             ? null
             : const Icon(Icons.person, color: Color(0xFFEFE7D8)),
       ),

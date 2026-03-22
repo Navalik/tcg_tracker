@@ -248,9 +248,38 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
     throw const FormatException('google_id_token_missing');
   }
   final credential = GoogleAuthProvider.credential(idToken: idToken);
-  final result = await FirebaseAuth.instance.signInWithCredential(credential);
+  final auth = FirebaseAuth.instance;
+  final currentUser = auth.currentUser;
+  final UserCredential result;
+  if (currentUser?.isAnonymous ?? false) {
+    result = await currentUser!.linkWithCredential(credential);
+    await _logAuthBreadcrumb(
+      'firebase_google_link_success',
+      details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
+    );
+  } else {
+    result = await auth.signInWithCredential(credential);
+  }
   await _logAuthBreadcrumb(
     'firebase_google_sign_in_success',
+    details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
+  );
+  return result;
+}
+
+Future<UserCredential?> _signInAnonymouslyIfNeeded() async {
+  if (!_firebaseReady) {
+    return null;
+  }
+  final auth = FirebaseAuth.instance;
+  final currentUser = auth.currentUser;
+  if (currentUser != null) {
+    return null;
+  }
+  await _logAuthBreadcrumb('anonymous_sign_in_start');
+  final result = await auth.signInAnonymously();
+  await _logAuthBreadcrumb(
+    'anonymous_sign_in_success',
     details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
   return result;
@@ -1255,7 +1284,6 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
-  bool _continueAsGuest = false;
   bool _isSigningIn = false;
 
   bool get _supportsFirebaseAuth =>
@@ -1334,13 +1362,44 @@ class _AuthGateState extends State<_AuthGate> {
     }
   }
 
+  Future<void> _continueAsGuest() async {
+    if (_isSigningIn || !_supportsFirebaseAuth) {
+      return;
+    }
+    setState(() {
+      _isSigningIn = true;
+    });
+    try {
+      await _signInAnonymouslyIfNeeded();
+    } catch (error) {
+      await _logAuthBreadcrumb(
+        'anonymous_sign_in_error',
+        details: {'error': error},
+      );
+      if (!mounted) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.authGoogleSignInFailedTryAgain)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_continueAsGuest || !_supportsFirebaseAuth) {
+    if (!_supportsFirebaseAuth) {
       return const CollectionHomePage();
     }
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -1429,8 +1488,7 @@ class _AuthGateState extends State<_AuthGate> {
                             OutlinedButton(
                               onPressed: _isSigningIn
                                   ? null
-                                  : () =>
-                                        setState(() => _continueAsGuest = true),
+                                  : _continueAsGuest,
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFFEFE7D8),
                                 minimumSize: const Size.fromHeight(46),
