@@ -74,7 +74,61 @@ class _ProPageState extends State<ProPage> {
     required String freeValue,
     required String plusValue,
     bool highlightPlus = false,
+    bool compact = false,
   }) {
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(feature, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppLocalizations.of(context)!.freePlanLabel,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: const Color(0xFFBFAE95),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      _buildPlanCell(text: freeValue, pro: false),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppLocalizations.of(context)!.plusPlanLabel,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: const Color(0xFFE9C46A),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      _buildPlanCell(
+                        text: plusValue,
+                        pro: true,
+                        highlighted: highlightPlus,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -176,6 +230,7 @@ class _ProPageState extends State<ProPage> {
         final monthly = _manager.monthlyPlan;
         final yearly = _manager.yearlyPlan;
         final bottomInset = MediaQuery.of(context).padding.bottom;
+        final compactComparison = MediaQuery.of(context).size.width < 380;
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(title: Text(l10n.plusPageTitle)),
@@ -319,75 +374,87 @@ class _ProPageState extends State<ProPage> {
                     ),
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            const Expanded(flex: 5, child: SizedBox.shrink()),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                l10n.freePlanLabel,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleSmall,
+                        if (!compactComparison) ...[
+                          Row(
+                            children: [
+                              const Expanded(flex: 5, child: SizedBox.shrink()),
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  l10n.freePlanLabel,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
                               ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                l10n.plusPlanLabel,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(color: const Color(0xFFE9C46A)),
+                              Expanded(
+                                flex: 3,
+                                child: Text(
+                                  l10n.plusPlanLabel,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.titleSmall
+                                      ?.copyWith(
+                                        color: const Color(0xFFE9C46A),
+                                      ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
                         const Divider(height: 1, color: Color(0xFF3A2F24)),
                         _buildFeatureRow(
                           feature: l10n.dailyCardScansFeature,
                           freeValue: l10n.scansPerDay(20),
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.setCollectionsFeature,
                           freeValue: '2',
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.customCollectionsFeature,
                           freeValue: '2',
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.smartCollectionsFeature,
                           freeValue: '1',
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.decksFeature,
                           freeValue: '2',
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.wishlistFeature,
                           freeValue: '1',
                           plusValue: l10n.unlimitedLabel,
                           highlightPlus: true,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.cardSearchAddFeature,
                           freeValue: l10n.unlimitedLabel,
                           plusValue: l10n.unlimitedLabel,
+                          compact: compactComparison,
                         ),
                         _buildFeatureRow(
                           feature: l10n.advancedFiltersFeature,
                           freeValue: l10n.unlimitedLabel,
                           plusValue: l10n.unlimitedLabel,
+                          compact: compactComparison,
                         ),
                       ],
                     ),

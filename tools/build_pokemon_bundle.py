@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import time
@@ -1151,6 +1152,21 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Bundle version tag used in manifest.",
     )
     parser.add_argument(
+        "--source-repo",
+        default="",
+        help="Optional source repository URL/name recorded in the manifest.",
+    )
+    parser.add_argument(
+        "--source-ref",
+        default="",
+        help="Optional source git ref/branch/tag recorded in the manifest.",
+    )
+    parser.add_argument(
+        "--source-commit",
+        default="",
+        help="Optional source git commit SHA recorded in the manifest.",
+    )
+    parser.add_argument(
         "--language-bundles",
         default="",
         help=(
@@ -1223,6 +1239,57 @@ def _load_records_from_args(args: argparse.Namespace, languages: List[str]) -> D
     return records
 
 
+def _run_git(path: Path, *args: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), *args],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return ""
+    return result.stdout.strip()
+
+
+def _detect_source_metadata(args: argparse.Namespace) -> Dict[str, Any]:
+    source_repo = (args.source_repo or "").strip()
+    source_ref = (args.source_ref or "").strip()
+    source_commit = (args.source_commit or "").strip()
+    source_kind = "unknown"
+
+    if args.source_tcgdex_api:
+        source_kind = "tcgdex_api"
+        if not source_repo:
+            source_repo = TCGDEX_API_BASE
+    elif args.source_zip:
+        source_kind = "zip"
+        if not source_repo:
+            source_repo = str(args.source_zip).strip()
+    elif args.source_dir:
+        source_kind = "directory"
+        source_dir = Path(args.source_dir).resolve()
+        if source_dir.exists():
+            detected_repo = _run_git(source_dir, "config", "--get", "remote.origin.url")
+            detected_ref = _run_git(source_dir, "rev-parse", "--abbrev-ref", "HEAD")
+            detected_commit = _run_git(source_dir, "rev-parse", "HEAD")
+            if detected_repo and not source_repo:
+                source_repo = detected_repo
+            if detected_ref and detected_ref != "HEAD" and not source_ref:
+                source_ref = detected_ref
+            if detected_commit and not source_commit:
+                source_commit = detected_commit
+            if detected_repo or detected_ref or detected_commit:
+                source_kind = "git_checkout"
+
+    return {
+        "kind": source_kind,
+        "repo": source_repo or None,
+        "ref": source_ref or None,
+        "commit": source_commit or None,
+    }
+
+
 def _build_bundle_artifacts(
     *,
     output_dir: Path,
@@ -1230,6 +1297,7 @@ def _build_bundle_artifacts(
     profile: str,
     languages: List[str],
     version: str,
+    source_metadata: Dict[str, Any],
     suffix: str = "",
 ) -> Dict[str, Any]:
     # Canonical snapshot payload + gzip.
@@ -1260,6 +1328,7 @@ def _build_bundle_artifacts(
         "profile": profile,
         "languages": sorted(set(languages)),
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": source_metadata,
         "counts": {
             "printings": len(records),
             "legacy_cards_rows": inserted_rows,
@@ -1292,6 +1361,7 @@ def main(argv: List[str]) -> int:
     args = parse_args(argv)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    source_metadata = _detect_source_metadata(args)
 
     languages = [
         lang.strip().lower()
@@ -1328,6 +1398,7 @@ def main(argv: List[str]) -> int:
                 profile=args.profile,
                 languages=bundle_languages,
                 version=args.version,
+                source_metadata=source_metadata,
                 suffix=lang,
             )
         if not generated:
@@ -1385,6 +1456,7 @@ def main(argv: List[str]) -> int:
             "compatibility_version": POKEMON_BUNDLE_COMPATIBILITY_VERSION,
             "mode": aggregate_mode,
             "generated_at": datetime.now(timezone.utc).isoformat(),
+            "source": source_metadata,
             "bundles": bundle_entries,
         }
         aggregate_path = output_dir / "manifest.json"
@@ -1403,6 +1475,7 @@ def main(argv: List[str]) -> int:
             profile=args.profile,
             languages=languages,
             version=args.version,
+            source_metadata=source_metadata,
         )
 
     print("[done] bundle artifacts ready")

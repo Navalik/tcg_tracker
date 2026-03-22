@@ -1999,31 +1999,79 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 16),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: FilledButton(
-                                            onPressed: _countLoading
-                                                ? null
-                                                : _bulkAddByFilters,
-                                            child: Text(l10n.addAll),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: OutlinedButton(
-                                            onPressed: _countLoading
-                                                ? null
-                                                : () async {
-                                                    setState(() {
-                                                      _showResults = true;
-                                                    });
-                                                    await _runSearch();
-                                                  },
-                                            child: Text(l10n.viewResults),
-                                          ),
-                                        ),
-                                      ],
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final compactActions =
+                                            constraints.maxWidth < 320;
+                                        final buttons = <Widget>[
+                                          compactActions
+                                              ? SizedBox(
+                                                  width: double.infinity,
+                                                  child: FilledButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : _bulkAddByFilters,
+                                                    child: Text(l10n.addAll),
+                                                  ),
+                                                )
+                                              : Expanded(
+                                                  child: FilledButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : _bulkAddByFilters,
+                                                    child: Text(l10n.addAll),
+                                                  ),
+                                                ),
+                                          compactActions
+                                              ? SizedBox(
+                                                  width: double.infinity,
+                                                  child: OutlinedButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : () async {
+                                                            setState(() {
+                                                              _showResults = true;
+                                                            });
+                                                            await _runSearch();
+                                                          },
+                                                    child: Text(
+                                                      l10n.viewResults,
+                                                    ),
+                                                  ),
+                                                )
+                                              : Expanded(
+                                                  child: OutlinedButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : () async {
+                                                            setState(() {
+                                                              _showResults = true;
+                                                            });
+                                                            await _runSearch();
+                                                          },
+                                                    child: Text(
+                                                      l10n.viewResults,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ];
+                                        if (compactActions) {
+                                          return Column(
+                                            children: [
+                                              buttons[0],
+                                              const SizedBox(height: 10),
+                                              buttons[1],
+                                            ],
+                                          );
+                                        }
+                                        return Row(
+                                          children: [
+                                            buttons[0],
+                                            const SizedBox(width: 12),
+                                            buttons[1],
+                                          ],
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),

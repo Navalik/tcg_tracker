@@ -48,6 +48,7 @@ extension _HomeShellStateX on _CollectionHomePageState {
 
   Widget _buildCollectionsMenu() {
     final l10n = AppLocalizations.of(context)!;
+    final compactMenu = MediaQuery.of(context).size.width < 380;
     final items = <(_HomeCollectionsMenu, IconData, String)>[
       (_HomeCollectionsMenu.set, Icons.auto_awesome_mosaic, l10n.setLabel),
       (
@@ -75,30 +76,60 @@ extension _HomeShellStateX on _CollectionHomePageState {
       children: [
         const Divider(height: 1, color: Color(0x7A5D4731)),
         const SizedBox(height: 10),
-        Row(
-          children: items
-              .map(
-                (entry) => Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: _MenuPillButton(
-                      icon: entry.$2,
-                      tooltip: entry.$3,
-                      selected: _activeCollectionsMenu == entry.$1,
-                      onTap: () {
-                        if (_activeCollectionsMenu == entry.$1) {
-                          return;
-                        }
-                        setState(() {
-                          _activeCollectionsMenu = entry.$1;
-                        });
-                      },
-                    ),
-                  ),
+        compactMenu
+            ? SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Row(
+                  children: items
+                      .map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 3),
+                          child: SizedBox(
+                            width: 52,
+                            child: _MenuPillButton(
+                              icon: entry.$2,
+                              tooltip: entry.$3,
+                              selected: _activeCollectionsMenu == entry.$1,
+                              onTap: () {
+                                if (_activeCollectionsMenu == entry.$1) {
+                                  return;
+                                }
+                                setState(() {
+                                  _activeCollectionsMenu = entry.$1;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
                 ),
               )
-              .toList(growable: false),
-        ),
+            : Row(
+                children: items
+                    .map(
+                      (entry) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: _MenuPillButton(
+                            icon: entry.$2,
+                            tooltip: entry.$3,
+                            selected: _activeCollectionsMenu == entry.$1,
+                            onTap: () {
+                              if (_activeCollectionsMenu == entry.$1) {
+                                return;
+                              }
+                              setState(() {
+                                _activeCollectionsMenu = entry.$1;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(growable: false),
+              ),
         const SizedBox(height: 10),
         const Divider(height: 1, color: Color(0x7A5D4731)),
       ],
