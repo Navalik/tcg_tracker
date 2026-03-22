@@ -4594,7 +4594,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (!mounted || !added) {
           return;
         }
-        keepScanning = await _askScanAnotherCard();
+        keepScanning = true;
         continue;
       }
       final added = await _openScannedCardSearch(
@@ -4606,7 +4606,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       if (!mounted || !added) {
         return;
       }
-      keepScanning = await _askScanAnotherCard();
+      keepScanning = true;
     }
   }
 
@@ -6008,28 +6008,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     );
     await _loadCollections();
     return true;
-  }
-
-  Future<bool> _askScanAnotherCard() async {
-    final l10n = AppLocalizations.of(context)!;
-    final again = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.cardAddedTitle),
-        content: Text(l10n.scanAnotherCardQuestion),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.no),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.yes),
-          ),
-        ],
-      ),
-    );
-    return again ?? false;
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
