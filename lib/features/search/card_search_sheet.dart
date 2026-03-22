@@ -18,6 +18,8 @@ class _CardSearchSelection {
   final List<String> cardIds;
 }
 
+enum _CardSearchSheetDismissAction { retryScan }
+
 class _SearchPriceData {
   const _SearchPriceData({required this.base, required this.foil});
 
@@ -38,6 +40,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.requiredFilter,
     this.deckFormatConstraint,
     this.showFilterButton = true,
+    this.showRetryScanOnNoResults = false,
   });
 
   final String? initialQuery;
@@ -51,6 +54,7 @@ class _CardSearchSheet extends StatefulWidget {
   final CollectionFilter? requiredFilter;
   final String? deckFormatConstraint;
   final bool showFilterButton;
+  final bool showRetryScanOnNoResults;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
@@ -129,6 +133,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool get _isDeckSearch => _deckFormatConstraint != null;
 
   bool get _isPokemonSearch => _activeSearchGame == AppTcgGame.pokemon;
+
+  bool get _useEnglishFallbackForScannerSearch {
+    return widget.showRetryScanOnNoResults && !_isPokemonSearch;
+  }
 
   bool get _shouldAutoLoadInitialResults {
     return _query.trim().isNotEmpty || _hasRequiredAdvancedFilters();
@@ -230,6 +238,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _query = value;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), _runSearch);
+  }
+
+  void _focusAndSelectSearchQuery() {
+    _focusNode.requestFocus();
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
   }
 
   Future<void> _runSearch({bool forceRefresh = false}) async {
@@ -374,7 +390,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<String> _effectiveLanguages() {
-    return _searchLanguages;
+    final normalized = _searchLanguages
+        .map((lang) => lang.trim().toLowerCase())
+        .where((lang) => lang.isNotEmpty)
+        .toList(growable: true);
+    if (normalized.isEmpty) {
+      normalized.add('en');
+    }
+    if (_useEnglishFallbackForScannerSearch && !normalized.contains('en')) {
+      normalized.add('en');
+    }
+    return normalized;
   }
 
   Future<void> _loadNextPage(String query, {bool replace = false}) async {
@@ -1841,9 +1867,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                           .bodyMedium
                                           ?.copyWith(
                                             color: const Color(0xFFBFAE95),
-                                          ),
+                                      ),
                                       textAlign: TextAlign.center,
                                     ),
+                                    if (widget.showRetryScanOnNoResults &&
+                                        _query.isNotEmpty) ...[
+                                      const SizedBox(height: 16),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 12,
+                                        runSpacing: 12,
+                                        children: [
+                                          OutlinedButton.icon(
+                                            onPressed: _focusAndSelectSearchQuery,
+                                            icon: const Icon(Icons.edit_outlined),
+                                            label: Text(l10n.typeCardNameHint),
+                                          ),
+                                          FilledButton.icon(
+                                            onPressed: () => Navigator.of(context)
+                                                .pop(
+                                                  _CardSearchSheetDismissAction
+                                                      .retryScan,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.document_scanner_outlined,
+                                            ),
+                                            label: Text(l10n.retry),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ],
                               ),

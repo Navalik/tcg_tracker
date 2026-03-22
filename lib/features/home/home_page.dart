@@ -1,5 +1,7 @@
 part of 'package:tcg_tracker/main.dart';
 
+enum _ScannedCardSearchOutcome { added, retryScan, cancelled }
+
 class CollectionHomePage extends StatefulWidget {
   const CollectionHomePage({super.key});
 
@@ -4577,11 +4579,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (!mounted) {
           return;
         }
+        hideProgress();
+        await _yieldToUi();
         final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
         if (!mounted) {
           return;
         }
-        hideProgress();
         if (resolved.pickedCard != null) {
           final action = await _showScannedCardPreview(resolved.pickedCard!);
           if (!mounted) {
@@ -4604,13 +4607,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           keepScanning = true;
           continue;
         }
-        final added = await _openScannedCardSearch(
+        final searchOutcome = await _openScannedCardSearch(
           query: resolved.seed.query,
           initialSetCode: resolved.seed.setCode,
           initialCollectorNumber: resolved.seed.collectorNumber,
           foil: resolved.seed.isFoil,
         );
-        if (!mounted || !added) {
+        if (!mounted) {
+          return;
+        }
+        if (searchOutcome == _ScannedCardSearchOutcome.retryScan) {
+          keepScanning = true;
+          continue;
+        }
+        if (searchOutcome != _ScannedCardSearchOutcome.added) {
           return;
         }
         keepScanning = true;
@@ -6010,7 +6020,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return RegExp(r'^\d$').hasMatch(value.trim());
   }
 
-  Future<bool> _openScannedCardSearch({
+  Future<_ScannedCardSearchOutcome> _openScannedCardSearch({
     required String query,
     String? initialSetCode,
     String? initialCollectorNumber,
@@ -6029,10 +6039,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
       await _loadCollections();
       if (!mounted) {
-        return false;
+        return _ScannedCardSearchOutcome.cancelled;
       }
     }
-    final selection = await showModalBottomSheet<_CardSearchSelection>(
+    final selection = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -6040,10 +6050,17 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         initialQuery: query,
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
+        showRetryScanOnNoResults: true,
       ),
     );
-    if (!mounted || selection == null) {
-      return false;
+    if (!mounted) {
+      return _ScannedCardSearchOutcome.cancelled;
+    }
+    if (selection == _CardSearchSheetDismissAction.retryScan) {
+      return _ScannedCardSearchOutcome.retryScan;
+    }
+    if (selection is! _CardSearchSelection) {
+      return _ScannedCardSearchOutcome.cancelled;
     }
 
     if (selection.isBulk) {
@@ -6079,14 +6096,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     if (!mounted) {
-      return false;
+      return _ScannedCardSearchOutcome.cancelled;
     }
     showAppSnackBar(
       context,
       AppLocalizations.of(context)!.addedCards(selection.count),
     );
     await _loadCollections();
-    return true;
+    return _ScannedCardSearchOutcome.added;
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {
