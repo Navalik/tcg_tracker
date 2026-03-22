@@ -625,18 +625,104 @@ class _UniversalSplashScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          const _AppBackground(),
+          const _SplashBackdrop(),
           SafeArea(
             child: Stack(
               children: [
                 Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [const _SplashCardMark()],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final compact = constraints.maxHeight < 700;
+                      return SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 28,
+                        ),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 420),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const _SplashLogoWordmark(),
+                              SizedBox(height: compact ? 10 : 14),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Flexible(
+                                    child: Container(
+                                      constraints: BoxConstraints(
+                                        maxWidth: compact ? 22 : 34,
+                                      ),
+                                      height: 1,
+                                      color: const Color(0x59F2CA50),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    flex: 0,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        'Archive. Protect. Prosper.',
+                                        textAlign: TextAlign.center,
+                                        style: GoogleFonts.spaceGrotesk(
+                                          color: const Color(0xFFF2CA50),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: compact ? 2.6 : 3.4,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    child: Container(
+                                      constraints: BoxConstraints(
+                                        maxWidth: compact ? 22 : 34,
+                                      ),
+                                      height: 1,
+                                      color: const Color(0x59F2CA50),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: compact ? 18 : 30),
+                              _SplashCardMark(compact: compact),
+                              SizedBox(height: compact ? 52 : 70),
+                              Container(
+                                width: 164,
+                                height: 3,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF4D4635),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                child: const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: _SplashStatusBeam(),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Opening the vault',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.spaceGrotesk(
+                                  color: const Color(0xFFD0C5AF),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 2.8,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 if (versionLabel.trim().isNotEmpty)
@@ -646,7 +732,7 @@ class _UniversalSplashScreen extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 18),
                       child: Text(
                         versionLabel,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        style: textTheme.bodySmall?.copyWith(
                           color: const Color(0xFFC9BDA4),
                           letterSpacing: 1.1,
                           fontWeight: FontWeight.w700,
@@ -663,37 +749,302 @@ class _UniversalSplashScreen extends StatelessWidget {
   }
 }
 
-class _SplashCardMark extends StatelessWidget {
-  const _SplashCardMark();
+class _SplashBackdrop extends StatelessWidget {
+  const _SplashBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF1B1512),
+            Color(0xFF15110F),
+            Color(0xFF100D0B),
+          ],
+        ),
+      ),
+      child: Stack(
+        children: const [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(-0.92, -0.96),
+                  radius: 0.44,
+                  colors: [Color(0x29C06F22), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment(0.95, 0.96),
+                  radius: 0.38,
+                  colors: [Color(0x14F2CA50), Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(child: _SplashGridPattern()),
+          Positioned.fill(child: _SplashFrame()),
+          Positioned.fill(child: _SplashGhostCards()),
+        ],
+      ),
+    );
+  }
+}
+
+class _SplashGridPattern extends StatelessWidget {
+  const _SplashGridPattern();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _SplashGridPainter());
+  }
+}
+
+class _SplashFrame extends StatelessWidget {
+  const _SplashFrame();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Stack(
+          children: const [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.all(Radius.circular(28)),
+                  border: Border.fromBorderSide(
+                    BorderSide(color: Color(0x24F2CA50)),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              top: 0,
+              child: _SplashCorner(top: true, left: true),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              child: _SplashCorner(top: true, left: false),
+            ),
+            Positioned(
+              left: 0,
+              bottom: 0,
+              child: _SplashCorner(top: false, left: true),
+            ),
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: _SplashCorner(top: false, left: false),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashCorner extends StatelessWidget {
+  const _SplashCorner({required this.top, required this.left});
+
+  final bool top;
+  final bool left;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 250,
-      height: 272,
+      width: 38,
+      height: 38,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.only(
+            topLeft: top && left ? const Radius.circular(16) : Radius.zero,
+            topRight: top && !left ? const Radius.circular(16) : Radius.zero,
+            bottomLeft: !top && left ? const Radius.circular(16) : Radius.zero,
+            bottomRight: !top && !left
+                ? const Radius.circular(16)
+                : Radius.zero,
+          ),
+          border: Border(
+            top: top
+                ? const BorderSide(color: Color(0x52F2CA50), width: 2)
+                : BorderSide.none,
+            bottom: !top
+                ? const BorderSide(color: Color(0x52F2CA50), width: 2)
+                : BorderSide.none,
+            left: left
+                ? const BorderSide(color: Color(0x52F2CA50), width: 2)
+                : BorderSide.none,
+            right: !left
+                ? const BorderSide(color: Color(0x52F2CA50), width: 2)
+                : BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashGhostCards extends StatelessWidget {
+  const _SplashGhostCards();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: const [
+          _GhostCard(left: 0.08, top: 0.08, width: 78, height: 124, angle: -0.32),
+          _GhostCard(left: 0.03, top: 0.30, width: 92, height: 138, angle: -0.08),
+          _GhostCard(left: 0.17, top: 0.60, width: 80, height: 124, angle: 0.14),
+          _GhostCard(left: 0.34, top: 0.76, width: 68, height: 112, angle: -0.10),
+          _GhostCard(right: 0.10, top: 0.10, width: 78, height: 124, angle: 0.28),
+          _GhostCard(right: 0.19, top: 0.26, width: 68, height: 112, angle: 0.22),
+          _GhostCard(right: 0.34, top: 0.38, width: 66, height: 106, angle: 0.16),
+          _GhostCard(right: 0.08, top: 0.64, width: 80, height: 124, angle: -0.18),
+          _GhostCard(right: 0.20, top: 0.80, width: 66, height: 106, angle: 0.07),
+        ],
+      ),
+    );
+  }
+}
+
+class _GhostCard extends StatelessWidget {
+  const _GhostCard({
+    this.left,
+    this.right,
+    required this.top,
+    required this.width,
+    required this.height,
+    required this.angle,
+  });
+
+  final double? left;
+  final double? right;
+  final double top;
+  final double width;
+  final double height;
+  final double angle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left != null ? MediaQuery.sizeOf(context).width * left! : null,
+      right: right != null ? MediaQuery.sizeOf(context).width * right! : null,
+      top: MediaQuery.sizeOf(context).height * top,
+      child: Transform.rotate(
+        angle: angle,
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0x38EAE1DD)),
+            color: const Color(0x128B6444),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashLogoWordmark extends StatelessWidget {
+  const _SplashLogoWordmark();
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = width < 380;
+    final style = GoogleFonts.cinzelDecorative(
+      fontSize: compact ? 38 : 46,
+      fontWeight: FontWeight.w900,
+      letterSpacing: compact ? 0.8 : 1.4,
+      height: 0.92,
+    );
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFFE8D08A),
+            Color(0xFFC8952A),
+            Color(0xFF7A4A0A),
+            Color(0xFF3D1F00),
+          ],
+          stops: [0.0, 0.32, 0.62, 1.0],
+        ).createShader(bounds),
+        child: Text(
+          'BinderVault',
+          maxLines: 1,
+          softWrap: false,
+          textAlign: TextAlign.center,
+          style: style.copyWith(
+            color: Colors.white,
+            shadows: const [
+              Shadow(
+                color: Color(0x731A0800),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+              Shadow(
+                color: Color(0x991A0800),
+                blurRadius: 0,
+                offset: Offset(2, 3),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashCardMark extends StatelessWidget {
+  const _SplashCardMark({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: compact ? 248 : 288,
+      height: compact ? 264 : 320,
       child: Stack(
         alignment: Alignment.center,
-        children: const [
+        children: [
           _SplashCard(
-            offset: Offset(-44, 24),
-            angle: -0.22,
-            fill: Color(0xFF6A4A45),
-            stroke: Color(0xFF8B655F),
+            offset: compact ? const Offset(-66, 30) : const Offset(-78, 34),
+            angle: -0.20,
+            fill: Color(0xFF8A6662),
+            stroke: Color(0x26FFFFFF),
           ),
           _SplashCard(
-            offset: Offset(44, 24),
-            angle: 0.22,
-            fill: Color(0xFF465B72),
-            stroke: Color(0xFF667E99),
+            offset: compact ? const Offset(66, 30) : const Offset(78, 34),
+            angle: 0.20,
+            fill: Color(0xFF657D9F),
+            stroke: Color(0x26FFFFFF),
           ),
           _SplashCard(
-            offset: Offset(0, 10),
+            offset: compact ? const Offset(0, 8) : const Offset(0, 12),
             angle: 0,
-            fill: Color(0xFF4E624F),
-            stroke: Color(0xFF6F8670),
+            fill: Color(0xFF6F876D),
+            stroke: Color(0x26FFFFFF),
+            compact: compact,
           ),
-          _SplashDiamondShadow(),
-          _SplashDiamond(),
+          _SplashDiamondShadow(compact: compact),
+          _SplashDiamond(compact: compact),
         ],
       ),
     );
@@ -706,12 +1057,14 @@ class _SplashCard extends StatelessWidget {
     required this.angle,
     required this.fill,
     required this.stroke,
+    this.compact = false,
   });
 
   final Offset offset;
   final double angle;
   final Color fill;
   final Color stroke;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -720,12 +1073,30 @@ class _SplashCard extends StatelessWidget {
       child: Transform.rotate(
         angle: angle,
         child: Container(
-          width: 102,
-          height: 148,
+          width: compact ? 96 : 112,
+          height: compact ? 152 : 176,
           decoration: BoxDecoration(
-            color: fill,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color.alphaBlend(const Color(0x36FFFFFF), fill), fill],
+            ),
             border: Border.all(color: stroke, width: 1.3),
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x73000000),
+                blurRadius: 28,
+                offset: Offset(0, 18),
+              ),
+            ],
+          ),
+          child: Container(
+            margin: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0x1FFFFFFF)),
+            ),
           ),
         ),
       ),
@@ -734,40 +1105,146 @@ class _SplashCard extends StatelessWidget {
 }
 
 class _SplashDiamondShadow extends StatelessWidget {
-  const _SplashDiamondShadow();
+  const _SplashDiamondShadow({required this.compact});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Transform.translate(
-      offset: const Offset(0, 90),
+      offset: compact ? const Offset(0, 100) : const Offset(0, 118),
       child: Transform.rotate(
         angle: 0.785398,
-        child: Container(width: 44, height: 44, color: const Color(0x82000000)),
+        child: Container(
+          width: 52,
+          height: 52,
+          color: const Color(0x82000000),
+        ),
       ),
     );
   }
 }
 
 class _SplashDiamond extends StatelessWidget {
-  const _SplashDiamond();
+  const _SplashDiamond({required this.compact});
+
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Transform.translate(
-      offset: const Offset(0, 82),
+      offset: compact ? const Offset(0, 92) : const Offset(0, 108),
       child: Transform.rotate(
         angle: 0.785398,
         child: Container(
-          width: 36,
-          height: 36,
+          width: compact ? 34 : 40,
+          height: compact ? 34 : 40,
           decoration: BoxDecoration(
-            color: const Color(0xFFD4B86A),
-            border: Border.all(color: const Color(0xFFB26A39), width: 2),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFFF6D872), Color(0xFFEFC74C)],
+            ),
+            border: Border.all(color: const Color(0xFFC88D24), width: 2),
           ),
         ),
       ),
     );
   }
+}
+
+class _SplashStatusBeam extends StatefulWidget {
+  const _SplashStatusBeam();
+
+  @override
+  State<_SplashStatusBeam> createState() => _SplashStatusBeamState();
+}
+
+class _SplashStatusBeamState extends State<_SplashStatusBeam>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2150),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final trackWidth = 164.0;
+        final beamWidth = 56.0;
+        final progress = Curves.easeInOut.transform(_controller.value);
+        final left = (trackWidth + beamWidth) * progress - beamWidth;
+        return Transform.translate(
+          offset: Offset(left, 0),
+          child: child,
+        );
+      },
+      child: Container(
+        width: 56,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0x00F2CA50),
+              Color(0x2EF2CA50),
+              Color(0xF2FFE896),
+              Color(0x38F2CA50),
+              Color(0x00F2CA50),
+            ],
+          ),
+          boxShadow: const [
+            BoxShadow(color: Color(0x59F2CA50), blurRadius: 10),
+            BoxShadow(color: Color(0x47F2CA50), blurRadius: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SplashGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final linePaint = Paint()
+      ..color = const Color(0x06FFFFFF)
+      ..strokeWidth = 1;
+    const spacing = 48.0;
+    for (double x = 0; x <= size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
+    }
+    for (double y = 0; y <= size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
+    }
+
+    final diagonalPaint = Paint()
+      ..color = const Color(0x09F2CA50)
+      ..strokeWidth = 1;
+    const diagonalSpacing = 24.0;
+    for (double start = -size.height; start <= size.width; start += diagonalSpacing) {
+      canvas.drawLine(
+        Offset(start, 0),
+        Offset(start + size.height, size.height),
+        diagonalPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _AuthGate extends StatefulWidget {
