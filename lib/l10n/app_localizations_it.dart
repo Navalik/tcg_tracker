@@ -1685,6 +1685,16 @@ class AppLocalizationsIt extends AppLocalizations {
   String get issueDescribeHint => 'Descrivi cosa e successo e come riprodurlo.';
 
   @override
+  String get reportIssueConsentTitle => 'Inviare report diagnostico?';
+
+  @override
+  String get reportIssueConsentBody =>
+      'Il tuo messaggio e una diagnostica tecnica di base verranno inviati a BinderVault tramite Firebase Crashlytics per analizzare il problema. Non inserire dati personali sensibili.';
+
+  @override
+  String get reportIssueConsentSend => 'Invia report';
+
+  @override
   String get sendLabel => 'Invia';
 
   @override

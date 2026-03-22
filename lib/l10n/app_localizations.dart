@@ -3014,6 +3014,24 @@ abstract class AppLocalizations {
   /// **'Describe what happened and how to reproduce it.'**
   String get issueDescribeHint;
 
+  /// No description provided for @reportIssueConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send diagnostic report?'**
+  String get reportIssueConsentTitle;
+
+  /// No description provided for @reportIssueConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your message and basic technical diagnostics will be sent to BinderVault through Firebase Crashlytics to help investigate the issue. Do not include sensitive personal data.'**
+  String get reportIssueConsentBody;
+
+  /// No description provided for @reportIssueConsentSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get reportIssueConsentSend;
+
   /// No description provided for @sendLabel.
   ///
   /// In en, this message translates to:

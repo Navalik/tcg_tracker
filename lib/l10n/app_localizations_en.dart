@@ -1663,6 +1663,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Describe what happened and how to reproduce it.';
 
   @override
+  String get reportIssueConsentTitle => 'Send diagnostic report?';
+
+  @override
+  String get reportIssueConsentBody =>
+      'Your message and basic technical diagnostics will be sent to BinderVault through Firebase Crashlytics to help investigate the issue. Do not include sensitive personal data.';
+
+  @override
+  String get reportIssueConsentSend => 'Send report';
+
+  @override
   String get sendLabel => 'Send';
 
   @override
