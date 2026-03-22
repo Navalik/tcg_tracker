@@ -521,6 +521,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (trimmedQuery.isNotEmpty) {
       page = _applyPrefixWordFilter(page, trimmedQuery);
     }
+    if (_useEnglishFallbackForScannerSearch &&
+        !hasAdvancedFilters &&
+        trimmedQuery.isNotEmpty &&
+        page.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _onlineArtworkLoading = true;
+        });
+      }
+      final onlineResults = await _fetchOnlinePrintings(trimmedQuery);
+      if (!mounted || query != _query) {
+        return;
+      }
+      page = _mergeUniquePrintings(page, onlineResults);
+      hasMorePages = false;
+    }
     final rawPageCount = page.length;
     Map<String, int> ownedQuantities = const {};
     Map<String, int> missingQuantities = const {};

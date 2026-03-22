@@ -4579,9 +4579,19 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         if (!mounted) {
           return;
         }
-        hideProgress();
-        await _yieldToUi();
-        final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
+        var progressHidden = false;
+        Future<void> hideProgressBeforeUi() async {
+          if (progressHidden) {
+            return;
+          }
+          progressHidden = true;
+          hideProgress();
+          await _yieldToUi();
+        }
+        final resolved = await _resolveSeedWithPrintingPicker(
+          refinedSeed,
+          onBeforePresentingUi: hideProgressBeforeUi,
+        );
         if (!mounted) {
           return;
         }
@@ -4607,6 +4617,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           keepScanning = true;
           continue;
         }
+        await hideProgressBeforeUi();
         final searchOutcome = await _openScannedCardSearch(
           query: resolved.seed.query,
           initialSetCode: resolved.seed.setCode,
@@ -4734,7 +4745,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(
-    _OcrSearchSeed seed,
+    _OcrSearchSeed seed, {
+    Future<void> Function()? onBeforePresentingUi,
+  }
   ) async {
     final cardName = seed.cardName?.trim();
     if (cardName == null || cardName.isEmpty) {
@@ -4753,6 +4766,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         searchRepository: appRepositories.search,
       );
       if (!mounted || resolution.candidates.isEmpty) {
+        return _ResolvedScanSelection(seed: seed);
+      }
+      if (onBeforePresentingUi != null) {
+        await onBeforePresentingUi();
+      }
+      if (!mounted) {
         return _ResolvedScanSelection(seed: seed);
       }
       final picked = await _pickCardPrintingForName(
@@ -4844,6 +4863,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (!mounted) {
       return _ResolvedScanSelection(seed: seed);
     }
+    if (onBeforePresentingUi != null) {
+      await onBeforePresentingUi();
+    }
+    if (!mounted) {
+      return _ResolvedScanSelection(seed: seed);
+    }
     var picked = await _pickCardPrintingForName(
       context,
       cardName,
@@ -4859,6 +4884,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         preferredLanguages: fallbackScanLanguages,
       );
       if (mounted) {
+        if (onBeforePresentingUi != null) {
+          await onBeforePresentingUi();
+        }
+        if (!mounted) {
+          return _ResolvedScanSelection(seed: seed);
+        }
         picked = await _pickCardPrintingForName(
           context,
           cardName,
@@ -4879,6 +4910,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         preferredCollectorNumber: seed.collectorNumber,
       );
       if (onlineByNameAndSet != null && mounted) {
+        if (onBeforePresentingUi != null) {
+          await onBeforePresentingUi();
+        }
+        if (!mounted) {
+          return _ResolvedScanSelection(seed: seed);
+        }
         picked = await _pickCardPrintingForName(
           context,
           cardName,
