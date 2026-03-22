@@ -4545,7 +4545,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final navigator = Navigator.of(context);
       final recognizedText = await navigator.push<String>(
-        MaterialPageRoute(builder: (_) => const _CardScannerPage()),
+        PageRouteBuilder<String>(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const _CardScannerPage(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
       );
       if (!mounted || recognizedText == null) {
         return;
@@ -4617,12 +4622,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           keepScanning = true;
           continue;
         }
-        await hideProgressBeforeUi();
         final searchOutcome = await _openScannedCardSearch(
           query: resolved.seed.query,
           initialSetCode: resolved.seed.setCode,
           initialCollectorNumber: resolved.seed.collectorNumber,
           foil: resolved.seed.isFoil,
+          onSheetPresented: hideProgressBeforeUi,
         );
         if (!mounted) {
           return;
@@ -4852,6 +4857,25 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         )
         .map(_printingKeyForCard)
         .toSet();
+    if (localBeforeSyncKeys.isEmpty) {
+      unawaited(
+        _syncOnlinePrintsByName(
+          cardName,
+          timeBudget: const Duration(seconds: 2),
+          preferredLanguages: fallbackScanLanguages,
+        ),
+      );
+      return _ResolvedScanSelection(
+        seed: _OcrSearchSeed(
+          query: cardName,
+          cardName: cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        ),
+      );
+    }
     // Keep scan flow snappy: avoid long blocking sync for cards with many printings.
     if (localBeforeSyncKeys.length < 4) {
       await _syncOnlinePrintsByName(
@@ -6062,23 +6086,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     String? initialSetCode,
     String? initialCollectorNumber,
     bool foil = false,
+    Future<void> Function()? onSheetPresented,
   }) async {
-    CollectionInfo? allCards = _findAllCardsCollection();
-    if (allCards == null) {
-      final allCardsId = await ScryfallDatabase.instance
-          .ensureAllCardsCollectionId();
-      allCards = CollectionInfo(
-        id: allCardsId,
-        name: _allCardsCollectionName,
-        cardCount: _totalCardCount,
-        type: CollectionType.all,
-        filter: null,
-      );
-      await _loadCollections();
-      if (!mounted) {
-        return _ScannedCardSearchOutcome.cancelled;
-      }
-    }
     final selection = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
@@ -6088,6 +6097,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
         showRetryScanOnNoResults: true,
+        onFirstFrameRendered: onSheetPresented,
       ),
     );
     if (!mounted) {
@@ -6100,6 +6110,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return _ScannedCardSearchOutcome.cancelled;
     }
 
+    int? allCardsId;
+    if (foil) {
+      allCardsId = _findAllCardsCollection()?.id ??
+          await ScryfallDatabase.instance.ensureAllCardsCollectionId();
+    }
+
     if (selection.isBulk) {
       for (final card in selection.cards) {
         await InventoryService.instance.addToInventory(
@@ -6107,9 +6123,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           printingId: card.printingId,
           deltaQty: 1,
         );
-        if (foil) {
+        if (foil && allCardsId != null) {
           await ScryfallDatabase.instance.updateCollectionCard(
-            allCards.id,
+            allCardsId,
             card.id,
             printingId: card.printingId,
             foil: true,
@@ -6123,9 +6139,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         printingId: selectedCard.printingId,
         deltaQty: 1,
       );
-      if (foil) {
+      if (foil && allCardsId != null) {
         await ScryfallDatabase.instance.updateCollectionCard(
-          allCards.id,
+          allCardsId,
           selectedCard.id,
           printingId: selectedCard.printingId,
           foil: true,

@@ -175,6 +175,7 @@ class _ProPageState extends State<ProPage> {
         final l10n = AppLocalizations.of(context)!;
         final monthly = _manager.monthlyPlan;
         final yearly = _manager.yearlyPlan;
+        final bottomInset = MediaQuery.of(context).padding.bottom;
         return Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(title: Text(l10n.plusPageTitle)),
@@ -182,7 +183,12 @@ class _ProPageState extends State<ProPage> {
             children: [
               const _AppBackground(),
               ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  24 + bottomInset + 16,
+                ),
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),

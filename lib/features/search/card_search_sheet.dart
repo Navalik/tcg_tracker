@@ -41,6 +41,7 @@ class _CardSearchSheet extends StatefulWidget {
     this.deckFormatConstraint,
     this.showFilterButton = true,
     this.showRetryScanOnNoResults = false,
+    this.onFirstFrameRendered,
   });
 
   final String? initialQuery;
@@ -55,6 +56,7 @@ class _CardSearchSheet extends StatefulWidget {
   final String? deckFormatConstraint;
   final bool showFilterButton;
   final bool showRetryScanOnNoResults;
+  final Future<void> Function()? onFirstFrameRendered;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
@@ -115,6 +117,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   final Map<String, _SearchPriceData> _priceDataByCardId = {};
   final Set<String> _priceRefreshQueued = {};
   Map<String, bool> _deckLegalityByCardId = const {};
+  bool _firstFrameCallbackScheduled = false;
 
   String? get _deckFormatConstraint {
     final explicit = widget.deckFormatConstraint?.trim().toLowerCase();
@@ -176,10 +179,28 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (seedQuery != null) {
       _controller.text = seedQuery;
       _query = seedQuery;
+      if (widget.showRetryScanOnNoResults) {
+        _loading = true;
+      }
     }
     unawaited(_loadBulkCoverageState());
     unawaited(_loadPricePreferences());
     _loadSearchLanguages();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_firstFrameCallbackScheduled || widget.onFirstFrameRendered == null) {
+      return;
+    }
+    _firstFrameCallbackScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final callback = widget.onFirstFrameRendered;
+      if (callback != null) {
+        unawaited(callback());
+      }
+    });
   }
 
   Future<void> _loadBulkCoverageState() async {
@@ -638,12 +659,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
         final strict = await _fetchScryfallSearchResults(
           '!"$resolvedName" oracleid:$oracleId include:extras',
-          maxPages: 20,
+          maxPages: 8,
         );
-        collected.addAll(strict);
+        if (strict.isNotEmpty) {
+          return _mergeUniquePrintings(const [], strict);
+        }
       }
 
-      final queryCandidates = <String>[];
+      final queryCandidates = <String>{};
       if (prefixQuery.isNotEmpty) {
         queryCandidates.add(prefixQuery);
       }
@@ -665,11 +688,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
 
       for (final q in queryCandidates) {
-        final pageResults = await _fetchScryfallSearchResults(q, maxPages: 12);
+        final pageResults = await _fetchScryfallSearchResults(q, maxPages: 6);
         collected.addAll(pageResults);
+        if (pageResults.isNotEmpty) {
+          break;
+        }
       }
 
-      return collected;
+      return _mergeUniquePrintings(const [], collected);
     } catch (_) {
       return const [];
     }

@@ -170,9 +170,6 @@ Future<void> main() async {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
@@ -229,19 +226,24 @@ Future<void> _logAuthBreadcrumb(
   } catch (_) {}
 }
 
+bool _hasNonEmptyValue(Object? value) {
+  final normalized = value?.toString().trim() ?? '';
+  return normalized.isNotEmpty;
+}
+
 Future<UserCredential> _signInToFirebaseWithGoogle() async {
   await _logAuthBreadcrumb('google_sign_in_start');
   await _ensureGoogleSignInInitialized();
   final googleUser = await _googleSignIn.authenticate();
   await _logAuthBreadcrumb(
     'google_authenticate_success',
-    details: {'email': googleUser.email},
+    details: {'has_email': _hasNonEmptyValue(googleUser.email)},
   );
   final idToken = googleUser.authentication.idToken?.trim();
   if (idToken == null || idToken.isEmpty) {
     await _logAuthBreadcrumb(
       'google_id_token_missing',
-      details: {'email': googleUser.email},
+      details: {'has_email': _hasNonEmptyValue(googleUser.email)},
     );
     throw const FormatException('google_id_token_missing');
   }
@@ -249,7 +251,7 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
   final result = await FirebaseAuth.instance.signInWithCredential(credential);
   await _logAuthBreadcrumb(
     'firebase_google_sign_in_success',
-    details: {'uid': result.user?.uid},
+    details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
   return result;
 }
