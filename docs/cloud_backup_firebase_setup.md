@@ -71,32 +71,38 @@ await FirebaseAuth.instance.currentUser?.getIdToken(true);
 
 Until that happens, Storage Rules may still see the previous claim set.
 
-## Suggested Backend Endpoints / Functions
+## Implemented Backend Shape
 
-The repo does not currently contain Firebase Functions code. A practical first backend is:
+The repo now contains a first Firebase Functions backend in
+[`functions/index.js`](/c:/Users/Naval/Documents/TGC/tcg_tracker/functions/index.js).
 
-- callable or HTTPS endpoint: `syncPlusEntitlement`
+Current callable:
 
-Responsibilities:
+- `syncPlusEntitlement`
 
-- authenticate Firebase user
-- inspect latest Play/App Store entitlement using your server-side credentials
-- set or remove custom claims through Firebase Admin SDK
-- return the resolved tier
+Current behavior:
 
-Pseudo-shape:
+- authenticates the Firebase user
+- accepts Android proof payload from the app:
+  - `packageName`
+  - `productId`
+  - `purchaseToken`
+- verifies the subscription against Google Play Developer API
+- writes or removes Firebase custom claims through Firebase Admin SDK
+- returns the resolved tier plus verification metadata
 
-```ts
-// Pseudocode only
-const uid = verifiedFirebaseUser.uid;
-const plusActive = await verifyStoreEntitlement(uid, purchasePayload);
+## Required Google Cloud / Play Console setup
 
-if (plusActive) {
-  await admin.auth().setCustomUserClaims(uid, { tier: 'plus' });
-} else {
-  await admin.auth().setCustomUserClaims(uid, {});
-}
-```
+For production verification you must configure all of the following:
+
+1. Enable `androidpublisher.googleapis.com` on the Google Cloud project.
+2. Grant the Cloud Functions runtime service account permission to call the
+   Google Play Developer API.
+3. In Play Console, link the same Google Cloud project and authorize that
+   service account for app financial / subscription access.
+
+Without that configuration, real entitlement verification will fail even if the
+app purchase is valid locally.
 
 ## Deployment
 

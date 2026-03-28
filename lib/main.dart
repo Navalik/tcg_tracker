@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:file_picker/file_picker.dart';
@@ -36,7 +37,6 @@ import 'services/analytics_service.dart';
 import 'services/auth_email_support.dart';
 import 'services/cloud_backup_scheduler.dart';
 import 'services/cloud_backup_service.dart';
-import 'services/entitlement_sync_service.dart';
 import 'services/local_backup_service.dart';
 import 'services/price_repository.dart';
 import 'services/inventory_service.dart';
@@ -185,6 +185,7 @@ Future<void> main() async {
   if (Platform.isAndroid || Platform.isIOS) {
     try {
       await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+      await _activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
       _firebaseReady = true;
       _googleSignInInitialization = _googleSignIn.initialize();
       await AnalyticsService.instance.init().timeout(
@@ -207,6 +208,20 @@ Future<void> main() async {
       ),
     );
   });
+}
+
+Future<void> _activateFirebaseAppCheck() async {
+  if (!(Platform.isAndroid || Platform.isIOS)) {
+    return;
+  }
+  await FirebaseAppCheck.instance.activate(
+    providerAndroid: kDebugMode
+        ? const AndroidDebugProvider()
+        : const AndroidPlayIntegrityProvider(),
+    providerApple: kDebugMode
+        ? const AppleDebugProvider()
+        : const AppleAppAttestWithDeviceCheckFallbackProvider(),
+  );
 }
 
 Future<void> _ensureGoogleSignInInitialized() async {
@@ -287,11 +302,6 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
     'firebase_google_sign_in_success',
     details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
-  try {
-    await EntitlementSyncService.instance.syncCurrentUserTier(
-      localPlusActive: PurchaseManager.instance.isPro,
-    );
-  } catch (_) {}
   return result;
 }
 
@@ -393,11 +403,6 @@ Future<_EmailPasswordAuthResult> _authenticateWithEmailPassword({
       'email_password_create_success',
       details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
     );
-    try {
-      await EntitlementSyncService.instance.syncCurrentUserTier(
-        localPlusActive: PurchaseManager.instance.isPro,
-      );
-    } catch (_) {}
     final verificationEmailSent = await _sendEmailVerificationIfPossible(
       result.user,
     );
@@ -414,11 +419,6 @@ Future<_EmailPasswordAuthResult> _authenticateWithEmailPassword({
     'email_password_sign_in_success',
     details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
-  try {
-    await EntitlementSyncService.instance.syncCurrentUserTier(
-      localPlusActive: PurchaseManager.instance.isPro,
-    );
-  } catch (_) {}
   return _EmailPasswordAuthResult(mode: _EmailPasswordAuthMode.signedIn);
 }
 

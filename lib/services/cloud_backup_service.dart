@@ -176,7 +176,7 @@ class CloudBackupService {
     if (data == null || data.isEmpty) {
       throw const FormatException('cloud_backup_empty');
     }
-    final decodedText = utf8.decode(gzip.decode(data));
+    final decodedText = _decodeBackupPayloadText(data);
     final payload = jsonDecode(decodedText);
     if (payload is! Map) {
       throw const FormatException('cloud_backup_invalid');
@@ -215,6 +215,14 @@ class CloudBackupService {
     await AppSettings.saveCloudBackupLastError(
       error.toString().replaceAll(RegExp(r'[\r\n]+'), ' ').trim(),
     );
+  }
+
+  String _decodeBackupPayloadText(Uint8List data) {
+    try {
+      return utf8.decode(gzip.decode(data));
+    } on Object {
+      return utf8.decode(data);
+    }
   }
 
   Reference _latestRef(String uid) {

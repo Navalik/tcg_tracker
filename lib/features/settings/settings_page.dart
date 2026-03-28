@@ -257,8 +257,10 @@ class _SettingsPageState extends State<SettingsPage> {
           prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
         );
     final cloudAutoEnabled = await AppSettings.loadCloudBackupAutoEnabled();
-    final cloudEligibility = await CloudBackupService.instance.checkEligibility();
-    final cloudSnapshot = await CloudBackupService.instance.fetchLatestSnapshotInfo();
+    final cloudEligibility = await CloudBackupService.instance
+        .checkEligibility();
+    final cloudSnapshot = await CloudBackupService.instance
+        .fetchLatestSnapshotInfo();
     final cloudLastError = await AppSettings.loadCloudBackupLastError();
     var appVersion = _appVersion;
     try {
@@ -282,8 +284,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _latestPokemonAutoBackupName = latestPokemonAutoBackup == null
           ? null
           : path.basename(latestPokemonAutoBackup.path);
-      _latestPokemonAutoBackupAt =
-          latestPokemonAutoBackup?.statSync().modified;
+      _latestPokemonAutoBackupAt = latestPokemonAutoBackup?.statSync().modified;
       _cloudBackupAutoEnabled = cloudAutoEnabled;
       _cloudBackupSignedIn = cloudEligibility.signedIn;
       _cloudBackupPlus = cloudEligibility.plus;
@@ -341,6 +342,21 @@ class _SettingsPageState extends State<SettingsPage> {
     return _isItalianUi
         ? 'Nessun backup cloud ancora caricato.'
         : 'No cloud backup uploaded yet.';
+  }
+
+  bool get _showPlusPromoCard => !_purchaseManager.isPro;
+
+  String get _plusStatusTitle => _isItalianUi ? 'Plus attivo' : 'Plus active';
+
+  String get _plusStatusBody {
+    if (_cloudBackupPlus) {
+      return _isItalianUi
+          ? 'Le funzioni Plus sono attive e il cloud backup e verificato lato server.'
+          : 'Plus features are active and cloud backup is verified server-side.';
+    }
+    return _isItalianUi
+        ? 'L\'abbonamento locale risulta attivo. La verifica server per il cloud backup e ancora in aggiornamento.'
+        : 'Your local subscription is active. Server verification for cloud backup is still updating.';
   }
 
   Future<void> _changePrimaryGame(TcgGame selected) async {
@@ -739,53 +755,81 @@ class _SettingsPageState extends State<SettingsPage> {
                   title: l10n.pro,
                   subtitle: l10n.proCardSubtitle,
                   children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0x221D1712),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            l10n.needMoreThanFreeTitle,
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            l10n.needMoreThanFreeBody,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFFBFAE95)),
-                          ),
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: FilledButton.icon(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) => const ProPage(),
-                                  ),
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFFE9C46A),
-                                foregroundColor: const Color(0xFF1C1510),
-                              ),
-                              icon: const Icon(
-                                Icons.workspace_premium_rounded,
-                                size: 18,
-                              ),
-                              label: Text(l10n.discoverPlus),
+                    if (_showPlusPromoCard) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0x221D1712),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF3A2F24)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              l10n.needMoreThanFreeTitle,
+                              style: Theme.of(context).textTheme.titleSmall,
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 4),
+                            Text(
+                              l10n.needMoreThanFreeBody,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFBFAE95)),
+                            ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: FilledButton.icon(
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const ProPage(),
+                                    ),
+                                  );
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFFE9C46A),
+                                  foregroundColor: const Color(0xFF1C1510),
+                                ),
+                                icon: const Icon(
+                                  Icons.workspace_premium_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(l10n.discoverPlus),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
+                      const SizedBox(height: 10),
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0x1F284127),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF496946)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _plusStatusTitle,
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _plusStatusBody,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFC6D9C3)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -856,7 +900,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                   : 'Upload full collection snapshots after changes.',
                             ),
                             value: _cloudBackupAutoEnabled,
-                            onChanged: (!_cloudBackupSignedIn || !_cloudBackupPlus)
+                            onChanged:
+                                (!_cloudBackupSignedIn || !_cloudBackupPlus)
                                 ? null
                                 : _setCloudBackupAutoEnabled,
                           ),
@@ -865,7 +910,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             children: [
                               Expanded(
                                 child: OutlinedButton.icon(
-                                  onPressed: _backupBusy ? null : _exportCloudBackup,
+                                  onPressed: _backupBusy
+                                      ? null
+                                      : _exportCloudBackup,
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(
                                       color: Color(0xFF5D4731),
@@ -873,17 +920,25 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ),
                                   icon: const Icon(Icons.cloud_upload_outlined),
                                   label: Text(
-                                    _isItalianUi ? 'Backup cloud ora' : 'Backup now',
+                                    _isItalianUi
+                                        ? 'Backup cloud ora'
+                                        : 'Backup now',
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: FilledButton.icon(
-                                  onPressed: _backupBusy ? null : _importCloudBackup,
-                                  icon: const Icon(Icons.cloud_download_outlined),
+                                  onPressed: _backupBusy
+                                      ? null
+                                      : _importCloudBackup,
+                                  icon: const Icon(
+                                    Icons.cloud_download_outlined,
+                                  ),
                                   label: Text(
-                                    _isItalianUi ? 'Ripristina cloud' : 'Restore cloud',
+                                    _isItalianUi
+                                        ? 'Ripristina cloud'
+                                        : 'Restore cloud',
                                   ),
                                 ),
                               ),
@@ -1283,12 +1338,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: OutlinedButton.icon(
-                              onPressed: _backupBusy ||
+                              onPressed:
+                                  _backupBusy ||
                                       _latestPokemonAutoBackupName == null
                                   ? null
                                   : _restoreLatestPokemonAutomaticBackup,
                               style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Color(0xFF5D4731)),
+                                side: const BorderSide(
+                                  color: Color(0xFF5D4731),
+                                ),
                               ),
                               icon: const Icon(Icons.restore_rounded),
                               label: Text(

@@ -40,14 +40,15 @@ class PurchaseManager extends ChangeNotifier {
   static const String additionalTcgProductId = 'unlock_additional_tcg';
   static const String magicOwnershipKey = 'magic';
   static const String pokemonOwnershipKey = 'pokemon';
+  static const String androidPackageName = 'com.navalik.bindervault';
   static const String _billingMonthlyPeriod = 'P1M';
   static const String _billingYearlyPeriod = 'P1Y';
   static const bool _requireServerEntitlementVerification =
       bool.fromEnvironment(
         'REQUIRE_SERVER_ENTITLEMENT_VERIFICATION',
-        defaultValue: false,
+        defaultValue: true,
       );
-  static const bool _serverEntitlementVerificationAvailable = false;
+  static const bool _serverEntitlementVerificationAvailable = true;
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -132,10 +133,40 @@ class PurchaseManager extends ChangeNotifier {
     return trimmed.length <= 120 ? trimmed : '${trimmed.substring(0, 120)}...';
   }
 
-  Future<void> _syncFirebaseEntitlementClaim() async {
+  Future<AndroidEntitlementProof?> _findPlusProof(
+    List<PurchaseDetails> purchases,
+  ) async {
+    if (!Platform.isAndroid) {
+      return null;
+    }
+    for (final purchase in purchases) {
+      final activePurchase =
+          purchase.status == PurchaseStatus.purchased ||
+          purchase.status == PurchaseStatus.restored;
+      if (!activePurchase || purchase.productID != plusProductId) {
+        continue;
+      }
+      final purchaseToken = purchase.verificationData.serverVerificationData
+          .trim();
+      if (purchaseToken.isEmpty) {
+        continue;
+      }
+      return AndroidEntitlementProof(
+        packageName: androidPackageName,
+        productId: plusProductId,
+        purchaseToken: purchaseToken,
+      );
+    }
+    return null;
+  }
+
+  Future<void> _syncFirebaseEntitlementClaim({
+    AndroidEntitlementProof? androidProof,
+  }) async {
     try {
       final result = await EntitlementSyncService.instance.syncCurrentUserTier(
         localPlusActive: _userTier == UserTier.plus,
+        androidProof: androidProof,
       );
       await _logBillingEvent(
         'firebase_claim_sync_complete',
@@ -143,6 +174,7 @@ class PurchaseManager extends ChangeNotifier {
           'claim_tier': result.claimTier,
           'synced': result.synced,
           'source': result.source ?? '',
+          'verification_state': result.verificationState ?? '',
         },
       );
     } catch (error) {
@@ -506,7 +538,10 @@ class PurchaseManager extends ChangeNotifier {
           'owned_tcgs': _ownedTcgs.join(','),
         },
       );
-      await _syncFirebaseEntitlementClaim();
+      final plusProof = plusActive
+          ? await _findPlusProof(response.pastPurchases)
+          : null;
+      await _syncFirebaseEntitlementClaim(androidProof: plusProof);
       notifyListeners();
     } catch (error) {
       _lastError = 'entitlement_refresh_failed';
@@ -720,9 +755,15 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   Future<bool> _verifyReceiptWithServer(List<PurchaseDetails> purchases) async {
-    throw UnsupportedError(
-      'Server entitlement verification is not configured for this build.',
+    final proof = await _findPlusProof(purchases);
+    if (proof == null) {
+      return false;
+    }
+    final result = await EntitlementSyncService.instance.syncCurrentUserTier(
+      localPlusActive: true,
+      androidProof: proof,
     );
+    return result.claimTier == 'plus';
   }
 
   Future<void> setOwnedTcgs(Set<String> values) async {
