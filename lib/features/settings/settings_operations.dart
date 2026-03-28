@@ -22,7 +22,6 @@ extension _SettingsOperationsSection on _SettingsPageState {
         _cloudBackupSignedIn = eligibility.signedIn;
         _cloudBackupPlus = eligibility.plus;
         _cloudBackupLastUploadedAt = snapshot?.updatedAt?.toLocal();
-        _cloudBackupRemotePath = snapshot?.path;
         _cloudBackupLastError = eligibility.canAccess ? lastError : null;
       });
     } catch (error) {

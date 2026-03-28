@@ -92,11 +92,13 @@ extension _CollectionDetailTileStateX on _CollectionDetailPageState {
           (_showOwned && _showMissing) ||
           (_showOwned && isOwned) ||
           (_showMissing && !isOwned);
+      final shouldRemoveWhenEmpty =
+          !_isFilterCollection && !_isWishlistCollection && nextQuantity <= 0;
 
       if (index == -1) {
         return;
       }
-      if (!shouldRemainVisible || removeFromList) {
+      if (!shouldRemainVisible || removeFromList || shouldRemoveWhenEmpty) {
         _cards.removeAt(index);
         return;
       }

@@ -186,19 +186,13 @@ Future<void> main() async {
     if (Platform.isAndroid || Platform.isIOS) {
       try {
         await Firebase.initializeApp().timeout(const Duration(seconds: 8));
-        await _activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
         _firebaseReady = true;
-        _googleSignInInitialization = _googleSignIn.initialize();
-        await AnalyticsService.instance.init().timeout(
-          const Duration(seconds: 5),
-        );
-        await _configureCrashReporting();
       } catch (_) {
         _firebaseReady = false;
       }
     }
-    CloudBackupScheduler.instance.init();
     runApp(const TCGTracker());
+    unawaited(_finishDeferredAppBootstrap());
   }, (error, stackTrace) {
     final reason = 'run_zoned_guarded';
     unawaited(
@@ -210,6 +204,26 @@ Future<void> main() async {
       ),
     );
   });
+}
+
+Future<void> _finishDeferredAppBootstrap() async {
+  if (!_firebaseReady) {
+    return;
+  }
+  try {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    _googleSignInInitialization ??= _googleSignIn.initialize();
+    unawaited(
+      _activateFirebaseAppCheck().timeout(const Duration(seconds: 8)),
+    );
+    unawaited(
+      AnalyticsService.instance.init().timeout(const Duration(seconds: 5)),
+    );
+    unawaited(_configureCrashReporting());
+    CloudBackupScheduler.instance.init();
+  } catch (_) {
+    // Best effort only: startup should not fail if deferred integrations lag.
+  }
 }
 
 Future<void> _activateFirebaseAppCheck() async {

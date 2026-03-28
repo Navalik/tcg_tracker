@@ -87,8 +87,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat();
-    unawaited(_checkForAppUpdateOnStartup());
-    unawaited(_initializeEnvironmentAndData());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_initializeEnvironmentAndData());
+      unawaited(_checkForAppUpdateOnStartup());
+    });
     _collectionsRefreshNotifier.addListener(_onCollectionsRefreshRequested);
   }
 
@@ -834,6 +839,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     try {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      if (!mounted) {
+        return;
+      }
       final updateInfo = await InAppUpdate.checkForUpdate();
       if (updateInfo.updateAvailability != UpdateAvailability.updateAvailable) {
         return;

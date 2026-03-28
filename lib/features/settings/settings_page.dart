@@ -1397,8 +1397,8 @@ class _SettingsPageState extends State<SettingsPage> {
                               children: [
                                 Text(
                                   _isItalianUi
-                                      ? 'Snapshot di sicurezza automatico'
-                                      : 'Automatic safety snapshot',
+                                      ? 'Backup automatico pre-update database'
+                                      : 'Automatic pre-update database backup',
                                   style: Theme.of(context).textTheme.titleSmall,
                                 ),
                                 const SizedBox(height: 4),
@@ -1416,19 +1416,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 const SizedBox(height: 4),
                                 Text(
                                   _isItalianUi
-                                      ? 'Backup locale completo creato automaticamente prima di operazioni sensibili sul database.'
-                                      : 'Full local backup created automatically before sensitive database operations.',
+                                      ? 'Backup locale completo creato automaticamente prima degli aggiornamenti del database, cosi puoi tornare indietro se qualcosa va storto.'
+                                      : 'Full local backup created automatically before database updates, so you can roll back if something goes wrong.',
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: const Color(0xFF8F816B)),
                                 ),
-                                if (_latestPokemonAutoBackupName != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _latestPokemonAutoBackupName!,
-                                    style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: const Color(0xFFD8C7AE)),
-                                  ),
-                                ],
                                 const SizedBox(height: 10),
                                 Align(
                                   alignment: Alignment.centerLeft,
