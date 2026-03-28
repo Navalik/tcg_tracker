@@ -35,6 +35,9 @@ class CloudBackupSnapshotInfo {
     required this.automatic,
     required this.appVersion,
     required this.reason,
+    required this.collections,
+    required this.collectionCards,
+    required this.cards,
   });
 
   final String path;
@@ -44,6 +47,9 @@ class CloudBackupSnapshotInfo {
   final bool automatic;
   final String? appVersion;
   final String? reason;
+  final int? collections;
+  final int? collectionCards;
+  final int? cards;
 }
 
 class CloudBackupUploadResult {
@@ -62,6 +68,7 @@ class CloudBackupService {
   static final CloudBackupService instance = CloudBackupService._();
   static const int backupSchemaVersion = 1;
   static const String _latestObjectName = 'latest.json.gz';
+  static const String _historyDirectoryName = 'snapshots';
 
   bool get isSupported => Platform.isAndroid || Platform.isIOS;
 
@@ -108,10 +115,26 @@ class CloudBackupService {
         return CloudBackupUploadResult(snapshot: existing, skipped: true);
       }
     }
-    final gzipBytes = gzip.encode(payloadBytes);
     final collections = (payload['collections'] as List?)?.length ?? 0;
     final collectionCards = (payload['collectionCards'] as List?)?.length ?? 0;
     final cards = (payload['cards'] as List?)?.length ?? 0;
+    final existing = await _fetchSnapshotInfo(ref);
+    final payloadLooksEmpty = collections == 0 && collectionCards == 0;
+    final wouldOverwriteNonEmptyBackup =
+        (existing?.collections ?? 0) > 0 || (existing?.collectionCards ?? 0) > 0;
+    if (automatic && payloadLooksEmpty && wouldOverwriteNonEmptyBackup) {
+      final message =
+          'cloud_backup_suspicious_empty_payload collections=$collections collectionCards=$collectionCards existingCollections=${existing?.collections ?? 0} existingCollectionCards=${existing?.collectionCards ?? 0}';
+      await saveLastError(message);
+      throw StateError(message);
+    }
+    if (!force && payloadLooksEmpty) {
+      final message =
+          'cloud_backup_empty_payload collections=$collections collectionCards=$collectionCards';
+      await saveLastError(message);
+      throw StateError(message);
+    }
+    final gzipBytes = gzip.encode(payloadBytes);
     final metadata = SettableMetadata(
       contentType: 'application/gzip',
       contentEncoding: 'gzip',
@@ -127,7 +150,12 @@ class CloudBackupService {
         'cards': '$cards',
       },
     );
-    final task = await ref.putData(Uint8List.fromList(gzipBytes), metadata);
+    final data = Uint8List.fromList(gzipBytes);
+    await _historyRef(
+      user.uid,
+      exportedAt: payload['exportedAt']?.toString(),
+    ).putData(data, metadata);
+    final task = await ref.putData(data, metadata);
     final taskMetadata = task.metadata ?? await ref.getMetadata();
     final snapshot = _snapshotInfoFromMetadata(taskMetadata);
     await AppSettings.saveCloudBackupLastHash(payloadHash);
@@ -146,8 +174,10 @@ class CloudBackupService {
     }
     final user = FirebaseAuth.instance.currentUser!;
     try {
-      final metadata = await _latestRef(user.uid).getMetadata();
-      final snapshot = _snapshotInfoFromMetadata(metadata);
+      final snapshot = await _fetchSnapshotInfo(_latestRef(user.uid));
+      if (snapshot == null) {
+        return null;
+      }
       await AppSettings.saveCloudBackupLastUploadedAtMs(
         snapshot.updatedAt?.millisecondsSinceEpoch,
       );
@@ -231,6 +261,36 @@ class CloudBackupService {
     );
   }
 
+  Reference _historyRef(String uid, {String? exportedAt}) {
+    final suffix = _historyObjectName(exportedAt);
+    return FirebaseStorage.instance.ref(
+      'users/$uid/cloud-backup/$_historyDirectoryName/$suffix',
+    );
+  }
+
+  String _historyObjectName(String? exportedAt) {
+    final raw = (exportedAt ?? DateTime.now().toUtc().toIso8601String()).trim();
+    final normalized = raw
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    return '${normalized.isEmpty ? DateTime.now().millisecondsSinceEpoch : normalized}.json.gz';
+  }
+
+  Future<CloudBackupSnapshotInfo?> _fetchSnapshotInfo(Reference ref) async {
+    try {
+      final metadata = await ref.getMetadata();
+      return _snapshotInfoFromMetadata(metadata);
+    } on FirebaseException catch (error) {
+      if (error.code == 'object-not-found' ||
+          error.code == 'unauthorized' ||
+          error.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   CloudBackupSnapshotInfo _snapshotInfoFromMetadata(FullMetadata metadata) {
     final custom = metadata.customMetadata ?? const <String, String>{};
     return CloudBackupSnapshotInfo(
@@ -241,6 +301,9 @@ class CloudBackupService {
       automatic: custom['automatic']?.trim().toLowerCase() == 'true',
       appVersion: custom['appVersion']?.trim(),
       reason: custom['reason']?.trim(),
+      collections: int.tryParse(custom['collections']?.trim() ?? ''),
+      collectionCards: int.tryParse(custom['collectionCards']?.trim() ?? ''),
+      cards: int.tryParse(custom['cards']?.trim() ?? ''),
     );
   }
 }
