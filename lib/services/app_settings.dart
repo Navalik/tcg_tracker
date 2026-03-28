@@ -37,6 +37,13 @@ class AppSettings {
       'collection_coherence_check_version';
   static const _prefsKeyPrimaryGamePromptVersion =
       'primary_game_prompt_version';
+  static const _prefsKeyCloudBackupAutoEnabled = 'cloud_backup_auto_enabled';
+  static const _prefsKeyCloudBackupLastHash = 'cloud_backup_last_hash';
+  static const _prefsKeyCloudBackupLastUploadedAtMs =
+      'cloud_backup_last_uploaded_at_ms';
+  static const _prefsKeyCloudBackupLastError = 'cloud_backup_last_error';
+  static const _prefsKeyCloudBackupLastRemotePath =
+      'cloud_backup_last_remote_path';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
       'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
   static String _prefsKeyCollectionCoherenceCheckVersionForGame(
@@ -316,6 +323,93 @@ class AppSettings {
     await prefs.setBool(_prefsKeyProUnlocked, normalized == 'plus');
   }
 
+  static Future<bool> loadCloudBackupAutoEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    final stored = prefs.getBool(_prefsKeyCloudBackupAutoEnabled);
+    if (stored != null) {
+      return stored;
+    }
+    const fallback = true;
+    await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, fallback);
+    return fallback;
+  }
+
+  static Future<void> saveCloudBackupAutoEnabled(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, value);
+  }
+
+  static Future<String?> loadCloudBackupLastHash() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyCloudBackupLastHash)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> saveCloudBackupLastHash(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyCloudBackupLastHash);
+      return;
+    }
+    await prefs.setString(_prefsKeyCloudBackupLastHash, normalized);
+  }
+
+  static Future<int?> loadCloudBackupLastUploadedAtMs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_prefsKeyCloudBackupLastUploadedAtMs);
+  }
+
+  static Future<void> saveCloudBackupLastUploadedAtMs(int? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (value == null || value <= 0) {
+      await prefs.remove(_prefsKeyCloudBackupLastUploadedAtMs);
+      return;
+    }
+    await prefs.setInt(_prefsKeyCloudBackupLastUploadedAtMs, value);
+  }
+
+  static Future<String?> loadCloudBackupLastError() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyCloudBackupLastError)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> saveCloudBackupLastError(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyCloudBackupLastError);
+      return;
+    }
+    await prefs.setString(_prefsKeyCloudBackupLastError, normalized);
+  }
+
+  static Future<String?> loadCloudBackupLastRemotePath() async {
+    final prefs = await SharedPreferences.getInstance();
+    final value = prefs.getString(_prefsKeyCloudBackupLastRemotePath)?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
+  static Future<void> saveCloudBackupLastRemotePath(String? value) async {
+    final prefs = await SharedPreferences.getInstance();
+    final normalized = value?.trim() ?? '';
+    if (normalized.isEmpty) {
+      await prefs.remove(_prefsKeyCloudBackupLastRemotePath);
+      return;
+    }
+    await prefs.setString(_prefsKeyCloudBackupLastRemotePath, normalized);
+  }
+
   static Future<Set<String>> loadOwnedTcgs() async {
     final prefs = await SharedPreferences.getInstance();
     final values = prefs.getStringList(_prefsKeyOwnedTcgs) ?? const <String>[];
@@ -456,6 +550,11 @@ class AppSettings {
     );
     await prefs.remove(_prefsKeyPrimaryGamePromptVersion);
     await prefs.remove(_prefsKeyProUnlocked);
+    await prefs.remove(_prefsKeyCloudBackupAutoEnabled);
+    await prefs.remove(_prefsKeyCloudBackupLastHash);
+    await prefs.remove(_prefsKeyCloudBackupLastUploadedAtMs);
+    await prefs.remove(_prefsKeyCloudBackupLastError);
+    await prefs.remove(_prefsKeyCloudBackupLastRemotePath);
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
     await prefs.remove(_prefsKeyFreeScanLastSeenEpochMs);

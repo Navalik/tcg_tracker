@@ -14,6 +14,7 @@ import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import '../domain/domain_models.dart';
 import '../models.dart';
 import '../services/app_settings.dart';
+import '../services/cloud_backup_signals.dart';
 import '../services/price_provider.dart';
 import 'canonical_catalog_store.dart';
 
@@ -496,6 +497,10 @@ class ScryfallDatabase {
   static final List<_DbAppMigration> _appDbMigrations = <_DbAppMigration>[
     _DbAppMigration(version: 1, run: _runAppDbMigrationV1),
   ];
+
+  void _notifyCollectionsChanged(String reason) {
+    CloudBackupSignals.instance.markCollectionsChanged(reason);
+  }
 
   AppDatabase? _db;
   String _dbFileName = _defaultDbFileName;
@@ -1355,7 +1360,7 @@ class ScryfallDatabase {
       }
     }
     final db = await open();
-    return db
+    final insertedId = await db
         .into(db.collections)
         .insert(
           CollectionsCompanion.insert(
@@ -1366,6 +1371,8 @@ class ScryfallDatabase {
             ),
           ),
         );
+    _notifyCollectionsChanged('add_collection');
+    return insertedId;
   }
 
   Future<void> renameCollection(int id, String name) async {
@@ -1373,6 +1380,7 @@ class ScryfallDatabase {
     await (db.update(db.collections)..where((tbl) => tbl.id.equals(id))).write(
       CollectionsCompanion(name: Value(name)),
     );
+    _notifyCollectionsChanged('rename_collection');
   }
 
   Future<void> updateCollectionFilter(
@@ -1385,6 +1393,7 @@ class ScryfallDatabase {
         filterJson: Value(filter == null ? null : jsonEncode(filter.toJson())),
       ),
     );
+    _notifyCollectionsChanged('update_collection_filter');
   }
 
   Future<CollectionType?> fetchCollectionTypeById(int id) async {
@@ -1408,6 +1417,7 @@ class ScryfallDatabase {
       )..where((tbl) => tbl.collectionId.equals(id))).go();
       await (db.delete(db.collections)..where((tbl) => tbl.id.equals(id))).go();
     });
+    _notifyCollectionsChanged('delete_collection');
   }
 
   Future<Map<String, dynamic>> exportCollectionsBackupPayload({
@@ -1602,6 +1612,7 @@ class ScryfallDatabase {
         insertedCollectionCards += 1;
       }
     });
+    _notifyCollectionsChanged('restore_collections_backup');
 
     return <String, int>{
       'cards': upsertedCards,
@@ -3638,6 +3649,7 @@ class ScryfallDatabase {
             );
       }
     });
+    _notifyCollectionsChanged('add_card_to_collection');
   }
 
   Future<void> addCardToCollectionAsMissing(
@@ -3699,6 +3711,7 @@ class ScryfallDatabase {
           ))
           .go();
     });
+    _notifyCollectionsChanged('claim_card_from_wishlist');
   }
 
   Future<void> addCardsToCollection(
@@ -3753,6 +3766,7 @@ class ScryfallDatabase {
         }
       }
     });
+    _notifyCollectionsChanged('add_cards_to_collection');
   }
 
   Future<Map<String, String>> fetchSetCodesForCardIds(
@@ -4292,6 +4306,7 @@ class ScryfallDatabase {
         altArt ? 1 : 0,
       ],
     );
+    _notifyCollectionsChanged('upsert_collection_card');
   }
 
   Future<void> upsertCollectionMembership(
@@ -4322,6 +4337,7 @@ class ScryfallDatabase {
       ''',
       <Object?>[collectionId, normalizedCardId, normalizedPrintingId],
     );
+    _notifyCollectionsChanged('upsert_collection_membership');
   }
 
   Future<int> fetchOwnedQuantityInAllCards(
@@ -4390,6 +4406,7 @@ class ScryfallDatabase {
           normalizedPrintingId,
       ],
     );
+    _notifyCollectionsChanged('remove_card_from_direct_custom_collections');
   }
 
   Future<void> removeCardFromWishlists(
@@ -4420,6 +4437,7 @@ class ScryfallDatabase {
           normalizedPrintingId,
       ],
     );
+    _notifyCollectionsChanged('remove_card_from_wishlists');
   }
 
   Future<void> updateCollectionCard(
@@ -4458,6 +4476,7 @@ class ScryfallDatabase {
           normalizedPrintingId,
         ],
       );
+      _notifyCollectionsChanged('update_collection_card');
       return;
     }
     await (db.update(db.collectionCards)..where(
@@ -4466,6 +4485,7 @@ class ScryfallDatabase {
               tbl.cardId.equals(normalizedCardId),
         ))
         .write(values);
+    _notifyCollectionsChanged('update_collection_card');
   }
 
   Future<void> deleteCollectionCard(
@@ -4485,6 +4505,7 @@ class ScryfallDatabase {
         ''',
         <Object?>[collectionId, normalizedCardId, normalizedPrintingId],
       );
+      _notifyCollectionsChanged('delete_collection_card');
       return;
     }
     await (db.delete(db.collectionCards)..where(
@@ -4493,6 +4514,7 @@ class ScryfallDatabase {
               tbl.cardId.equals(normalizedCardId),
         ))
         .go();
+    _notifyCollectionsChanged('delete_collection_card');
   }
 
   Future<Map<String, dynamic>?> fetchCardJsonPayload(

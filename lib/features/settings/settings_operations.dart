@@ -3,6 +3,221 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _SettingsOperationsSection on _SettingsPageState {
+  Future<void> _refreshCloudBackupStatus({bool busy = false}) async {
+    if (mounted) {
+      setState(() {
+        _cloudBackupStatusBusy = busy;
+      });
+    }
+    try {
+      final eligibility = await CloudBackupService.instance.checkEligibility();
+      final snapshot = await CloudBackupService.instance.fetchLatestSnapshotInfo();
+      final lastError = await AppSettings.loadCloudBackupLastError();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cloudBackupSignedIn = eligibility.signedIn;
+        _cloudBackupPlus = eligibility.plus;
+        _cloudBackupLastUploadedAt = snapshot?.updatedAt?.toLocal();
+        _cloudBackupRemotePath = snapshot?.path;
+        _cloudBackupLastError = lastError;
+      });
+    } catch (error) {
+      await AppSettings.saveCloudBackupLastError(error.toString());
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _cloudBackupLastError = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _cloudBackupStatusBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _setCloudBackupAutoEnabled(bool value) async {
+    await AppSettings.saveCloudBackupAutoEnabled(value);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _cloudBackupAutoEnabled = value;
+    });
+    if (value) {
+      await CloudBackupScheduler.instance.triggerNow(
+        reason: 'cloud_backup_auto_enabled',
+      );
+      await _refreshCloudBackupStatus();
+    }
+  }
+
+  Future<bool> _ensureCloudBackupAvailable() async {
+    final eligibility = await CloudBackupService.instance.checkEligibility();
+    if (!mounted) {
+      return false;
+    }
+    setState(() {
+      _cloudBackupSignedIn = eligibility.signedIn;
+      _cloudBackupPlus = eligibility.plus;
+    });
+    if (!eligibility.supported) {
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Cloud backup disponibile solo su Android e iOS.'
+            : 'Cloud backup is available only on Android and iOS.',
+      );
+      return false;
+    }
+    if (!eligibility.signedIn) {
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Accedi con un account prima di usare il cloud backup.'
+            : 'Sign in with an account before using cloud backup.',
+      );
+      return false;
+    }
+    if (!eligibility.plus) {
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Il cloud backup e disponibile per BinderVault Plus.'
+            : 'Cloud backup is available with BinderVault Plus.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _exportCloudBackup() async {
+    if (_backupBusy) {
+      return;
+    }
+    if (!await _ensureCloudBackupAvailable() || !mounted) {
+      return;
+    }
+    setState(() {
+      _backupBusy = true;
+      _cloudBackupStatusBusy = true;
+    });
+    try {
+      final result = await CloudBackupService.instance.uploadLatestBackup(
+        automatic: false,
+        force: true,
+        reason: 'manual_backup',
+      );
+      if (!mounted) {
+        return;
+      }
+      final message = result.skipped
+          ? (_isItalianUi
+                ? 'Backup cloud gia aggiornato.'
+                : 'Cloud backup already up to date.')
+          : (_isItalianUi
+                ? 'Backup cloud completato.'
+                : 'Cloud backup completed.');
+      showAppSnackBar(context, message);
+      await _refreshCloudBackupStatus();
+    } catch (error) {
+      await CloudBackupService.instance.saveLastError(error);
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Backup cloud fallito. Controlla accesso e configurazione Firebase.'
+            : 'Cloud backup failed. Check sign-in and Firebase configuration.',
+      );
+      await _refreshCloudBackupStatus();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _backupBusy = false;
+          _cloudBackupStatusBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _importCloudBackup() async {
+    if (_backupBusy) {
+      return;
+    }
+    if (!await _ensureCloudBackupAvailable() || !mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          _isItalianUi ? 'Ripristinare backup cloud?' : 'Restore cloud backup?',
+        ),
+        content: Text(
+          _isItalianUi
+              ? 'Questo sostituira le collezioni correnti con l\'ultimo snapshot cloud.'
+              : 'This will replace current collections with the latest cloud snapshot.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(AppLocalizations.of(context)!.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(_isItalianUi ? 'Ripristina' : 'Restore'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    setState(() {
+      _backupBusy = true;
+      _cloudBackupStatusBusy = true;
+    });
+    try {
+      final stats = await CloudBackupService.instance.restoreLatestBackup();
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Backup cloud ripristinato. Collezioni: ${stats['collections'] ?? 0}, voci: ${stats['collectionCards'] ?? 0}'
+            : 'Cloud backup restored. Collections: ${stats['collections'] ?? 0}, entries: ${stats['collectionCards'] ?? 0}',
+      );
+      _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+      await _refreshCloudBackupStatus();
+    } catch (error) {
+      await CloudBackupService.instance.saveLastError(error);
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Ripristino cloud fallito. Verifica che esista un backup valido.'
+            : 'Cloud restore failed. Make sure a valid backup exists.',
+      );
+      await _refreshCloudBackupStatus();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _backupBusy = false;
+          _cloudBackupStatusBusy = false;
+        });
+      }
+    }
+  }
+
   Future<void> _reportIssueFromSettings() async {
     final l10n = AppLocalizations.of(context)!;
     final categories = <String, String>{

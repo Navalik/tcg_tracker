@@ -8,6 +8,7 @@ import 'package:in_app_purchase_android/in_app_purchase_android.dart';
 import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 
 import 'app_settings.dart';
+import 'entitlement_sync_service.dart';
 
 enum UserTier { free, plus }
 
@@ -129,6 +130,27 @@ class PurchaseManager extends ChangeNotifier {
       return '';
     }
     return trimmed.length <= 120 ? trimmed : '${trimmed.substring(0, 120)}...';
+  }
+
+  Future<void> _syncFirebaseEntitlementClaim() async {
+    try {
+      final result = await EntitlementSyncService.instance.syncCurrentUserTier(
+        localPlusActive: _userTier == UserTier.plus,
+      );
+      await _logBillingEvent(
+        'firebase_claim_sync_complete',
+        details: {
+          'claim_tier': result.claimTier,
+          'synced': result.synced,
+          'source': result.source ?? '',
+        },
+      );
+    } catch (error) {
+      await _logBillingEvent(
+        'firebase_claim_sync_error',
+        details: {'error': error},
+      );
+    }
   }
 
   Future<void> init() async {
@@ -484,6 +506,7 @@ class PurchaseManager extends ChangeNotifier {
           'owned_tcgs': _ownedTcgs.join(','),
         },
       );
+      await _syncFirebaseEntitlementClaim();
       notifyListeners();
     } catch (error) {
       _lastError = 'entitlement_refresh_failed';

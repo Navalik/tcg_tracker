@@ -34,6 +34,13 @@ class _SettingsPageState extends State<SettingsPage> {
   String _appThemeCode = 'magic';
   String _appVersion = '0.5.0';
   bool _backupBusy = false;
+  bool _cloudBackupAutoEnabled = true;
+  bool _cloudBackupStatusBusy = false;
+  bool _cloudBackupSignedIn = false;
+  bool _cloudBackupPlus = false;
+  DateTime? _cloudBackupLastUploadedAt;
+  String? _cloudBackupLastError;
+  String? _cloudBackupRemotePath;
   String? _latestPokemonAutoBackupName;
   DateTime? _latestPokemonAutoBackupAt;
   bool _gamesBusy = false;
@@ -58,9 +65,21 @@ class _SettingsPageState extends State<SettingsPage> {
         : (forImport
               ? 'Select a local file on this device.'
               : 'Save a local file on this device.');
-    final cloudSubtitle = italian
-        ? 'Backup cloud (in arrivo).'
-        : 'Cloud backup (coming soon).';
+    final cloudSubtitle = !_supportsFirebaseAuth
+        ? (italian
+              ? 'Disponibile solo su Android e iOS.'
+              : 'Available on Android and iOS only.')
+        : (!_cloudBackupSignedIn
+              ? (italian
+                    ? 'Accedi con un account per usare il cloud backup.'
+                    : 'Sign in with an account to use cloud backup.')
+              : (!_cloudBackupPlus
+                    ? (italian
+                          ? 'Disponibile per BinderVault Plus.'
+                          : 'Available with BinderVault Plus.')
+                    : (italian
+                          ? 'Snapshot automatici della collezione completa.'
+                          : 'Automatic snapshots of your full collection.')));
     return showDialog<_BackupTarget>(
       context: context,
       builder: (context) => AlertDialog(
@@ -92,36 +111,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _showCloudBackupComingSoon({required bool forImport}) async {
-    if (!mounted) {
-      return;
-    }
-    final italian = _isItalianUi;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          italian ? 'Backup cloud in arrivo' : 'Cloud backup coming soon',
-        ),
-        content: Text(
-          italian
-              ? 'Il backup cloud non e ancora attivo in questa release. Usa il backup locale per ora.'
-              : 'Cloud backup is not enabled in this release yet. Use local backup for now.',
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              forImport
-                  ? AppLocalizations.of(context)!.backupImport
-                  : AppLocalizations.of(context)!.backupExport,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _exportBackup() async {
     final target = await _pickBackupTarget(forImport: false);
     if (target == null || !mounted) {
@@ -131,7 +120,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await _exportLocalBackup();
       return;
     }
-    await _showCloudBackupComingSoon(forImport: false);
+    await _exportCloudBackup();
   }
 
   Future<void> _importBackup() async {
@@ -143,7 +132,7 @@ class _SettingsPageState extends State<SettingsPage> {
       await _importLocalBackup();
       return;
     }
-    await _showCloudBackupComingSoon(forImport: true);
+    await _importCloudBackup();
   }
 
   bool get _supportsFirebaseAuth => Platform.isAndroid || Platform.isIOS;
@@ -229,6 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _purchaseManager.purchasePending ||
             _purchaseManager.restoringPurchases;
       });
+      unawaited(_refreshCloudBackupStatus());
     };
     _purchaseManager.addListener(_purchaseListener);
     _loadSettings();
@@ -266,6 +256,10 @@ class _SettingsPageState extends State<SettingsPage> {
         .latestBackupFile(
           prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
         );
+    final cloudAutoEnabled = await AppSettings.loadCloudBackupAutoEnabled();
+    final cloudEligibility = await CloudBackupService.instance.checkEligibility();
+    final cloudSnapshot = await CloudBackupService.instance.fetchLatestSnapshotInfo();
+    final cloudLastError = await AppSettings.loadCloudBackupLastError();
     var appVersion = _appVersion;
     try {
       final packageInfo = await PackageInfo.fromPlatform();
@@ -290,6 +284,12 @@ class _SettingsPageState extends State<SettingsPage> {
           : path.basename(latestPokemonAutoBackup.path);
       _latestPokemonAutoBackupAt =
           latestPokemonAutoBackup?.statSync().modified;
+      _cloudBackupAutoEnabled = cloudAutoEnabled;
+      _cloudBackupSignedIn = cloudEligibility.signedIn;
+      _cloudBackupPlus = cloudEligibility.plus;
+      _cloudBackupLastUploadedAt = cloudSnapshot?.updatedAt?.toLocal();
+      _cloudBackupLastError = cloudLastError;
+      _cloudBackupRemotePath = cloudSnapshot?.path;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;
@@ -315,6 +315,32 @@ class _SettingsPageState extends State<SettingsPage> {
     final hh = local.hour.toString().padLeft(2, '0');
     final min = local.minute.toString().padLeft(2, '0');
     return '$dd/$mm/$yyyy $hh:$min';
+  }
+
+  String get _cloudBackupStatusLabel {
+    if (!_supportsFirebaseAuth) {
+      return _isItalianUi
+          ? 'Disponibile solo su Android e iOS.'
+          : 'Available only on Android and iOS.';
+    }
+    if (!_cloudBackupSignedIn) {
+      return _isItalianUi
+          ? 'Accedi con un account per attivare il cloud backup.'
+          : 'Sign in with an account to enable cloud backup.';
+    }
+    if (!_cloudBackupPlus) {
+      return _isItalianUi
+          ? 'Cloud backup disponibile per BinderVault Plus.'
+          : 'Cloud backup is available with BinderVault Plus.';
+    }
+    if (_cloudBackupLastUploadedAt != null) {
+      return _isItalianUi
+          ? 'Ultimo backup cloud: ${_formatBackupTimestamp(_cloudBackupLastUploadedAt!)}'
+          : 'Last cloud backup: ${_formatBackupTimestamp(_cloudBackupLastUploadedAt!)}';
+    }
+    return _isItalianUi
+        ? 'Nessun backup cloud ancora caricato.'
+        : 'No cloud backup uploaded yet.';
   }
 
   Future<void> _changePrimaryGame(TcgGame selected) async {
@@ -755,6 +781,113 @@ class _SettingsPageState extends State<SettingsPage> {
                               ),
                               label: Text(l10n.discoverPlus),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0x221D1712),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF3A2F24)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _isItalianUi
+                                      ? 'Cloud backup automatico'
+                                      : 'Automatic cloud backup',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                              ),
+                              if (_cloudBackupStatusBusy)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _cloudBackupStatusLabel,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: const Color(0xFFBFAE95)),
+                          ),
+                          if (_cloudBackupRemotePath != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              _cloudBackupRemotePath!,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFD8C7AE)),
+                            ),
+                          ],
+                          if (_cloudBackupLastError != null &&
+                              _cloudBackupLastError!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              _isItalianUi
+                                  ? 'Ultimo errore: ${_cloudBackupLastError!}'
+                                  : 'Last error: ${_cloudBackupLastError!}',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFE0A39A)),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              _isItalianUi
+                                  ? 'Salva automaticamente online'
+                                  : 'Automatically save online',
+                            ),
+                            subtitle: Text(
+                              _isItalianUi
+                                  ? 'Carica snapshot della collezione completa quando fai modifiche.'
+                                  : 'Upload full collection snapshots after changes.',
+                            ),
+                            value: _cloudBackupAutoEnabled,
+                            onChanged: (!_cloudBackupSignedIn || !_cloudBackupPlus)
+                                ? null
+                                : _setCloudBackupAutoEnabled,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _backupBusy ? null : _exportCloudBackup,
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                      color: Color(0xFF5D4731),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.cloud_upload_outlined),
+                                  label: Text(
+                                    _isItalianUi ? 'Backup cloud ora' : 'Backup now',
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _backupBusy ? null : _importCloudBackup,
+                                  icon: const Icon(Icons.cloud_download_outlined),
+                                  label: Text(
+                                    _isItalianUi ? 'Ripristina cloud' : 'Restore cloud',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),

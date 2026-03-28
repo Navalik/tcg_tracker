@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isPlus() {
+      return isSignedIn() && request.auth.token.tier == 'plus';
+    }
+
+    match /users/{uid}/cloud-backup/{allPaths=**} {
+      allow read, write: if isOwner(uid) && isPlus();
+    }
+  }
+}

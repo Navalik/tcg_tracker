@@ -65,3 +65,11 @@ android/key.properties
 
 # Local scripting artifacts
 tools/__pycache__/
+
+# Firebase Functions local-only artifacts
+functions/node_modules/
+functions/.env
+functions/.env.*
+
+# Generated local bundle artifacts
+tools/dist/

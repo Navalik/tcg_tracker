@@ -34,6 +34,9 @@ import 'repositories/filter_definitions.dart';
 import 'services/app_settings.dart';
 import 'services/analytics_service.dart';
 import 'services/auth_email_support.dart';
+import 'services/cloud_backup_scheduler.dart';
+import 'services/cloud_backup_service.dart';
+import 'services/entitlement_sync_service.dart';
 import 'services/local_backup_service.dart';
 import 'services/price_repository.dart';
 import 'services/inventory_service.dart';
@@ -192,6 +195,7 @@ Future<void> main() async {
       _firebaseReady = false;
     }
   }
+  CloudBackupScheduler.instance.init();
   runZonedGuarded(() => runApp(const TCGTracker()), (error, stackTrace) {
     final reason = 'run_zoned_guarded';
     unawaited(
@@ -254,13 +258,28 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
   final credential = GoogleAuthProvider.credential(idToken: idToken);
   final auth = FirebaseAuth.instance;
   final currentUser = auth.currentUser;
-  final UserCredential result;
+  late UserCredential result;
   if (currentUser?.isAnonymous ?? false) {
-    result = await currentUser!.linkWithCredential(credential);
-    await _logAuthBreadcrumb(
-      'firebase_google_link_success',
-      details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
-    );
+    try {
+      result = await currentUser!.linkWithCredential(credential);
+      await _logAuthBreadcrumb(
+        'firebase_google_link_success',
+        details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
+      );
+    } on FirebaseAuthException catch (error) {
+      if (error.code != 'credential-already-in-use' &&
+          error.code != 'account-exists-with-different-credential') {
+        rethrow;
+      }
+      await _logAuthBreadcrumb(
+        'firebase_google_link_conflict_fallback_sign_in',
+        details: {
+          'code': error.code,
+          'has_uid': _hasNonEmptyValue(currentUser?.uid),
+        },
+      );
+      result = await auth.signInWithCredential(credential);
+    }
   } else {
     result = await auth.signInWithCredential(credential);
   }
@@ -268,6 +287,11 @@ Future<UserCredential> _signInToFirebaseWithGoogle() async {
     'firebase_google_sign_in_success',
     details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
+  try {
+    await EntitlementSyncService.instance.syncCurrentUserTier(
+      localPlusActive: PurchaseManager.instance.isPro,
+    );
+  } catch (_) {}
   return result;
 }
 
@@ -369,6 +393,11 @@ Future<_EmailPasswordAuthResult> _authenticateWithEmailPassword({
       'email_password_create_success',
       details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
     );
+    try {
+      await EntitlementSyncService.instance.syncCurrentUserTier(
+        localPlusActive: PurchaseManager.instance.isPro,
+      );
+    } catch (_) {}
     final verificationEmailSent = await _sendEmailVerificationIfPossible(
       result.user,
     );
@@ -385,6 +414,11 @@ Future<_EmailPasswordAuthResult> _authenticateWithEmailPassword({
     'email_password_sign_in_success',
     details: {'has_uid': _hasNonEmptyValue(result.user?.uid)},
   );
+  try {
+    await EntitlementSyncService.instance.syncCurrentUserTier(
+      localPlusActive: PurchaseManager.instance.isPro,
+    );
+  } catch (_) {}
   return _EmailPasswordAuthResult(mode: _EmailPasswordAuthMode.signedIn);
 }
 
@@ -696,8 +730,7 @@ Future<_ChangeEmailRequest?> _promptForEmailChange(
 }) async {
   return showDialog<_ChangeEmailRequest>(
     context: context,
-    builder: (dialogContext) =>
-        _ChangeEmailDialog(currentEmail: currentEmail),
+    builder: (dialogContext) => _ChangeEmailDialog(currentEmail: currentEmail),
   );
 }
 
@@ -1442,9 +1475,7 @@ class _ChangePasswordDialogState extends State<_ChangePasswordDialog> {
                 onTap: () =>
                     _normalizePasswordEditingState(_confirmPasswordController),
                 onChanged: (_) =>
-                    _normalizePasswordEditingState(
-                      _confirmPasswordController,
-                    ),
+                    _normalizePasswordEditingState(_confirmPasswordController),
                 validator: (value) {
                   final normalized = value ?? '';
                   if (!_hasAttemptedSubmit &&
@@ -1579,10 +1610,7 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
       return;
     }
     Navigator.of(context).pop(
-      _ChangeEmailRequest(
-        currentPassword: currentPassword,
-        newEmail: newEmail,
-      ),
+      _ChangeEmailRequest(currentPassword: currentPassword, newEmail: newEmail),
     );
   }
 
