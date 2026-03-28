@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src https://identitytoolkit.googleapis.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+  <title>BinderVault - Account Action</title>
+  <meta name="description" content="Complete BinderVault account actions such as password reset and email verification.">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="googlebot" content="noindex,nofollow,noarchive">
+  <meta name="theme-color" content="#161311">
+  <link rel="canonical" href="https://bindervault.app/auth-action">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #161311;
+      --surface: #231f1d;
+      --surface-high: #2e2927;
+      --border: rgba(212, 175, 55, 0.22);
+      --text: #eae1dd;
+      --muted: #d0c5af;
+      --primary: #f2ca50;
+      --primary-dark: #3c2f00;
+      --error: #ffb4ab;
+      --error-bg: rgba(186, 26, 26, 0.16);
+      --success: #c7f0c2;
+      --success-bg: rgba(72, 135, 61, 0.18);
+      --info-bg: rgba(242, 202, 80, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      background:
+        radial-gradient(circle at top, rgba(242, 202, 80, 0.08), transparent 32%),
+        linear-gradient(180deg, #1b1512 0%, var(--bg) 100%);
+      color: var(--text);
+      font: 16px/1.5 Manrope, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(35, 31, 29, 0.97);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      box-shadow: 0 22px 60px rgba(0, 0, 0, 0.4);
+      overflow: hidden;
+    }
+
+    .content {
+      padding: 28px 24px 24px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(1.8rem, 5vw, 2.25rem);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .status {
+      display: none;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid transparent;
+      font-size: 0.96rem;
+    }
+
+    .status.visible { display: block; }
+    .status.error {
+      color: var(--error);
+      background: var(--error-bg);
+      border-color: rgba(255, 180, 171, 0.18);
+    }
+    .status.success {
+      color: var(--success);
+      background: var(--success-bg);
+      border-color: rgba(199, 240, 194, 0.18);
+    }
+    .status.info {
+      color: var(--text);
+      background: var(--info-bg);
+      border-color: rgba(242, 202, 80, 0.15);
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      min-height: 52px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: var(--surface-high);
+      color: var(--text);
+      padding: 0 14px;
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(242, 202, 80, 0.16);
+    }
+
+    .hint {
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    button, .link-button {
+      min-height: 48px;
+      border-radius: 999px;
+      padding: 0 18px;
+      font: inherit;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .primary {
+      background: var(--primary);
+      color: var(--primary-dark);
+      font-weight: 700;
+    }
+
+    .secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    button[disabled] {
+      opacity: 0.65;
+      cursor: wait;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="content">
+      <h1 id="title">Account action</h1>
+      <p id="subtitle">Checking your Firebase action link…</p>
+
+      <div class="stack">
+        <div id="status" class="status info visible" role="status" aria-live="polite"></div>
+
+        <form id="reset-form" novalidate hidden>
+          <div class="field">
+            <label for="email">Account email</label>
+            <input id="email" type="email" autocomplete="username" readonly>
+          </div>
+
+          <div class="field">
+            <label for="password">New password</label>
+            <input id="password" type="password" autocomplete="new-password" required minlength="8">
+            <div class="hint">Use at least 8 characters, 1 uppercase letter, 1 number, and 1 symbol.</div>
+          </div>
+
+          <div class="field">
+            <label for="confirm-password">Confirm new password</label>
+            <input id="confirm-password" type="password" autocomplete="new-password" required minlength="8">
+          </div>
+
+          <div class="actions">
+            <button id="submit-button" type="submit" class="primary">Save new password</button>
+            <a class="link-button secondary" href="./index.html">Back to site</a>
+          </div>
+        </form>
+
+        <div id="success-actions" class="actions" hidden>
+          <a class="link-button primary" href="./index.html">Go to BinderVault</a>
+        </div>
+      </div>
+
+      <div class="footer">
+        This page only handles Firebase account action links. It does not provide account access or admin operations.
+      </div>
+    </div>
+  </main>
+
+  <script src="./firebase-web-config.js" defer></script>
+  <script src="./auth-action.js" defer></script>
+</body>
+</html>
