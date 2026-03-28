@@ -562,62 +562,10 @@ class _AccountSettingsPageState extends State<_AccountSettingsPage>
   }
 
   Future<String?> _promptForDeleteAccountPassword() async {
-    final controller = TextEditingController();
-    var obscurePassword = true;
-    final l10n = AppLocalizations.of(context)!;
     final result = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (dialogContext, setState) => AlertDialog(
-          title: Text(l10n.authDeleteAccountPasswordTitle),
-          content: TextField(
-            controller: controller,
-            obscureText: obscurePassword,
-            keyboardType: TextInputType.visiblePassword,
-            enableSuggestions: false,
-            autocorrect: false,
-            smartDashesType: SmartDashesType.disabled,
-            smartQuotesType: SmartQuotesType.disabled,
-            decoration: InputDecoration(
-              labelText: l10n.authCurrentPasswordLabel,
-              hintText: l10n.authCurrentPasswordHint,
-              suffixIcon: IconButton(
-                tooltip: obscurePassword
-                    ? l10n.authShowPassword
-                    : l10n.authHidePassword,
-                onPressed: () {
-                  setState(() {
-                    obscurePassword = !obscurePassword;
-                  });
-                },
-                icon: Icon(
-                  obscurePassword
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility,
-                ),
-              ),
-            ),
-            onSubmitted: (_) =>
-                Navigator.of(dialogContext).pop(controller.text),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFFB44336),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-              child: Text(l10n.authDeleteAccountAction),
-            ),
-          ],
-        ),
-      ),
+      builder: (dialogContext) => const _DeleteAccountPasswordDialog(),
     );
-    controller.dispose();
     final password = result?.trim() ?? '';
     if (password.isEmpty) {
       return null;
@@ -871,6 +819,119 @@ class _AccountSettingsPageState extends State<_AccountSettingsPage>
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DeleteAccountPasswordDialog extends StatefulWidget {
+  const _DeleteAccountPasswordDialog();
+
+  @override
+  State<_DeleteAccountPasswordDialog> createState() =>
+      _DeleteAccountPasswordDialogState();
+}
+
+class _DeleteAccountPasswordDialogState
+    extends State<_DeleteAccountPasswordDialog> {
+  late final TextEditingController _passwordController;
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  bool _obscurePassword = true;
+  bool _hasAttemptedSubmit = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _passwordController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  String? _passwordErrorText(String value, AppLocalizations l10n) {
+    if (!_hasAttemptedSubmit && value.isEmpty) {
+      return null;
+    }
+    if (value.isEmpty) {
+      return l10n.authCurrentPasswordRequired;
+    }
+    return null;
+  }
+
+  void _submit() {
+    setState(() {
+      _hasAttemptedSubmit = true;
+    });
+    if (_formKey.currentState?.validate() != true) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    Navigator.of(context).pop(_passwordController.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      scrollable: true,
+      title: Text(l10n.authDeleteAccountPasswordTitle),
+      content: Form(
+        key: _formKey,
+        autovalidateMode: AutovalidateMode.onUserInteraction,
+        child: SizedBox(
+          width: double.maxFinite,
+          child: TextFormField(
+            controller: _passwordController,
+            autofocus: true,
+            obscureText: _obscurePassword,
+            keyboardType: TextInputType.visiblePassword,
+            enableSuggestions: false,
+            autocorrect: false,
+            smartDashesType: SmartDashesType.disabled,
+            smartQuotesType: SmartQuotesType.disabled,
+            enableInteractiveSelection: true,
+            showCursor: true,
+            textInputAction: TextInputAction.done,
+            decoration: InputDecoration(
+              labelText: l10n.authCurrentPasswordLabel,
+              hintText: l10n.authCurrentPasswordHint,
+              suffixIcon: IconButton(
+                tooltip: _obscurePassword
+                    ? l10n.authShowPassword
+                    : l10n.authHidePassword,
+                onPressed: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
+                },
+                icon: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility,
+                ),
+              ),
+            ),
+            validator: (value) => _passwordErrorText(value ?? '', l10n),
+            onFieldSubmitted: (_) => _submit(),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFB44336),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _submit,
+          child: Text(l10n.authDeleteAccountAction),
+        ),
+      ],
     );
   }
 }
