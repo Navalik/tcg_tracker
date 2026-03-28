@@ -2094,7 +2094,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.3';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.4';
 
   @override
   String get whatsNewFeaturesTitle => 'Main updates';
@@ -2104,38 +2104,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whatsNewLine1 =>
-      'Improved multilingual support across search, results, and the local catalog.';
+      'Fixed issues around cloud backup protection and Plus access checks.';
 
   @override
   String get whatsNewLine2 =>
-      'Refactored the Pokemon database layer for a more solid and maintainable foundation.';
+      'Improved startup flow and overall app stability.';
 
   @override
-  String get whatsNewLine3 =>
-      'Updated deck card handling with clearer legal and not legal states.';
+  String get whatsNewLine3 => 'Added email and password sign-in.';
 
   @override
-  String get whatsNewLine4 =>
-      'Improved consistency between counts, previews, and card adding flows in filters.';
+  String get whatsNewLine4 => 'Added cloud sync for BinderVault Plus.';
 
   @override
-  String get whatsNewLine5 =>
-      'Deck search now shows all matching cards with legal or not legal badges.';
+  String get whatsNewLine5 => 'Refreshed the splash screen.';
 
   @override
   String get whatsNewLine6 =>
-      'Reduced incorrect missing states inside deck-related flows.';
+      'Improved the scanner flow and overall usability.';
 
   @override
-  String get whatsNewLine7 => '';
+  String get whatsNewLine7 =>
+      'Updated technical foundations and upgraded libraries.';
 
   @override
   String get whatsNewLine8 =>
-      'Fixed major issues across decks, smart filters, previews, and add-card flows.';
+      'Fixed backup UI inconsistencies and cloud restore edge cases.';
 
   @override
   String get whatsNewLine9 =>
-      'Also includes various minor UI, alignment, and stability fixes.';
+      'Also includes additional minor bug fixes and polish across the app.';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

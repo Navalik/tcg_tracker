@@ -3749,7 +3749,7 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.5.3'**
+  /// **'What\'s new in 0.5.4'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.
@@ -3767,55 +3767,55 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Improved multilingual support across search, results, and the local catalog.'**
+  /// **'Fixed issues around cloud backup protection and Plus access checks.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Refactored the Pokemon database layer for a more solid and maintainable foundation.'**
+  /// **'Improved startup flow and overall app stability.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'Updated deck card handling with clearer legal and not legal states.'**
+  /// **'Added email and password sign-in.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Improved consistency between counts, previews, and card adding flows in filters.'**
+  /// **'Added cloud sync for BinderVault Plus.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'Deck search now shows all matching cards with legal or not legal badges.'**
+  /// **'Refreshed the splash screen.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
   ///
   /// In en, this message translates to:
-  /// **'Reduced incorrect missing states inside deck-related flows.'**
+  /// **'Improved the scanner flow and overall usability.'**
   String get whatsNewLine6;
 
   /// No description provided for @whatsNewLine7.
   ///
   /// In en, this message translates to:
-  /// **''**
+  /// **'Updated technical foundations and upgraded libraries.'**
   String get whatsNewLine7;
 
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **'Fixed major issues across decks, smart filters, previews, and add-card flows.'**
+  /// **'Fixed backup UI inconsistencies and cloud restore edge cases.'**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **'Also includes various minor UI, alignment, and stability fixes.'**
+  /// **'Also includes additional minor bug fixes and polish across the app.'**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.

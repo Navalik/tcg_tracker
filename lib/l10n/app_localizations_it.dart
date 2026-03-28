@@ -2118,7 +2118,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewButtonLabel => 'Novita';
 
   @override
-  String get whatsNewDialogTitle => 'Novita versione 0.5.3';
+  String get whatsNewDialogTitle => 'Novita versione 0.5.4';
 
   @override
   String get whatsNewFeaturesTitle => 'Novita principali';
@@ -2128,38 +2128,35 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get whatsNewLine1 =>
-      'Supporto multilingua migliorato per ricerca, risultati e catalogo locale.';
+      'Risolti problemi nella protezione del cloud backup e nei controlli di accesso Plus.';
 
   @override
   String get whatsNewLine2 =>
-      'Refactor del database Pokemon per una base piu solida e piu facile da mantenere.';
+      'Migliorato il flusso di avvio e la stabilita generale dell\'app.';
 
   @override
-  String get whatsNewLine3 =>
-      'Aggiornata la gestione delle carte nei mazzi con stato legal e not legal piu chiaro.';
+  String get whatsNewLine3 => 'Aggiunto l\'accesso con email e password.';
 
   @override
-  String get whatsNewLine4 =>
-      'Migliorata la coerenza tra conteggi, anteprime e aggiunta carte nei filtri.';
+  String get whatsNewLine4 => 'Aggiunto il cloud sync per BinderVault Plus.';
 
   @override
-  String get whatsNewLine5 =>
-      'La ricerca nei mazzi mostra tutte le carte compatibili con badge legal o not legal.';
+  String get whatsNewLine5 => 'Nuovo splash screen.';
 
   @override
   String get whatsNewLine6 =>
-      'Ridotta la presenza di stati missing non corretti nel contesto dei mazzi.';
+      'Migliorato il flusso scanner e l\'usabilita generale.';
 
   @override
-  String get whatsNewLine7 => '';
+  String get whatsNewLine7 => 'Aggiornate le basi tecniche e le librerie.';
 
   @override
   String get whatsNewLine8 =>
-      'Risolti bug maggiori su deck, filtri smart, preview e aggiunta carte.';
+      'Corretti problemi nella UI del backup e alcuni casi limite del ripristino cloud.';
 
   @override
   String get whatsNewLine9 =>
-      'Incluse anche varie correzioni minori di UI, allineamento e stabilita.';
+      'Incluse anche ulteriori correzioni minori e rifiniture generali.';
 
   @override
   String get createSmartCollectionTitle => 'Crea una smart collection';
