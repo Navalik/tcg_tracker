@@ -40,7 +40,6 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _cloudBackupPlus = false;
   DateTime? _cloudBackupLastUploadedAt;
   String? _cloudBackupLastError;
-  String? _cloudBackupRemotePath;
   String? _latestPokemonAutoBackupName;
   DateTime? _latestPokemonAutoBackupAt;
   bool _gamesBusy = false;
@@ -233,38 +232,55 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     await _purchaseManager.init();
     await _purchaseManager.syncPrimaryGameFromSettings();
-    final selectedGame = await AppSettings.loadSelectedTcgGame();
-    final primaryGame = await AppSettings.loadPrimaryTcgGameOrNull();
-    final bulkType = await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
-    final priceCurrency = await AppSettings.loadPriceCurrency();
-    final showPrices = await AppSettings.loadShowPrices();
-    final appLocaleCode = await AppSettings.loadAppLocale();
-    final appThemeCode = await AppSettings.loadVisualTheme();
-    final ownedTcgs = await AppSettings.loadOwnedTcgs();
-    final pokemonUnlocked = await AppSettings.loadPokemonUnlocked();
-    final mtgCardLanguages = await AppSettings.loadCardLanguagesForGame(
+    final selectedGameFuture = AppSettings.loadSelectedTcgGame();
+    final primaryGameFuture = AppSettings.loadPrimaryTcgGameOrNull();
+    final bulkTypeFuture = AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
+    final priceCurrencyFuture = AppSettings.loadPriceCurrency();
+    final showPricesFuture = AppSettings.loadShowPrices();
+    final appLocaleCodeFuture = AppSettings.loadAppLocale();
+    final appThemeCodeFuture = AppSettings.loadVisualTheme();
+    final ownedTcgsFuture = AppSettings.loadOwnedTcgs();
+    final pokemonUnlockedFuture = AppSettings.loadPokemonUnlocked();
+    final mtgCardLanguagesFuture = AppSettings.loadCardLanguagesForGame(
       AppTcgGame.mtg,
     );
-    final pokemonCardLanguagesRaw = await AppSettings.loadCardLanguagesForGame(
+    final pokemonCardLanguagesFuture = AppSettings.loadCardLanguagesForGame(
       AppTcgGame.pokemon,
     );
+    final latestPokemonAutoBackupFuture = LocalBackupService.instance
+        .latestBackupFile(
+          prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
+        );
+    final cloudAutoEnabledFuture = AppSettings.loadCloudBackupAutoEnabled();
+    final cloudEligibilityFuture = CloudBackupService.instance.checkEligibility();
+    final cloudLastErrorFuture = AppSettings.loadCloudBackupLastError();
+    final packageInfoFuture = PackageInfo.fromPlatform();
+
+    final selectedGame = await selectedGameFuture;
+    final primaryGame = await primaryGameFuture;
+    final bulkType = await bulkTypeFuture;
+    final priceCurrency = await priceCurrencyFuture;
+    final showPrices = await showPricesFuture;
+    final appLocaleCode = await appLocaleCodeFuture;
+    final appThemeCode = await appThemeCodeFuture;
+    final ownedTcgs = await ownedTcgsFuture;
+    final pokemonUnlocked = await pokemonUnlockedFuture;
+    final mtgCardLanguages = await mtgCardLanguagesFuture;
+    final pokemonCardLanguagesRaw = await pokemonCardLanguagesFuture;
     final pokemonCardLanguages = pokemonCardLanguagesRaw
         .map((value) => value.trim().toLowerCase())
         .where((value) => value.isNotEmpty)
         .toSet();
-    final latestPokemonAutoBackup = await LocalBackupService.instance
-        .latestBackupFile(
-          prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
-        );
-    final cloudAutoEnabled = await AppSettings.loadCloudBackupAutoEnabled();
-    final cloudEligibility = await CloudBackupService.instance
-        .checkEligibility();
-    final cloudSnapshot = await CloudBackupService.instance
-        .fetchLatestSnapshotInfo();
-    final cloudLastError = await AppSettings.loadCloudBackupLastError();
+    final latestPokemonAutoBackup = await latestPokemonAutoBackupFuture;
+    final cloudAutoEnabled = await cloudAutoEnabledFuture;
+    final cloudEligibility = await cloudEligibilityFuture;
+    final cloudSnapshot = cloudEligibility.canAccess
+        ? await CloudBackupService.instance.fetchLatestSnapshotInfo()
+        : null;
+    final cloudLastError = await cloudLastErrorFuture;
     var appVersion = _appVersion;
     try {
-      final packageInfo = await PackageInfo.fromPlatform();
+      final packageInfo = await packageInfoFuture;
       appVersion = packageInfo.version;
     } catch (_) {
       appVersion = _appVersion;
@@ -289,8 +305,7 @@ class _SettingsPageState extends State<SettingsPage> {
       _cloudBackupSignedIn = cloudEligibility.signedIn;
       _cloudBackupPlus = cloudEligibility.plus;
       _cloudBackupLastUploadedAt = cloudSnapshot?.updatedAt?.toLocal();
-      _cloudBackupLastError = cloudLastError;
-      _cloudBackupRemotePath = cloudSnapshot?.path;
+      _cloudBackupLastError = cloudEligibility.canAccess ? cloudLastError : null;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;
@@ -347,6 +362,46 @@ class _SettingsPageState extends State<SettingsPage> {
   bool get _showPlusPromoCard => !_purchaseManager.isPro;
 
   String get _plusStatusTitle => _isItalianUi ? 'Plus attivo' : 'Plus active';
+
+  String get _plusManageButtonLabel =>
+      _isItalianUi ? 'Gestisci Plus' : 'Manage Plus';
+
+  String get _plusBadgeLabel => 'Plus';
+
+  void _openPlusPage() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProPage()));
+  }
+
+  Widget _buildPlusBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9C46A),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFB07C2A)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.workspace_premium_rounded,
+            size: 14,
+            color: Color(0xFF1C1510),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _plusBadgeLabel,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: const Color(0xFF1C1510),
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   String get _plusStatusBody {
     if (_cloudBackupPlus) {
@@ -825,128 +880,29 @@ class _SettingsPageState extends State<SettingsPage> {
                               style: Theme.of(context).textTheme.bodySmall
                                   ?.copyWith(color: const Color(0xFFC6D9C3)),
                             ),
+                            const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: OutlinedButton.icon(
+                                onPressed: _openPlusPage,
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: Color(0xFF496946),
+                                  ),
+                                  foregroundColor: const Color(0xFFE6F1E0),
+                                ),
+                                icon: const Icon(
+                                  Icons.workspace_premium_rounded,
+                                  size: 18,
+                                ),
+                                label: Text(_plusManageButtonLabel),
+                              ),
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 10),
                     ],
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0x221D1712),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFF3A2F24)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _isItalianUi
-                                      ? 'Cloud backup automatico'
-                                      : 'Automatic cloud backup',
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
-                              ),
-                              if (_cloudBackupStatusBusy)
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _cloudBackupStatusLabel,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(color: const Color(0xFFBFAE95)),
-                          ),
-                          if (_cloudBackupRemotePath != null) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              _cloudBackupRemotePath!,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFD8C7AE)),
-                            ),
-                          ],
-                          if (_cloudBackupLastError != null &&
-                              _cloudBackupLastError!.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              _isItalianUi
-                                  ? 'Ultimo errore: ${_cloudBackupLastError!}'
-                                  : 'Last error: ${_cloudBackupLastError!}',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFE0A39A)),
-                            ),
-                          ],
-                          const SizedBox(height: 8),
-                          SwitchListTile.adaptive(
-                            contentPadding: EdgeInsets.zero,
-                            title: Text(
-                              _isItalianUi
-                                  ? 'Salva automaticamente online'
-                                  : 'Automatically save online',
-                            ),
-                            subtitle: Text(
-                              _isItalianUi
-                                  ? 'Carica snapshot della collezione completa quando fai modifiche.'
-                                  : 'Upload full collection snapshots after changes.',
-                            ),
-                            value: _cloudBackupAutoEnabled,
-                            onChanged:
-                                (!_cloudBackupSignedIn || !_cloudBackupPlus)
-                                ? null
-                                : _setCloudBackupAutoEnabled,
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  onPressed: _backupBusy
-                                      ? null
-                                      : _exportCloudBackup,
-                                  style: OutlinedButton.styleFrom(
-                                    side: const BorderSide(
-                                      color: Color(0xFF5D4731),
-                                    ),
-                                  ),
-                                  icon: const Icon(Icons.cloud_upload_outlined),
-                                  label: Text(
-                                    _isItalianUi
-                                        ? 'Backup cloud ora'
-                                        : 'Backup now',
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: FilledButton.icon(
-                                  onPressed: _backupBusy
-                                      ? null
-                                      : _importCloudBackup,
-                                  icon: const Icon(
-                                    Icons.cloud_download_outlined,
-                                  ),
-                                  label: Text(
-                                    _isItalianUi
-                                        ? 'Ripristina cloud'
-                                        : 'Restore cloud',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -1274,6 +1230,20 @@ class _SettingsPageState extends State<SettingsPage> {
                         )
                       : null,
                   children: [
+                    Text(
+                      _isItalianUi ? 'Backup locale' : 'Local backup',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _isItalianUi
+                          ? 'Esporta o importa un file di backup sul dispositivo.'
+                          : 'Export or import a backup file on this device.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFFBFAE95),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
@@ -1296,7 +1266,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const Divider(height: 22, color: Color(0xFF3A2F24)),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
@@ -1308,52 +1278,180 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _isItalianUi
-                                ? 'Recovery automatico Pokemon'
-                                : 'Pokemon automatic recovery',
-                            style: Theme.of(context).textTheme.titleSmall,
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    Text(
+                                      _isItalianUi
+                                          ? 'Cloud backup'
+                                          : 'Cloud backup',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleSmall,
+                                    ),
+                                    _buildPlusBadge(),
+                                  ],
+                                ),
+                              ),
+                              if (_cloudBackupStatusBusy)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _latestPokemonAutoBackupName == null
-                                ? (_isItalianUi
-                                      ? 'Nessun backup automatico Pokemon disponibile.'
-                                      : 'No automatic Pokemon backup available.')
-                                : (_isItalianUi
-                                      ? 'Ultimo backup: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'
-                                      : 'Latest backup: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'),
+                            _cloudBackupStatusLabel,
                             style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(color: const Color(0xFFBFAE95)),
                           ),
-                          if (_latestPokemonAutoBackupName != null) ...[
-                            const SizedBox(height: 2),
+                          if (_cloudBackupLastError != null &&
+                              _cloudBackupLastError!.isNotEmpty) ...[
+                            const SizedBox(height: 6),
                             Text(
-                              _latestPokemonAutoBackupName!,
+                              _isItalianUi
+                                  ? 'Ultimo errore: ${_cloudBackupLastError!}'
+                                  : 'Last error: ${_cloudBackupLastError!}',
                               style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: const Color(0xFFD8C7AE)),
+                                  ?.copyWith(color: const Color(0xFFE0A39A)),
                             ),
                           ],
-                          const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  _backupBusy ||
-                                      _latestPokemonAutoBackupName == null
-                                  ? null
-                                  : _restoreLatestPokemonAutomaticBackup,
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(
-                                  color: Color(0xFF5D4731),
+                          const SizedBox(height: 8),
+                          SwitchListTile.adaptive(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(
+                              _isItalianUi
+                                  ? 'Salva automaticamente online'
+                                  : 'Automatically save online',
+                            ),
+                            subtitle: Text(
+                              _isItalianUi
+                                  ? 'Solo Plus. Carica snapshot della collezione completa quando fai modifiche.'
+                                  : 'Plus only. Upload full collection snapshots after changes.',
+                            ),
+                            value: _cloudBackupAutoEnabled,
+                            onChanged:
+                                (!_cloudBackupSignedIn || !_cloudBackupPlus)
+                                ? null
+                                : _setCloudBackupAutoEnabled,
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _backupBusy
+                                      ? null
+                                      : _exportCloudBackup,
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(
+                                      color: Color(0xFF5D4731),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.cloud_upload_outlined),
+                                  label: Text(
+                                    _isItalianUi
+                                        ? 'Backup cloud ora'
+                                        : 'Backup now',
+                                  ),
                                 ),
                               ),
-                              icon: const Icon(Icons.restore_rounded),
-                              label: Text(
-                                _isItalianUi
-                                    ? 'Ripristina ultimo backup Pokemon'
-                                    : 'Restore latest Pokemon backup',
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: FilledButton.icon(
+                                  onPressed: _backupBusy
+                                      ? null
+                                      : _importCloudBackup,
+                                  icon: const Icon(
+                                    Icons.cloud_download_outlined,
+                                  ),
+                                  label: Text(
+                                    _isItalianUi
+                                        ? 'Ripristina cloud'
+                                        : 'Restore cloud',
+                                  ),
+                                ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                            decoration: BoxDecoration(
+                              color: const Color(0x221D1712),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF3A2F24)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _isItalianUi
+                                      ? 'Snapshot di sicurezza automatico'
+                                      : 'Automatic safety snapshot',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _latestPokemonAutoBackupName == null
+                                      ? (_isItalianUi
+                                            ? 'Nessuno snapshot automatico disponibile.'
+                                            : 'No automatic snapshot available.')
+                                      : (_isItalianUi
+                                            ? 'Ultimo snapshot: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'
+                                            : 'Latest snapshot: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'),
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: const Color(0xFFBFAE95)),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _isItalianUi
+                                      ? 'Backup locale completo creato automaticamente prima di operazioni sensibili sul database.'
+                                      : 'Full local backup created automatically before sensitive database operations.',
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: const Color(0xFF8F816B)),
+                                ),
+                                if (_latestPokemonAutoBackupName != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _latestPokemonAutoBackupName!,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(color: const Color(0xFFD8C7AE)),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: OutlinedButton.icon(
+                                    onPressed:
+                                        _backupBusy ||
+                                            _latestPokemonAutoBackupName == null
+                                        ? null
+                                        : _restoreLatestPokemonAutomaticBackup,
+                                    style: OutlinedButton.styleFrom(
+                                      side: const BorderSide(
+                                        color: Color(0xFF5D4731),
+                                      ),
+                                    ),
+                                    icon: const Icon(Icons.restore_rounded),
+                                    label: Text(
+                                      _isItalianUi
+                                          ? 'Ripristina ultimo snapshot'
+                                          : 'Restore latest snapshot',
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],

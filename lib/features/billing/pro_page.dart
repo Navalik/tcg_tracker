@@ -160,6 +160,19 @@ class _ProPageState extends State<ProPage> {
     }
   }
 
+  bool get _isItalianUi => Localizations.localeOf(
+    context,
+  ).languageCode.toLowerCase().startsWith('it');
+
+  String get _cloudBackupFeatureLabel => _isItalianUi
+      ? 'Cloud backup automatico'
+      : 'Automatic cloud backup';
+
+  String get _notIncludedLabel =>
+      _isItalianUi ? 'Non incluso' : 'Not included';
+
+  String get _includedLabel => _isItalianUi ? 'Incluso' : 'Included';
+
   Widget _buildPlanButton({
     required BuildContext context,
     required AppLocalizations l10n,
@@ -441,6 +454,13 @@ class _ProPageState extends State<ProPage> {
                           feature: l10n.wishlistFeature,
                           freeValue: '1',
                           plusValue: l10n.unlimitedLabel,
+                          highlightPlus: true,
+                          compact: compactComparison,
+                        ),
+                        _buildFeatureRow(
+                          feature: _cloudBackupFeatureLabel,
+                          freeValue: _notIncludedLabel,
+                          plusValue: _includedLabel,
                           highlightPlus: true,
                           compact: compactComparison,
                         ),

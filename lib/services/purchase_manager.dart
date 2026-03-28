@@ -210,8 +210,7 @@ class PurchaseManager extends ChangeNotifier {
       _ensurePurchaseStreamListener();
 
       if (_storeAvailable) {
-        await refreshCatalog();
-        await refreshEntitlementFromStore();
+        unawaited(_warmStoreState());
       }
     }
 
@@ -225,6 +224,18 @@ class PurchaseManager extends ChangeNotifier {
       },
     );
     notifyListeners();
+  }
+
+  Future<void> _warmStoreState() async {
+    try {
+      await refreshCatalog();
+      await refreshEntitlementFromStore();
+    } catch (error) {
+      await _logBillingEvent(
+        'store_warmup_exception',
+        details: {'error': error},
+      );
+    }
   }
 
   Future<void> refreshCatalog() async {

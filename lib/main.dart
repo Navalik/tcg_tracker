@@ -172,32 +172,34 @@ _AppVisualPalette _paletteForTheme(AppVisualTheme theme) {
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  if (Platform.isAndroid) {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarIconBrightness: Brightness.light,
-        systemNavigationBarIconBrightness: Brightness.light,
-      ),
-    );
-  }
-  if (Platform.isAndroid || Platform.isIOS) {
-    try {
-      await Firebase.initializeApp().timeout(const Duration(seconds: 8));
-      await _activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
-      _firebaseReady = true;
-      _googleSignInInitialization = _googleSignIn.initialize();
-      await AnalyticsService.instance.init().timeout(
-        const Duration(seconds: 5),
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+    if (Platform.isAndroid) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
       );
-      await _configureCrashReporting();
-    } catch (_) {
-      _firebaseReady = false;
     }
-  }
-  CloudBackupScheduler.instance.init();
-  runZonedGuarded(() => runApp(const TCGTracker()), (error, stackTrace) {
+    if (Platform.isAndroid || Platform.isIOS) {
+      try {
+        await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+        await _activateFirebaseAppCheck().timeout(const Duration(seconds: 8));
+        _firebaseReady = true;
+        _googleSignInInitialization = _googleSignIn.initialize();
+        await AnalyticsService.instance.init().timeout(
+          const Duration(seconds: 5),
+        );
+        await _configureCrashReporting();
+      } catch (_) {
+        _firebaseReady = false;
+      }
+    }
+    CloudBackupScheduler.instance.init();
+    runApp(const TCGTracker());
+  }, (error, stackTrace) {
     final reason = 'run_zoned_guarded';
     unawaited(
       _recordAppError(

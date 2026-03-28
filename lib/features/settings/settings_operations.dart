@@ -11,7 +11,9 @@ extension _SettingsOperationsSection on _SettingsPageState {
     }
     try {
       final eligibility = await CloudBackupService.instance.checkEligibility();
-      final snapshot = await CloudBackupService.instance.fetchLatestSnapshotInfo();
+      final snapshot = eligibility.canAccess
+          ? await CloudBackupService.instance.fetchLatestSnapshotInfo()
+          : null;
       final lastError = await AppSettings.loadCloudBackupLastError();
       if (!mounted) {
         return;
@@ -21,7 +23,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
         _cloudBackupPlus = eligibility.plus;
         _cloudBackupLastUploadedAt = snapshot?.updatedAt?.toLocal();
         _cloudBackupRemotePath = snapshot?.path;
-        _cloudBackupLastError = lastError;
+        _cloudBackupLastError = eligibility.canAccess ? lastError : null;
       });
     } catch (error) {
       await AppSettings.saveCloudBackupLastError(error.toString());

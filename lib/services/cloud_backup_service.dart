@@ -141,7 +141,7 @@ class CloudBackupService {
 
   Future<CloudBackupSnapshotInfo?> fetchLatestSnapshotInfo() async {
     final eligibility = await checkEligibility();
-    if (!eligibility.supported || !eligibility.signedIn) {
+    if (!eligibility.canAccess) {
       return null;
     }
     final user = FirebaseAuth.instance.currentUser!;
