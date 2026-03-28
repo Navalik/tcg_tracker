@@ -75,6 +75,28 @@ extension _SettingsOperationsSection on _SettingsPageState {
       return;
     }
     final diagnostics = await _buildIssueDiagnostics();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(l10n.reportIssueConsentTitle),
+          content: Text(l10n.reportIssueConsentBody),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(l10n.reportIssueConsentSend),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
     final sent = await _submitManualIssueReport(
       payload.$1,
       source: 'settings',

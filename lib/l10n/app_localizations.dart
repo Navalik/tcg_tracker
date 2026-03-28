@@ -1808,6 +1808,12 @@ abstract class AppLocalizations {
   /// **'Google User'**
   String get googleUserLabel;
 
+  /// No description provided for @accountSyncedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account synced'**
+  String get accountSyncedLabel;
+
   /// No description provided for @localProfileLabel.
   ///
   /// In en, this message translates to:
@@ -1819,6 +1825,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Signed in with Google'**
   String get signedInWithGoogle;
+
+  /// No description provided for @signedInWithEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with email'**
+  String get signedInWithEmail;
 
   /// No description provided for @profile.
   ///
@@ -2411,7 +2423,7 @@ abstract class AppLocalizations {
   /// No description provided for @authWelcomeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Sign in with Google to sync your account.'**
+  /// **'Sign in with Google or email to sync your account.'**
   String get authWelcomeSubtitle;
 
   /// No description provided for @authSignInWithGoogle.
@@ -2420,11 +2432,599 @@ abstract class AppLocalizations {
   /// **'Sign in with Google'**
   String get authSignInWithGoogle;
 
+  /// No description provided for @authContinueWithEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue with email'**
+  String get authContinueWithEmail;
+
+  /// No description provided for @authSignInWithEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with email'**
+  String get authSignInWithEmail;
+
+  /// No description provided for @authCreateAccountWithEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account with email'**
+  String get authCreateAccountWithEmail;
+
+  /// No description provided for @authSignInAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in'**
+  String get authSignInAction;
+
+  /// No description provided for @authCreateAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get authCreateAccountAction;
+
   /// No description provided for @authContinueAsGuest.
   ///
   /// In en, this message translates to:
   /// **'Continue as guest'**
   String get authContinueAsGuest;
+
+  /// No description provided for @authEmailAddressLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Email address'**
+  String get authEmailAddressLabel;
+
+  /// No description provided for @authEmailAddressHint.
+  ///
+  /// In en, this message translates to:
+  /// **'name@example.com'**
+  String get authEmailAddressHint;
+
+  /// No description provided for @authPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get authPasswordLabel;
+
+  /// No description provided for @authPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Min. 8 chars, 1 uppercase, 1 number, 1 symbol'**
+  String get authPasswordHint;
+
+  /// No description provided for @authConfirmPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get authConfirmPasswordLabel;
+
+  /// No description provided for @authConfirmPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat the same password'**
+  String get authConfirmPasswordHint;
+
+  /// No description provided for @authInvalidEmailAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid email address.'**
+  String get authInvalidEmailAddress;
+
+  /// No description provided for @authPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your password.'**
+  String get authPasswordRequired;
+
+  /// No description provided for @authPasswordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters.'**
+  String get authPasswordTooShort;
+
+  /// No description provided for @authPasswordNeedsUppercase.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least 1 uppercase letter.'**
+  String get authPasswordNeedsUppercase;
+
+  /// No description provided for @authPasswordNeedsNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least 1 number.'**
+  String get authPasswordNeedsNumber;
+
+  /// No description provided for @authPasswordNeedsSymbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least 1 symbol.'**
+  String get authPasswordNeedsSymbol;
+
+  /// No description provided for @authUnsupportedPasswordCharactersInline.
+  ///
+  /// In en, this message translates to:
+  /// **'Use only standard keyboard characters.'**
+  String get authUnsupportedPasswordCharactersInline;
+
+  /// No description provided for @authConfirmPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your password.'**
+  String get authConfirmPasswordRequired;
+
+  /// No description provided for @authPasswordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match.'**
+  String get authPasswordMismatch;
+
+  /// No description provided for @authInvalidPasswordRequirements.
+  ///
+  /// In en, this message translates to:
+  /// **'Use at least 8 characters, 1 uppercase letter, 1 number, and 1 symbol.'**
+  String get authInvalidPasswordRequirements;
+
+  /// No description provided for @authShowPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get authShowPassword;
+
+  /// No description provided for @authHidePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get authHidePassword;
+
+  /// No description provided for @authForgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get authForgotPassword;
+
+  /// No description provided for @authPasswordResetNeedsValidEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid email address first.'**
+  String get authPasswordResetNeedsValidEmail;
+
+  /// No description provided for @authPasswordResetConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset password?'**
+  String get authPasswordResetConfirmTitle;
+
+  /// No description provided for @authPasswordResetConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a password reset email to {email}?'**
+  String authPasswordResetConfirmBody(Object email);
+
+  /// No description provided for @authPasswordResetConfirmAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send email'**
+  String get authPasswordResetConfirmAction;
+
+  /// No description provided for @authPasswordResetStatusTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Password reset'**
+  String get authPasswordResetStatusTitle;
+
+  /// No description provided for @authPasswordResetSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending reset email...'**
+  String get authPasswordResetSending;
+
+  /// No description provided for @authPasswordResetSent.
+  ///
+  /// In en, this message translates to:
+  /// **'If that email is registered, a password reset email has been sent.'**
+  String get authPasswordResetSent;
+
+  /// No description provided for @authPasswordResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to send the password reset email. Try again.'**
+  String get authPasswordResetFailed;
+
+  /// No description provided for @authPasswordResetTooManyRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many reset attempts. Try again later.'**
+  String get authPasswordResetTooManyRequests;
+
+  /// No description provided for @authPasswordHelpTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Password rules'**
+  String get authPasswordHelpTitle;
+
+  /// No description provided for @authPasswordHelpBody.
+  ///
+  /// In en, this message translates to:
+  /// **'For account creation, use at least 8 characters, 1 uppercase letter, 1 number, and 1 ASCII symbol like !, @, #, or ?.'**
+  String get authPasswordHelpBody;
+
+  /// No description provided for @authChangePasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get authChangePasswordTitle;
+
+  /// No description provided for @authChangePasswordSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your current password, then choose a new one.'**
+  String get authChangePasswordSubtitle;
+
+  /// No description provided for @authChangePasswordAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change password'**
+  String get authChangePasswordAction;
+
+  /// No description provided for @authChangePasswordTileSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the password used for email sign-in.'**
+  String get authChangePasswordTileSubtitle;
+
+  /// No description provided for @authChangePasswordUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Password change is not available for this account.'**
+  String get authChangePasswordUnavailable;
+
+  /// No description provided for @authChangePasswordFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to change your password right now. Try again.'**
+  String get authChangePasswordFailedTryAgain;
+
+  /// No description provided for @authChangePasswordFailedWithCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Password change failed ({code}).'**
+  String authChangePasswordFailedWithCode(Object code);
+
+  /// No description provided for @authCurrentPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password'**
+  String get authCurrentPasswordLabel;
+
+  /// No description provided for @authCurrentPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your current password'**
+  String get authCurrentPasswordHint;
+
+  /// No description provided for @authCurrentPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your current password.'**
+  String get authCurrentPasswordRequired;
+
+  /// No description provided for @authCurrentPasswordIncorrect.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password is incorrect.'**
+  String get authCurrentPasswordIncorrect;
+
+  /// No description provided for @authChangeEmailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Change email'**
+  String get authChangeEmailTitle;
+
+  /// No description provided for @authChangeEmailSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your password, then choose the new email address for this account.'**
+  String get authChangeEmailSubtitle;
+
+  /// No description provided for @authChangeEmailAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Change email'**
+  String get authChangeEmailAction;
+
+  /// No description provided for @authChangeEmailTileSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a verification link to a new email address.'**
+  String get authChangeEmailTileSubtitle;
+
+  /// No description provided for @authChangeEmailUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Email change is not available for this account.'**
+  String get authChangeEmailUnavailable;
+
+  /// No description provided for @authChangeEmailVerificationSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification sent to the new email address. Open the email to complete the change.'**
+  String get authChangeEmailVerificationSent;
+
+  /// No description provided for @authChangeEmailFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to start the email change right now. Try again.'**
+  String get authChangeEmailFailedTryAgain;
+
+  /// No description provided for @authChangeEmailFailedWithCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Email change failed ({code}).'**
+  String authChangeEmailFailedWithCode(Object code);
+
+  /// No description provided for @authCurrentEmailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Current email'**
+  String get authCurrentEmailLabel;
+
+  /// No description provided for @authNewEmailLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New email'**
+  String get authNewEmailLabel;
+
+  /// No description provided for @authNewEmailHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter the new email address'**
+  String get authNewEmailHint;
+
+  /// No description provided for @authNewEmailMustDiffer.
+  ///
+  /// In en, this message translates to:
+  /// **'New email must be different from the current one.'**
+  String get authNewEmailMustDiffer;
+
+  /// No description provided for @authEmailVerifiedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Email verified'**
+  String get authEmailVerifiedStatus;
+
+  /// No description provided for @authEmailNotVerifiedStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Email not verified yet'**
+  String get authEmailNotVerifiedStatus;
+
+  /// No description provided for @authResendVerificationEmailTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend verification email'**
+  String get authResendVerificationEmailTitle;
+
+  /// No description provided for @authResendVerificationEmailSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a new verification link to this email address.'**
+  String get authResendVerificationEmailSubtitle;
+
+  /// No description provided for @authVerificationEmailResent.
+  ///
+  /// In en, this message translates to:
+  /// **'Verification email sent again. Check your inbox.'**
+  String get authVerificationEmailResent;
+
+  /// No description provided for @authVerificationEmailResendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to send the verification email right now. Try again.'**
+  String get authVerificationEmailResendFailed;
+
+  /// No description provided for @authAccountPageSignedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'This account session is no longer available. Return to settings to sign in again.'**
+  String get authAccountPageSignedOut;
+
+  /// No description provided for @authSignOutSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave this account and return to guest mode.'**
+  String get authSignOutSubtitle;
+
+  /// No description provided for @authDeleteAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get authDeleteAccountTitle;
+
+  /// No description provided for @authDeleteAccountAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete account'**
+  String get authDeleteAccountAction;
+
+  /// No description provided for @authDeleteAccountTileSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently remove this Firebase account and return to guest mode.'**
+  String get authDeleteAccountTileSubtitle;
+
+  /// No description provided for @authDeleteAccountBodyPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'This permanently deletes your Firebase account. Your local data on this device will remain. Enter your current password in the next step to confirm.'**
+  String get authDeleteAccountBodyPassword;
+
+  /// No description provided for @authDeleteAccountBodyProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'This permanently deletes your Firebase account. Your local data on this device will remain. You will need to confirm again with your sign-in provider.'**
+  String get authDeleteAccountBodyProvider;
+
+  /// No description provided for @authDeleteAccountPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm account deletion'**
+  String get authDeleteAccountPasswordTitle;
+
+  /// No description provided for @authDeleteAccountUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion is not available for this account.'**
+  String get authDeleteAccountUnavailable;
+
+  /// No description provided for @authDeleteAccountSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deleted. You are now back in guest mode.'**
+  String get authDeleteAccountSuccess;
+
+  /// No description provided for @authDeleteAccountFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to delete this account right now. Try again.'**
+  String get authDeleteAccountFailedTryAgain;
+
+  /// No description provided for @authDeleteAccountFailedWithCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Account deletion failed ({code}).'**
+  String authDeleteAccountFailedWithCode(Object code);
+
+  /// No description provided for @authNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New password'**
+  String get authNewPasswordLabel;
+
+  /// No description provided for @authNewPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a new password'**
+  String get authNewPasswordHint;
+
+  /// No description provided for @authNewPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a new password.'**
+  String get authNewPasswordRequired;
+
+  /// No description provided for @authNewPasswordMustDiffer.
+  ///
+  /// In en, this message translates to:
+  /// **'New password must be different from the current one.'**
+  String get authNewPasswordMustDiffer;
+
+  /// No description provided for @authConfirmNewPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new password'**
+  String get authConfirmNewPasswordLabel;
+
+  /// No description provided for @authConfirmNewPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-enter the new password'**
+  String get authConfirmNewPasswordHint;
+
+  /// No description provided for @authPasswordChangedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Password changed successfully.'**
+  String get authPasswordChangedSuccess;
+
+  /// No description provided for @authRequiresRecentLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Please sign in again before changing your password.'**
+  String get authRequiresRecentLogin;
+
+  /// No description provided for @authUnsupportedPasswordCharactersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported password characters'**
+  String get authUnsupportedPasswordCharactersTitle;
+
+  /// No description provided for @authUnsupportedPasswordCharactersBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Use only standard keyboard characters for passwords. Unsupported characters include accented letters, emoji, and symbols like the euro sign.'**
+  String get authUnsupportedPasswordCharactersBody;
+
+  /// No description provided for @authEmailPasswordPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your email and password to sign in or create your account.'**
+  String get authEmailPasswordPrompt;
+
+  /// No description provided for @authEmailSignedInSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with email.'**
+  String get authEmailSignedInSuccess;
+
+  /// No description provided for @authAccountCreatedSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Account created successfully.'**
+  String get authAccountCreatedSuccess;
+
+  /// No description provided for @authAccountCreatedVerificationSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Account created. Check your email to verify your address.'**
+  String get authAccountCreatedVerificationSent;
+
+  /// No description provided for @authEmailLinkedToGuestSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Email linked to your guest account.'**
+  String get authEmailLinkedToGuestSuccess;
+
+  /// No description provided for @authEmailLinkedToGuestVerificationSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Email linked to your guest account. Check your inbox to verify your address.'**
+  String get authEmailLinkedToGuestVerificationSent;
+
+  /// No description provided for @authWeakPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password is too weak. Use at least 8 characters, 1 uppercase letter, 1 number, and 1 symbol.'**
+  String get authWeakPassword;
+
+  /// No description provided for @authEmailAlreadyInUse.
+  ///
+  /// In en, this message translates to:
+  /// **'This email is already in use.'**
+  String get authEmailAlreadyInUse;
+
+  /// No description provided for @authInvalidEmailPasswordCredentials.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid email or password.'**
+  String get authInvalidEmailPasswordCredentials;
+
+  /// No description provided for @authEmailPasswordFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Email sign-in failed. Try again.'**
+  String get authEmailPasswordFailedTryAgain;
+
+  /// No description provided for @authEmailPasswordFailedWithCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Email sign-in failed ({code}).'**
+  String authEmailPasswordFailedWithCode(Object code);
+
+  /// No description provided for @authSessionExpiredSignedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is no longer available on Firebase. You have been signed out.'**
+  String get authSessionExpiredSignedOut;
 
   /// No description provided for @backupTitle.
   ///
@@ -3013,6 +3613,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Describe what happened and how to reproduce it.'**
   String get issueDescribeHint;
+
+  /// No description provided for @reportIssueConsentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send diagnostic report?'**
+  String get reportIssueConsentTitle;
+
+  /// No description provided for @reportIssueConsentBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your message and basic technical diagnostics will be sent to BinderVault through Firebase Crashlytics to help investigate the issue. Do not include sensitive personal data.'**
+  String get reportIssueConsentBody;
+
+  /// No description provided for @reportIssueConsentSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send report'**
+  String get reportIssueConsentSend;
 
   /// No description provided for @sendLabel.
   ///

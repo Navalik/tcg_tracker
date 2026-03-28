@@ -1,5 +1,7 @@
 part of 'package:tcg_tracker/main.dart';
 
+enum _ScannedCardSearchOutcome { added, retryScan, cancelled }
+
 class CollectionHomePage extends StatefulWidget {
   const CollectionHomePage({super.key});
 
@@ -4543,71 +4545,174 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
       final navigator = Navigator.of(context);
       final recognizedText = await navigator.push<String>(
-        MaterialPageRoute(builder: (_) => const _CardScannerPage()),
+        PageRouteBuilder<String>(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              const _CardScannerPage(),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
       );
       if (!mounted || recognizedText == null) {
         return;
       }
-      final consumed = await _consumeFreeScanIfNeeded();
-      if (!consumed || !mounted) {
-        return;
-      }
-      final setCodes = await _fetchKnownSetCodes();
-      if (!mounted) {
-        return;
-      }
-      final ocrSeed = _buildOcrSearchSeed(
-        recognizedText,
-        knownSetCodes: setCodes,
+      final l10n = AppLocalizations.of(context)!;
+      final hideProgress = _showScanProgressOverlay(
+        l10n.nameRecognizedOpeningSearchStatus,
       );
-      if (ocrSeed == null) {
-        showAppSnackBar(
-          context,
-          'No card text recognized. Try better light and focus.',
-        );
-        return;
-      }
-      final refinedSeed = await _refineOcrSeed(ocrSeed);
-      if (!mounted) {
-        return;
-      }
-      final resolved = await _resolveSeedWithPrintingPicker(refinedSeed);
-      if (!mounted) {
-        return;
-      }
-      if (resolved.pickedCard != null) {
-        final action = await _showScannedCardPreview(resolved.pickedCard!);
+      await _yieldToUi();
+      try {
+        final consumed = await _consumeFreeScanIfNeeded();
+        if (!consumed || !mounted) {
+          return;
+        }
+        final setCodes = await _fetchKnownSetCodes();
         if (!mounted) {
           return;
         }
-        if (action == _ScanPreviewAction.retry) {
+        final ocrSeed = _buildOcrSearchSeed(
+          recognizedText,
+          knownSetCodes: setCodes,
+        );
+        if (ocrSeed == null) {
+          showAppSnackBar(
+            context,
+            'No card text recognized. Try better light and focus.',
+          );
+          return;
+        }
+        final refinedSeed = await _refineOcrSeed(ocrSeed);
+        if (!mounted) {
+          return;
+        }
+        var progressHidden = false;
+        Future<void> hideProgressBeforeUi() async {
+          if (progressHidden) {
+            return;
+          }
+          progressHidden = true;
+          hideProgress();
+          await _yieldToUi();
+        }
+        final resolved = await _resolveSeedWithPrintingPicker(
+          refinedSeed,
+          onBeforePresentingUi: hideProgressBeforeUi,
+        );
+        if (!mounted) {
+          return;
+        }
+        if (resolved.pickedCard != null) {
+          final action = await _showScannedCardPreview(resolved.pickedCard!);
+          if (!mounted) {
+            return;
+          }
+          if (action == _ScanPreviewAction.retry) {
+            continue;
+          }
+          if (action != _ScanPreviewAction.add) {
+            return;
+          }
+          final added = await _addCardToAllCards(
+            resolved.pickedCard!.id,
+            printingId: resolved.pickedCard!.printingId,
+            foil: resolved.seed.isFoil,
+          );
+          if (!mounted || !added) {
+            return;
+          }
+          keepScanning = true;
           continue;
         }
-        if (action != _ScanPreviewAction.add) {
-          return;
-        }
-        final added = await _addCardToAllCards(
-          resolved.pickedCard!.id,
-          printingId: resolved.pickedCard!.printingId,
+        final searchOutcome = await _openScannedCardSearch(
+          query: resolved.seed.query,
+          initialSetCode: resolved.seed.setCode,
+          initialCollectorNumber: resolved.seed.collectorNumber,
           foil: resolved.seed.isFoil,
+          onSheetPresented: hideProgressBeforeUi,
         );
-        if (!mounted || !added) {
+        if (!mounted) {
           return;
         }
-        keepScanning = await _askScanAnotherCard();
-        continue;
+        if (searchOutcome == _ScannedCardSearchOutcome.retryScan) {
+          keepScanning = true;
+          continue;
+        }
+        if (searchOutcome != _ScannedCardSearchOutcome.added) {
+          return;
+        }
+        keepScanning = true;
+      } finally {
+        hideProgress();
       }
-      final added = await _openScannedCardSearch(
-        query: resolved.seed.query,
-        initialSetCode: resolved.seed.setCode,
-        initialCollectorNumber: resolved.seed.collectorNumber,
-        foil: resolved.seed.isFoil,
-      );
-      if (!mounted || !added) {
+    }
+  }
+
+  Future<void> _yieldToUi() async {
+    await WidgetsBinding.instance.endOfFrame;
+  }
+
+  VoidCallback _showScanProgressOverlay(String message) {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    late final OverlayEntry entry;
+    var removed = false;
+    entry = OverlayEntry(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return IgnorePointer(
+          ignoring: true,
+          child: Stack(
+            children: [
+              Center(
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 260),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 18,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CircularProgressIndicator(strokeWidth: 2.5),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          message,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    overlay.insert(entry);
+    return () {
+      if (removed) {
         return;
       }
-      keepScanning = await _askScanAnotherCard();
-    }
+      removed = true;
+      entry.remove();
+    };
   }
 
   Future<bool> _canStartScanSession() async {
@@ -4645,7 +4750,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(
-    _OcrSearchSeed seed,
+    _OcrSearchSeed seed, {
+    Future<void> Function()? onBeforePresentingUi,
+  }
   ) async {
     final cardName = seed.cardName?.trim();
     if (cardName == null || cardName.isEmpty) {
@@ -4664,6 +4771,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         searchRepository: appRepositories.search,
       );
       if (!mounted || resolution.candidates.isEmpty) {
+        return _ResolvedScanSelection(seed: seed);
+      }
+      if (onBeforePresentingUi != null) {
+        await onBeforePresentingUi();
+      }
+      if (!mounted) {
         return _ResolvedScanSelection(seed: seed);
       }
       final picked = await _pickCardPrintingForName(
@@ -4744,6 +4857,25 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         )
         .map(_printingKeyForCard)
         .toSet();
+    if (localBeforeSyncKeys.isEmpty) {
+      unawaited(
+        _syncOnlinePrintsByName(
+          cardName,
+          timeBudget: const Duration(seconds: 2),
+          preferredLanguages: fallbackScanLanguages,
+        ),
+      );
+      return _ResolvedScanSelection(
+        seed: _OcrSearchSeed(
+          query: cardName,
+          cardName: cardName,
+          setCode: seed.setCode,
+          collectorNumber: seed.collectorNumber,
+          scannerLanguageCode: seed.scannerLanguageCode,
+          isFoil: seed.isFoil,
+        ),
+      );
+    }
     // Keep scan flow snappy: avoid long blocking sync for cards with many printings.
     if (localBeforeSyncKeys.length < 4) {
       await _syncOnlinePrintsByName(
@@ -4751,6 +4883,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         timeBudget: const Duration(seconds: 2),
         preferredLanguages: fallbackScanLanguages,
       );
+    }
+    if (!mounted) {
+      return _ResolvedScanSelection(seed: seed);
+    }
+    if (onBeforePresentingUi != null) {
+      await onBeforePresentingUi();
     }
     if (!mounted) {
       return _ResolvedScanSelection(seed: seed);
@@ -4770,6 +4908,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         preferredLanguages: fallbackScanLanguages,
       );
       if (mounted) {
+        if (onBeforePresentingUi != null) {
+          await onBeforePresentingUi();
+        }
+        if (!mounted) {
+          return _ResolvedScanSelection(seed: seed);
+        }
         picked = await _pickCardPrintingForName(
           context,
           cardName,
@@ -4790,6 +4934,12 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         preferredCollectorNumber: seed.collectorNumber,
       );
       if (onlineByNameAndSet != null && mounted) {
+        if (onBeforePresentingUi != null) {
+          await onBeforePresentingUi();
+        }
+        if (!mounted) {
+          return _ResolvedScanSelection(seed: seed);
+        }
         picked = await _pickCardPrintingForName(
           context,
           cardName,
@@ -5931,29 +6081,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     return RegExp(r'^\d$').hasMatch(value.trim());
   }
 
-  Future<bool> _openScannedCardSearch({
+  Future<_ScannedCardSearchOutcome> _openScannedCardSearch({
     required String query,
     String? initialSetCode,
     String? initialCollectorNumber,
     bool foil = false,
+    Future<void> Function()? onSheetPresented,
   }) async {
-    CollectionInfo? allCards = _findAllCardsCollection();
-    if (allCards == null) {
-      final allCardsId = await ScryfallDatabase.instance
-          .ensureAllCardsCollectionId();
-      allCards = CollectionInfo(
-        id: allCardsId,
-        name: _allCardsCollectionName,
-        cardCount: _totalCardCount,
-        type: CollectionType.all,
-        filter: null,
-      );
-      await _loadCollections();
-      if (!mounted) {
-        return false;
-      }
-    }
-    final selection = await showModalBottomSheet<_CardSearchSelection>(
+    final selection = await showModalBottomSheet<Object?>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -5961,10 +6096,24 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         initialQuery: query,
         initialSetCode: initialSetCode,
         initialCollectorNumber: initialCollectorNumber,
+        showRetryScanOnNoResults: true,
+        onFirstFrameRendered: onSheetPresented,
       ),
     );
-    if (!mounted || selection == null) {
-      return false;
+    if (!mounted) {
+      return _ScannedCardSearchOutcome.cancelled;
+    }
+    if (selection == _CardSearchSheetDismissAction.retryScan) {
+      return _ScannedCardSearchOutcome.retryScan;
+    }
+    if (selection is! _CardSearchSelection) {
+      return _ScannedCardSearchOutcome.cancelled;
+    }
+
+    int? allCardsId;
+    if (foil) {
+      allCardsId = _findAllCardsCollection()?.id ??
+          await ScryfallDatabase.instance.ensureAllCardsCollectionId();
     }
 
     if (selection.isBulk) {
@@ -5974,9 +6123,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           printingId: card.printingId,
           deltaQty: 1,
         );
-        if (foil) {
+        if (foil && allCardsId != null) {
           await ScryfallDatabase.instance.updateCollectionCard(
-            allCards.id,
+            allCardsId,
             card.id,
             printingId: card.printingId,
             foil: true,
@@ -5990,9 +6139,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         printingId: selectedCard.printingId,
         deltaQty: 1,
       );
-      if (foil) {
+      if (foil && allCardsId != null) {
         await ScryfallDatabase.instance.updateCollectionCard(
-          allCards.id,
+          allCardsId,
           selectedCard.id,
           printingId: selectedCard.printingId,
           foil: true,
@@ -6000,36 +6149,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     }
     if (!mounted) {
-      return false;
+      return _ScannedCardSearchOutcome.cancelled;
     }
     showAppSnackBar(
       context,
       AppLocalizations.of(context)!.addedCards(selection.count),
     );
     await _loadCollections();
-    return true;
-  }
-
-  Future<bool> _askScanAnotherCard() async {
-    final l10n = AppLocalizations.of(context)!;
-    final again = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.cardAddedTitle),
-        content: Text(l10n.scanAnotherCardQuestion),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(l10n.no),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(l10n.yes),
-          ),
-        ],
-      ),
-    );
-    return again ?? false;
+    return _ScannedCardSearchOutcome.added;
   }
 
   Future<void> _openAddCardsForAllCards(BuildContext context) async {

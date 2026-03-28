@@ -26,6 +26,11 @@ class PokemonBulkService {
   static const String _prefsKeyInstalledAt = 'pokemon_dataset_installed_at';
   static const String _prefsKeyManifestFingerprint =
       'pokemon_dataset_manifest_fingerprint';
+  static const String _prefsKeyInstalledSourceRepo =
+      'pokemon_dataset_source_repo';
+  static const String _prefsKeyInstalledSourceRef = 'pokemon_dataset_source_ref';
+  static const String _prefsKeyInstalledSourceCommit =
+      'pokemon_dataset_source_commit';
   static const String _prefsKeyInstalledProfile =
       'pokemon_dataset_profile_installed';
   static const String _prefsKeyInstalledLanguages =
@@ -71,6 +76,9 @@ class PokemonBulkService {
     final prefs = await SharedPreferences.getInstance();
     final installedVersion = prefs.getString(_prefsKeyInstalledVersion);
     final installedFingerprint = prefs.getString(_prefsKeyManifestFingerprint);
+    final installedSourceRepo = prefs.getString(_prefsKeyInstalledSourceRepo);
+    final installedSourceRef = prefs.getString(_prefsKeyInstalledSourceRef);
+    final installedSourceCommit = prefs.getString(_prefsKeyInstalledSourceCommit);
     final selectedLanguages = await _selectedPokemonLanguageSignature();
     final installedProfile = prefs.getString(_prefsKeyInstalledProfile);
     final installedLanguages = prefs.getString(_prefsKeyInstalledLanguages);
@@ -86,12 +94,16 @@ class PokemonBulkService {
         updateAvailable: false,
       );
     }
-    final remoteFingerprint = await _fetchHostedManifestFingerprint();
+    final remoteManifest = await _fetchHostedManifestInfo();
+    final remoteFingerprint = remoteManifest?.fingerprint;
     if (remoteFingerprint == null || remoteFingerprint.isEmpty) {
       return PokemonDatasetUpdateStatus(
         installed: true,
         updateAvailable: false,
         installedFingerprint: installedFingerprint,
+        installedSourceRepo: installedSourceRepo,
+        installedSourceRef: installedSourceRef,
+        installedSourceCommit: installedSourceCommit,
       );
     }
     final updateAvailable =
@@ -103,6 +115,12 @@ class PokemonBulkService {
       updateAvailable: updateAvailable,
       installedFingerprint: installedFingerprint,
       remoteFingerprint: remoteFingerprint,
+      installedSourceRepo: installedSourceRepo,
+      installedSourceRef: installedSourceRef,
+      installedSourceCommit: installedSourceCommit,
+      remoteSourceRepo: remoteManifest?.sourceRepo,
+      remoteSourceRef: remoteManifest?.sourceRef,
+      remoteSourceCommit: remoteManifest?.sourceCommit,
     );
   }
 
@@ -123,6 +141,9 @@ class PokemonBulkService {
     await prefs.remove(_prefsKeyInstalledSource);
     await prefs.remove(_prefsKeyInstalledAt);
     await prefs.remove(_prefsKeyManifestFingerprint);
+    await prefs.remove(_prefsKeyInstalledSourceRepo);
+    await prefs.remove(_prefsKeyInstalledSourceRef);
+    await prefs.remove(_prefsKeyInstalledSourceCommit);
     await prefs.remove(_prefsKeyInstalledProfile);
     await prefs.remove(_prefsKeyInstalledLanguages);
     await _clearHostedBundleDiagnostic();
@@ -226,9 +247,18 @@ class PokemonBulkService {
       _prefsKeyInstalledLanguages,
       selectedLanguageSignature,
     );
-    final remoteFingerprint = await _fetchHostedManifestFingerprint();
+    final remoteManifest = await _fetchHostedManifestInfo();
+    final remoteFingerprint = remoteManifest?.fingerprint;
     if (remoteFingerprint != null && remoteFingerprint.isNotEmpty) {
       await prefs.setString(_prefsKeyManifestFingerprint, remoteFingerprint);
+    }
+    if (remoteManifest != null) {
+      await _saveInstalledSourceMetadata(
+        prefs,
+        repo: remoteManifest.sourceRepo,
+        ref: remoteManifest.sourceRef,
+        commit: remoteManifest.sourceCommit,
+      );
     }
     await _clearHostedBundleDiagnostic();
     finalizeStopwatch.stop();
@@ -880,6 +910,9 @@ class PokemonBulkService {
       'installed_manifest_fingerprint': prefs.getString(
         _prefsKeyManifestFingerprint,
       ),
+      'installed_source_repo': prefs.getString(_prefsKeyInstalledSourceRepo),
+      'installed_source_ref': prefs.getString(_prefsKeyInstalledSourceRef),
+      'installed_source_commit': prefs.getString(_prefsKeyInstalledSourceCommit),
       'expected_bundle_compatibility_version':
           _hostedBundleCompatibilityVersion,
     };
@@ -2103,7 +2136,27 @@ class PokemonBulkService {
     throw const HttpException('pokemon_api_failed');
   }
 
-  Future<String?> _fetchHostedManifestFingerprint() async {
+  Future<void> _saveInstalledSourceMetadata(
+    SharedPreferences prefs, {
+    String? repo,
+    String? ref,
+    String? commit,
+  }) async {
+    Future<void> writeOrRemove(String key, String? value) async {
+      final normalized = value?.trim();
+      if (normalized == null || normalized.isEmpty) {
+        await prefs.remove(key);
+      } else {
+        await prefs.setString(key, normalized);
+      }
+    }
+
+    await writeOrRemove(_prefsKeyInstalledSourceRepo, repo);
+    await writeOrRemove(_prefsKeyInstalledSourceRef, ref);
+    await writeOrRemove(_prefsKeyInstalledSourceCommit, commit);
+  }
+
+  Future<_HostedBundleManifestInfo?> _fetchHostedManifestInfo() async {
     final client = http.Client();
     try {
       final payload = await _fetchJsonWithRetry(
@@ -2116,7 +2169,24 @@ class PokemonBulkService {
       for (final unit in payload.codeUnits) {
         hash = ((hash * 31) + unit) & 0x7fffffff;
       }
-      return 'hosted:$hash';
+      final parsed = jsonDecode(payload);
+      String? sourceRepo;
+      String? sourceRef;
+      String? sourceCommit;
+      if (parsed is Map<String, dynamic>) {
+        final source = parsed['source'];
+        if (source is Map<String, dynamic>) {
+          sourceRepo = (source['repo'] as String?)?.trim();
+          sourceRef = (source['ref'] as String?)?.trim();
+          sourceCommit = (source['commit'] as String?)?.trim();
+        }
+      }
+      return _HostedBundleManifestInfo(
+        fingerprint: 'hosted:$hash',
+        sourceRepo: sourceRepo,
+        sourceRef: sourceRef,
+        sourceCommit: sourceCommit,
+      );
     } catch (_) {
       return null;
     } finally {
@@ -2188,12 +2258,38 @@ class PokemonDatasetUpdateStatus {
     required this.updateAvailable,
     this.installedFingerprint,
     this.remoteFingerprint,
+    this.installedSourceRepo,
+    this.installedSourceRef,
+    this.installedSourceCommit,
+    this.remoteSourceRepo,
+    this.remoteSourceRef,
+    this.remoteSourceCommit,
   });
 
   final bool installed;
   final bool updateAvailable;
   final String? installedFingerprint;
   final String? remoteFingerprint;
+  final String? installedSourceRepo;
+  final String? installedSourceRef;
+  final String? installedSourceCommit;
+  final String? remoteSourceRepo;
+  final String? remoteSourceRef;
+  final String? remoteSourceCommit;
+}
+
+class _HostedBundleManifestInfo {
+  const _HostedBundleManifestInfo({
+    required this.fingerprint,
+    this.sourceRepo,
+    this.sourceRef,
+    this.sourceCommit,
+  });
+
+  final String fingerprint;
+  final String? sourceRepo;
+  final String? sourceRef;
+  final String? sourceCommit;
 }
 
 class _CanonicalSnapshotPayload {

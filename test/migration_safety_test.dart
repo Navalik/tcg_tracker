@@ -149,7 +149,7 @@ void main() {
             )
             ''').first['total']
                 as int;
-        legacyDb.dispose();
+        legacyDb.close();
 
         final database = AppDatabase.forTesting(NativeDatabase(File(dbPath)));
         addTearDown(() async {
@@ -281,6 +281,6 @@ void _seedLegacyV8Database(String dbPath) {
       (7, ' card_f ', 2, 1, 0);
     """);
   } finally {
-    db.dispose();
+    db.close();
   }
 }

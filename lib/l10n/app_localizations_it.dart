@@ -991,10 +991,16 @@ class AppLocalizationsIt extends AppLocalizations {
   String get googleUserLabel => 'Utente Google';
 
   @override
+  String get accountSyncedLabel => 'Account sincronizzato';
+
+  @override
   String get localProfileLabel => 'Profilo locale';
 
   @override
   String get signedInWithGoogle => 'Accesso con Google';
+
+  @override
+  String get signedInWithEmail => 'Accesso con email';
 
   @override
   String get profile => 'Profilo';
@@ -1328,13 +1334,362 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get authWelcomeSubtitle =>
-      'Accedi con Google per sincronizzare il tuo account.';
+      'Accedi con Google o con email per sincronizzare il tuo account.';
 
   @override
   String get authSignInWithGoogle => 'Accedi con Google';
 
   @override
+  String get authContinueWithEmail => 'Continua con email';
+
+  @override
+  String get authSignInWithEmail => 'Accedi con email';
+
+  @override
+  String get authCreateAccountWithEmail => 'Crea account con email';
+
+  @override
+  String get authSignInAction => 'Accedi';
+
+  @override
+  String get authCreateAccountAction => 'Crea account';
+
+  @override
   String get authContinueAsGuest => 'Continua come ospite';
+
+  @override
+  String get authEmailAddressLabel => 'Indirizzo email';
+
+  @override
+  String get authEmailAddressHint => 'nome@esempio.com';
+
+  @override
+  String get authPasswordLabel => 'Password';
+
+  @override
+  String get authPasswordHint =>
+      'Min. 8 caratteri, 1 maiuscola, 1 numero, 1 simbolo';
+
+  @override
+  String get authConfirmPasswordLabel => 'Conferma password';
+
+  @override
+  String get authConfirmPasswordHint => 'Ripeti la stessa password';
+
+  @override
+  String get authInvalidEmailAddress => 'Inserisci un indirizzo email valido.';
+
+  @override
+  String get authPasswordRequired => 'Inserisci la password.';
+
+  @override
+  String get authPasswordTooShort =>
+      'La password deve avere almeno 8 caratteri.';
+
+  @override
+  String get authPasswordNeedsUppercase =>
+      'Aggiungi almeno 1 lettera maiuscola.';
+
+  @override
+  String get authPasswordNeedsNumber => 'Aggiungi almeno 1 numero.';
+
+  @override
+  String get authPasswordNeedsSymbol => 'Aggiungi almeno 1 simbolo.';
+
+  @override
+  String get authUnsupportedPasswordCharactersInline =>
+      'Usa solo caratteri standard da tastiera.';
+
+  @override
+  String get authConfirmPasswordRequired => 'Conferma la password.';
+
+  @override
+  String get authPasswordMismatch => 'Le password non corrispondono.';
+
+  @override
+  String get authInvalidPasswordRequirements =>
+      'Usa almeno 8 caratteri, 1 lettera maiuscola, 1 numero e 1 simbolo.';
+
+  @override
+  String get authShowPassword => 'Mostra password';
+
+  @override
+  String get authHidePassword => 'Nascondi password';
+
+  @override
+  String get authForgotPassword => 'Password dimenticata?';
+
+  @override
+  String get authPasswordResetNeedsValidEmail =>
+      'Inserisci prima un indirizzo email valido.';
+
+  @override
+  String get authPasswordResetConfirmTitle => 'Reimpostare la password?';
+
+  @override
+  String authPasswordResetConfirmBody(Object email) {
+    return 'Inviare un\'email per reimpostare la password a $email?';
+  }
+
+  @override
+  String get authPasswordResetConfirmAction => 'Invia email';
+
+  @override
+  String get authPasswordResetStatusTitle => 'Reset password';
+
+  @override
+  String get authPasswordResetSending => 'Invio email di reset...';
+
+  @override
+  String get authPasswordResetSent =>
+      'Se questa email e registrata, e stata inviata un\'email per reimpostare la password.';
+
+  @override
+  String get authPasswordResetFailed =>
+      'Impossibile inviare l\'email di reset password. Riprova.';
+
+  @override
+  String get authPasswordResetTooManyRequests =>
+      'Troppi tentativi di reset. Riprova piu tardi.';
+
+  @override
+  String get authPasswordHelpTitle => 'Regole password';
+
+  @override
+  String get authPasswordHelpBody =>
+      'Per creare l\'account usa almeno 8 caratteri, 1 lettera maiuscola, 1 numero e 1 simbolo ASCII come !, @, # o ?.';
+
+  @override
+  String get authChangePasswordTitle => 'Cambia password';
+
+  @override
+  String get authChangePasswordSubtitle =>
+      'Conferma la password attuale, poi scegli quella nuova.';
+
+  @override
+  String get authChangePasswordAction => 'Cambia password';
+
+  @override
+  String get authChangePasswordTileSubtitle =>
+      'Aggiorna la password usata per l\'accesso con email.';
+
+  @override
+  String get authChangePasswordUnavailable =>
+      'Il cambio password non e disponibile per questo account.';
+
+  @override
+  String get authChangePasswordFailedTryAgain =>
+      'Impossibile cambiare la password ora. Riprova.';
+
+  @override
+  String authChangePasswordFailedWithCode(Object code) {
+    return 'Cambio password fallito ($code).';
+  }
+
+  @override
+  String get authCurrentPasswordLabel => 'Password attuale';
+
+  @override
+  String get authCurrentPasswordHint => 'Inserisci la password attuale';
+
+  @override
+  String get authCurrentPasswordRequired => 'Inserisci la password attuale.';
+
+  @override
+  String get authCurrentPasswordIncorrect =>
+      'La password attuale non e corretta.';
+
+  @override
+  String get authChangeEmailTitle => 'Cambia email';
+
+  @override
+  String get authChangeEmailSubtitle =>
+      'Conferma la password, poi scegli il nuovo indirizzo email per questo account.';
+
+  @override
+  String get authChangeEmailAction => 'Cambia email';
+
+  @override
+  String get authChangeEmailTileSubtitle =>
+      'Invia un link di verifica a un nuovo indirizzo email.';
+
+  @override
+  String get authChangeEmailUnavailable =>
+      'Il cambio email non e disponibile per questo account.';
+
+  @override
+  String get authChangeEmailVerificationSent =>
+      'Verifica inviata al nuovo indirizzo email. Apri l\'email per completare il cambio.';
+
+  @override
+  String get authChangeEmailFailedTryAgain =>
+      'Impossibile avviare il cambio email ora. Riprova.';
+
+  @override
+  String authChangeEmailFailedWithCode(Object code) {
+    return 'Cambio email fallito ($code).';
+  }
+
+  @override
+  String get authCurrentEmailLabel => 'Email attuale';
+
+  @override
+  String get authNewEmailLabel => 'Nuova email';
+
+  @override
+  String get authNewEmailHint => 'Inserisci il nuovo indirizzo email';
+
+  @override
+  String get authNewEmailMustDiffer =>
+      'La nuova email deve essere diversa da quella attuale.';
+
+  @override
+  String get authEmailVerifiedStatus => 'Email verificata';
+
+  @override
+  String get authEmailNotVerifiedStatus => 'Email non ancora verificata';
+
+  @override
+  String get authResendVerificationEmailTitle =>
+      'Invia di nuovo email di verifica';
+
+  @override
+  String get authResendVerificationEmailSubtitle =>
+      'Invia un nuovo link di verifica a questo indirizzo email.';
+
+  @override
+  String get authVerificationEmailResent =>
+      'Email di verifica inviata di nuovo. Controlla la tua casella.';
+
+  @override
+  String get authVerificationEmailResendFailed =>
+      'Impossibile inviare l\'email di verifica ora. Riprova.';
+
+  @override
+  String get authAccountPageSignedOut =>
+      'Questa sessione account non e piu disponibile. Torna alle impostazioni per accedere di nuovo.';
+
+  @override
+  String get authSignOutSubtitle =>
+      'Esci da questo account e torna in modalita ospite.';
+
+  @override
+  String get authDeleteAccountTitle => 'Elimina account';
+
+  @override
+  String get authDeleteAccountAction => 'Elimina account';
+
+  @override
+  String get authDeleteAccountTileSubtitle =>
+      'Rimuovi definitivamente questo account Firebase e torna in modalita ospite.';
+
+  @override
+  String get authDeleteAccountBodyPassword =>
+      'Questo elimina definitivamente il tuo account Firebase. I dati locali su questo dispositivo resteranno. Nel passaggio successivo dovrai inserire la password attuale per confermare.';
+
+  @override
+  String get authDeleteAccountBodyProvider =>
+      'Questo elimina definitivamente il tuo account Firebase. I dati locali su questo dispositivo resteranno. Dovrai confermare di nuovo con il provider di accesso.';
+
+  @override
+  String get authDeleteAccountPasswordTitle => 'Conferma eliminazione account';
+
+  @override
+  String get authDeleteAccountUnavailable =>
+      'L\'eliminazione account non e disponibile per questo account.';
+
+  @override
+  String get authDeleteAccountSuccess =>
+      'Account eliminato. Ora sei tornato in modalita ospite.';
+
+  @override
+  String get authDeleteAccountFailedTryAgain =>
+      'Impossibile eliminare questo account ora. Riprova.';
+
+  @override
+  String authDeleteAccountFailedWithCode(Object code) {
+    return 'Eliminazione account fallita ($code).';
+  }
+
+  @override
+  String get authNewPasswordLabel => 'Nuova password';
+
+  @override
+  String get authNewPasswordHint => 'Scegli una nuova password';
+
+  @override
+  String get authNewPasswordRequired => 'Inserisci una nuova password.';
+
+  @override
+  String get authNewPasswordMustDiffer =>
+      'La nuova password deve essere diversa da quella attuale.';
+
+  @override
+  String get authConfirmNewPasswordLabel => 'Conferma nuova password';
+
+  @override
+  String get authConfirmNewPasswordHint => 'Reinserisci la nuova password';
+
+  @override
+  String get authPasswordChangedSuccess => 'Password cambiata con successo.';
+
+  @override
+  String get authRequiresRecentLogin =>
+      'Effettua di nuovo l\'accesso prima di cambiare la password.';
+
+  @override
+  String get authUnsupportedPasswordCharactersTitle =>
+      'Caratteri password non supportati';
+
+  @override
+  String get authUnsupportedPasswordCharactersBody =>
+      'Usa solo caratteri standard da tastiera per la password. Non sono supportati caratteri accentati, emoji e simboli come il segno euro.';
+
+  @override
+  String get authEmailPasswordPrompt =>
+      'Usa email e password per accedere o creare il tuo account.';
+
+  @override
+  String get authEmailSignedInSuccess => 'Accesso con email completato.';
+
+  @override
+  String get authAccountCreatedSuccess => 'Account creato con successo.';
+
+  @override
+  String get authAccountCreatedVerificationSent =>
+      'Account creato. Controlla la tua email per verificare l\'indirizzo.';
+
+  @override
+  String get authEmailLinkedToGuestSuccess =>
+      'Email collegata al tuo account ospite.';
+
+  @override
+  String get authEmailLinkedToGuestVerificationSent =>
+      'Email collegata al tuo account ospite. Controlla la tua casella per verificare l\'indirizzo.';
+
+  @override
+  String get authWeakPassword =>
+      'Password troppo debole. Usa almeno 8 caratteri, 1 maiuscola, 1 numero e 1 simbolo.';
+
+  @override
+  String get authEmailAlreadyInUse => 'Questa email e gia in uso.';
+
+  @override
+  String get authInvalidEmailPasswordCredentials =>
+      'Email o password non valide.';
+
+  @override
+  String get authEmailPasswordFailedTryAgain =>
+      'Accesso email fallito. Riprova.';
+
+  @override
+  String authEmailPasswordFailedWithCode(Object code) {
+    return 'Accesso email fallito ($code).';
+  }
+
+  @override
+  String get authSessionExpiredSignedOut =>
+      'Il tuo account non e piu disponibile su Firebase. Sei stato disconnesso.';
 
   @override
   String get backupTitle => 'Backup';
@@ -1683,6 +2038,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get issueDescribeHint => 'Descrivi cosa e successo e come riprodurlo.';
+
+  @override
+  String get reportIssueConsentTitle => 'Inviare report diagnostico?';
+
+  @override
+  String get reportIssueConsentBody =>
+      'Il tuo messaggio e una diagnostica tecnica di base verranno inviati a BinderVault tramite Firebase Crashlytics per analizzare il problema. Non inserire dati personali sensibili.';
+
+  @override
+  String get reportIssueConsentSend => 'Invia report';
 
   @override
   String get sendLabel => 'Invia';

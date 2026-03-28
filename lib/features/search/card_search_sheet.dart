@@ -18,6 +18,8 @@ class _CardSearchSelection {
   final List<String> cardIds;
 }
 
+enum _CardSearchSheetDismissAction { retryScan }
+
 class _SearchPriceData {
   const _SearchPriceData({required this.base, required this.foil});
 
@@ -38,6 +40,8 @@ class _CardSearchSheet extends StatefulWidget {
     this.requiredFilter,
     this.deckFormatConstraint,
     this.showFilterButton = true,
+    this.showRetryScanOnNoResults = false,
+    this.onFirstFrameRendered,
   });
 
   final String? initialQuery;
@@ -51,6 +55,8 @@ class _CardSearchSheet extends StatefulWidget {
   final CollectionFilter? requiredFilter;
   final String? deckFormatConstraint;
   final bool showFilterButton;
+  final bool showRetryScanOnNoResults;
+  final Future<void> Function()? onFirstFrameRendered;
 
   @override
   State<_CardSearchSheet> createState() => _CardSearchSheetState();
@@ -111,6 +117,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   final Map<String, _SearchPriceData> _priceDataByCardId = {};
   final Set<String> _priceRefreshQueued = {};
   Map<String, bool> _deckLegalityByCardId = const {};
+  bool _firstFrameCallbackScheduled = false;
 
   String? get _deckFormatConstraint {
     final explicit = widget.deckFormatConstraint?.trim().toLowerCase();
@@ -129,6 +136,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   bool get _isDeckSearch => _deckFormatConstraint != null;
 
   bool get _isPokemonSearch => _activeSearchGame == AppTcgGame.pokemon;
+
+  bool get _useEnglishFallbackForScannerSearch {
+    return widget.showRetryScanOnNoResults && !_isPokemonSearch;
+  }
 
   bool get _shouldAutoLoadInitialResults {
     return _query.trim().isNotEmpty || _hasRequiredAdvancedFilters();
@@ -168,10 +179,28 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (seedQuery != null) {
       _controller.text = seedQuery;
       _query = seedQuery;
+      if (widget.showRetryScanOnNoResults) {
+        _loading = true;
+      }
     }
     unawaited(_loadBulkCoverageState());
     unawaited(_loadPricePreferences());
     _loadSearchLanguages();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_firstFrameCallbackScheduled || widget.onFirstFrameRendered == null) {
+      return;
+    }
+    _firstFrameCallbackScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final callback = widget.onFirstFrameRendered;
+      if (callback != null) {
+        unawaited(callback());
+      }
+    });
   }
 
   Future<void> _loadBulkCoverageState() async {
@@ -230,6 +259,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     _query = value;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), _runSearch);
+  }
+
+  void _focusAndSelectSearchQuery() {
+    _focusNode.requestFocus();
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
   }
 
   Future<void> _runSearch({bool forceRefresh = false}) async {
@@ -374,7 +411,17 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   }
 
   List<String> _effectiveLanguages() {
-    return _searchLanguages;
+    final normalized = _searchLanguages
+        .map((lang) => lang.trim().toLowerCase())
+        .where((lang) => lang.isNotEmpty)
+        .toList(growable: true);
+    if (normalized.isEmpty) {
+      normalized.add('en');
+    }
+    if (_useEnglishFallbackForScannerSearch && !normalized.contains('en')) {
+      normalized.add('en');
+    }
+    return normalized;
   }
 
   Future<void> _loadNextPage(String query, {bool replace = false}) async {
@@ -495,6 +542,22 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     if (trimmedQuery.isNotEmpty) {
       page = _applyPrefixWordFilter(page, trimmedQuery);
     }
+    if (_useEnglishFallbackForScannerSearch &&
+        !hasAdvancedFilters &&
+        trimmedQuery.isNotEmpty &&
+        page.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _onlineArtworkLoading = true;
+        });
+      }
+      final onlineResults = await _fetchOnlinePrintings(trimmedQuery);
+      if (!mounted || query != _query) {
+        return;
+      }
+      page = _mergeUniquePrintings(page, onlineResults);
+      hasMorePages = false;
+    }
     final rawPageCount = page.length;
     Map<String, int> ownedQuantities = const {};
     Map<String, int> missingQuantities = const {};
@@ -596,12 +659,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       if (resolvedName.isNotEmpty && oracleId != null && oracleId.isNotEmpty) {
         final strict = await _fetchScryfallSearchResults(
           '!"$resolvedName" oracleid:$oracleId include:extras',
-          maxPages: 20,
+          maxPages: 8,
         );
-        collected.addAll(strict);
+        if (strict.isNotEmpty) {
+          return _mergeUniquePrintings(const [], strict);
+        }
       }
 
-      final queryCandidates = <String>[];
+      final queryCandidates = <String>{};
       if (prefixQuery.isNotEmpty) {
         queryCandidates.add(prefixQuery);
       }
@@ -623,11 +688,14 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
       }
 
       for (final q in queryCandidates) {
-        final pageResults = await _fetchScryfallSearchResults(q, maxPages: 12);
+        final pageResults = await _fetchScryfallSearchResults(q, maxPages: 6);
         collected.addAll(pageResults);
+        if (pageResults.isNotEmpty) {
+          break;
+        }
       }
 
-      return collected;
+      return _mergeUniquePrintings(const [], collected);
     } catch (_) {
       return const [];
     }
@@ -1841,9 +1909,36 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                           .bodyMedium
                                           ?.copyWith(
                                             color: const Color(0xFFBFAE95),
-                                          ),
+                                      ),
                                       textAlign: TextAlign.center,
                                     ),
+                                    if (widget.showRetryScanOnNoResults &&
+                                        _query.isNotEmpty) ...[
+                                      const SizedBox(height: 16),
+                                      Wrap(
+                                        alignment: WrapAlignment.center,
+                                        spacing: 12,
+                                        runSpacing: 12,
+                                        children: [
+                                          OutlinedButton.icon(
+                                            onPressed: _focusAndSelectSearchQuery,
+                                            icon: const Icon(Icons.edit_outlined),
+                                            label: Text(l10n.typeCardNameHint),
+                                          ),
+                                          FilledButton.icon(
+                                            onPressed: () => Navigator.of(context)
+                                                .pop(
+                                                  _CardSearchSheetDismissAction
+                                                      .retryScan,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.document_scanner_outlined,
+                                            ),
+                                            label: Text(l10n.retry),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ],
                                 ],
                               ),
@@ -1904,31 +1999,79 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                       textAlign: TextAlign.center,
                                     ),
                                     const SizedBox(height: 16),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: FilledButton(
-                                            onPressed: _countLoading
-                                                ? null
-                                                : _bulkAddByFilters,
-                                            child: Text(l10n.addAll),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: OutlinedButton(
-                                            onPressed: _countLoading
-                                                ? null
-                                                : () async {
-                                                    setState(() {
-                                                      _showResults = true;
-                                                    });
-                                                    await _runSearch();
-                                                  },
-                                            child: Text(l10n.viewResults),
-                                          ),
-                                        ),
-                                      ],
+                                    LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final compactActions =
+                                            constraints.maxWidth < 320;
+                                        final buttons = <Widget>[
+                                          compactActions
+                                              ? SizedBox(
+                                                  width: double.infinity,
+                                                  child: FilledButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : _bulkAddByFilters,
+                                                    child: Text(l10n.addAll),
+                                                  ),
+                                                )
+                                              : Expanded(
+                                                  child: FilledButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : _bulkAddByFilters,
+                                                    child: Text(l10n.addAll),
+                                                  ),
+                                                ),
+                                          compactActions
+                                              ? SizedBox(
+                                                  width: double.infinity,
+                                                  child: OutlinedButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : () async {
+                                                            setState(() {
+                                                              _showResults = true;
+                                                            });
+                                                            await _runSearch();
+                                                          },
+                                                    child: Text(
+                                                      l10n.viewResults,
+                                                    ),
+                                                  ),
+                                                )
+                                              : Expanded(
+                                                  child: OutlinedButton(
+                                                    onPressed: _countLoading
+                                                        ? null
+                                                        : () async {
+                                                            setState(() {
+                                                              _showResults = true;
+                                                            });
+                                                            await _runSearch();
+                                                          },
+                                                    child: Text(
+                                                      l10n.viewResults,
+                                                    ),
+                                                  ),
+                                                ),
+                                        ];
+                                        if (compactActions) {
+                                          return Column(
+                                            children: [
+                                              buttons[0],
+                                              const SizedBox(height: 10),
+                                              buttons[1],
+                                            ],
+                                          );
+                                        }
+                                        return Row(
+                                          children: [
+                                            buttons[0],
+                                            const SizedBox(width: 12),
+                                            buttons[1],
+                                          ],
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),

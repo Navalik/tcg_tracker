@@ -46,6 +46,7 @@ class PurchaseManager extends ChangeNotifier {
         'REQUIRE_SERVER_ENTITLEMENT_VERIFICATION',
         defaultValue: false,
       );
+  static const bool _serverEntitlementVerificationAvailable = false;
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -448,9 +449,13 @@ class PurchaseManager extends ChangeNotifier {
         }
       }
       if (plusActive && _requireServerEntitlementVerification) {
-        plusActive = await _verifyReceiptWithServer(response.pastPurchases);
-        if (!plusActive) {
-          _lastError = 'server_entitlement_unverified';
+        if (_serverEntitlementVerificationAvailable) {
+          plusActive = await _verifyReceiptWithServer(response.pastPurchases);
+          if (!plusActive) {
+            _lastError = 'server_entitlement_unverified';
+          }
+        } else {
+          await _logBillingEvent('server_entitlement_verification_unavailable');
         }
       }
       await _setTier(plusActive ? UserTier.plus : UserTier.free);
@@ -692,9 +697,9 @@ class PurchaseManager extends ChangeNotifier {
   }
 
   Future<bool> _verifyReceiptWithServer(List<PurchaseDetails> purchases) async {
-    // Hook for Firebase/Cloud Functions receipt validation.
-    // Intentionally disabled unless REQUIRE_SERVER_ENTITLEMENT_VERIFICATION=true.
-    return false;
+    throw UnsupportedError(
+      'Server entitlement verification is not configured for this build.',
+    );
   }
 
   Future<void> setOwnedTcgs(Set<String> values) async {

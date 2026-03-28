@@ -789,7 +789,7 @@ class CanonicalCatalogStore {
   }
 
   void dispose() {
-    _database.dispose();
+    _database.close();
   }
 
   void replaceCatalogForGame(
@@ -848,7 +848,7 @@ class CanonicalCatalogStore {
           nowMs,
         ]);
       }
-      insertSet.dispose();
+      insertSet.close();
 
       final insertCard = _database.prepare('''
         INSERT INTO catalog_cards (
@@ -867,7 +867,7 @@ class CanonicalCatalogStore {
           nowMs,
         ]);
       }
-      insertCard.dispose();
+      insertCard.close();
 
       final insertPrinting = _database.prepare('''
         INSERT INTO card_printings (
@@ -960,8 +960,8 @@ class CanonicalCatalogStore {
           ]);
         }
       }
-      insertPrinting.dispose();
-      insertPokemonMetadata?.dispose();
+      insertPrinting.close();
+      insertPokemonMetadata?.close();
 
       final insertCardLocalization = _database.prepare('''
         INSERT OR REPLACE INTO catalog_card_localizations (
@@ -980,7 +980,7 @@ class CanonicalCatalogStore {
           nowMs,
         ]);
       }
-      insertCardLocalization.dispose();
+      insertCardLocalization.close();
 
       final insertSetLocalization = _database.prepare('''
         INSERT OR REPLACE INTO catalog_set_localizations (
@@ -996,7 +996,7 @@ class CanonicalCatalogStore {
           nowMs,
         ]);
       }
-      insertSetLocalization.dispose();
+      insertSetLocalization.close();
 
       final insertProviderMapping = _database.prepare('''
         INSERT INTO provider_mappings (
@@ -1020,7 +1020,7 @@ class CanonicalCatalogStore {
           nowMs,
         ]);
       }
-      insertProviderMapping.dispose();
+      insertProviderMapping.close();
 
       final insertPrice = _database.prepare('''
         INSERT INTO price_snapshots (
@@ -1037,7 +1037,7 @@ class CanonicalCatalogStore {
           snapshot.capturedAt.toUtc().millisecondsSinceEpoch,
         ]);
       }
-      insertPrice.dispose();
+      insertPrice.close();
 
       _database.execute('COMMIT');
     } catch (_) {
