@@ -72,6 +72,10 @@ void main() {
 
     expect(payload['schemaVersion'], equals(2));
     expect(payload['metadata'], isA<Map<String, Object?>>());
+    expect(
+      ((payload['metadata'] as Map<String, Object?>)['game']),
+      equals('pokemon'),
+    );
     final collectionCards = payload['collectionCards'] as List<dynamic>;
     expect(collectionCards, hasLength(1));
     expect(
@@ -101,5 +105,27 @@ void main() {
       equals('pokemon:printing:tcgdex:base1-1:it'),
     );
     expect(rows.first.read<int>('quantity'), equals(3));
+  });
+
+  test('restore rejects payload exported for a different game', () async {
+    final payload = <String, dynamic>{
+      'schemaVersion': 2,
+      'exportedAt': DateTime.now().toUtc().toIso8601String(),
+      'metadata': const <String, Object?>{'game': 'mtg'},
+      'collections': const <Object>[],
+      'collectionCards': const <Object>[],
+      'cards': const <Object>[],
+    };
+
+    expect(
+      () => ScryfallDatabase.instance.restoreCollectionsBackupPayload(payload),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('backup_game_mismatch'),
+        ),
+      ),
+    );
   });
 }

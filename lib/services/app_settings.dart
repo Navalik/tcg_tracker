@@ -44,16 +44,28 @@ class AppSettings {
   static const _prefsKeyCloudBackupLastError = 'cloud_backup_last_error';
   static const _prefsKeyCloudBackupLastRemotePath =
       'cloud_backup_last_remote_path';
+  static String _gameSuffix(AppTcgGame game) =>
+      game == AppTcgGame.pokemon ? 'pokemon' : 'mtg';
   static String _prefsKeyBulkTypeForGame(AppTcgGame game) =>
-      'scryfall_bulk_type_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+      'scryfall_bulk_type_${_gameSuffix(game)}';
   static String _prefsKeyCollectionCoherenceCheckVersionForGame(
     AppTcgGame game,
   ) =>
-      '${_prefsKeyCollectionCoherenceCheckVersionPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+      '${_prefsKeyCollectionCoherenceCheckVersionPrefix}_${_gameSuffix(game)}';
   static String _prefsKeyCardLanguagesForGame(AppTcgGame game) =>
-      '${_prefsKeyCardLanguagesPrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+      '${_prefsKeyCardLanguagesPrefix}_${_gameSuffix(game)}';
   static String _prefsKeyScannerLanguageForGame(AppTcgGame game) =>
-      '${_prefsKeyScannerLanguagePrefix}_${game == AppTcgGame.pokemon ? 'pokemon' : 'mtg'}';
+      '${_prefsKeyScannerLanguagePrefix}_${_gameSuffix(game)}';
+  static String _prefsKeyCloudBackupAutoEnabledForGame(AppTcgGame game) =>
+      '${_prefsKeyCloudBackupAutoEnabled}_${_gameSuffix(game)}';
+  static String _prefsKeyCloudBackupLastHashForGame(AppTcgGame game) =>
+      '${_prefsKeyCloudBackupLastHash}_${_gameSuffix(game)}';
+  static String _prefsKeyCloudBackupLastUploadedAtMsForGame(AppTcgGame game) =>
+      '${_prefsKeyCloudBackupLastUploadedAtMs}_${_gameSuffix(game)}';
+  static String _prefsKeyCloudBackupLastErrorForGame(AppTcgGame game) =>
+      '${_prefsKeyCloudBackupLastError}_${_gameSuffix(game)}';
+  static String _prefsKeyCloudBackupLastRemotePathForGame(AppTcgGame game) =>
+      '${_prefsKeyCloudBackupLastRemotePath}_${_gameSuffix(game)}';
 
   static const List<String> languageCodes = ['en', 'it'];
 
@@ -323,91 +335,200 @@ class AppSettings {
     await prefs.setBool(_prefsKeyProUnlocked, normalized == 'plus');
   }
 
-  static Future<bool> loadCloudBackupAutoEnabled() async {
+  static Future<bool> loadCloudBackupAutoEnabled({AppTcgGame? game}) async {
     final prefs = await SharedPreferences.getInstance();
-    final stored = prefs.getBool(_prefsKeyCloudBackupAutoEnabled);
+    if (game == null) {
+      final stored = prefs.getBool(_prefsKeyCloudBackupAutoEnabled);
+      if (stored != null) {
+        return stored;
+      }
+      const fallback = true;
+      await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, fallback);
+      return fallback;
+    }
+    final gameKey = _prefsKeyCloudBackupAutoEnabledForGame(game);
+    final stored = prefs.getBool(gameKey);
     if (stored != null) {
       return stored;
     }
+    if (game == AppTcgGame.mtg) {
+      final legacy = prefs.getBool(_prefsKeyCloudBackupAutoEnabled);
+      if (legacy != null) {
+        await prefs.setBool(gameKey, legacy);
+        return legacy;
+      }
+    }
     const fallback = true;
-    await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, fallback);
+    await prefs.setBool(gameKey, fallback);
     return fallback;
   }
 
-  static Future<void> saveCloudBackupAutoEnabled(bool value) async {
+  static Future<void> saveCloudBackupAutoEnabled(
+    bool value, {
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, value);
+    if (game == null) {
+      await prefs.setBool(_prefsKeyCloudBackupAutoEnabled, value);
+      return;
+    }
+    await prefs.setBool(_prefsKeyCloudBackupAutoEnabledForGame(game), value);
   }
 
-  static Future<String?> loadCloudBackupLastHash() async {
+  static Future<String?> loadCloudBackupLastHash({AppTcgGame? game}) async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_prefsKeyCloudBackupLastHash)?.trim();
+    if (game == null) {
+      final value = prefs.getString(_prefsKeyCloudBackupLastHash)?.trim();
+      if (value == null || value.isEmpty) {
+        return null;
+      }
+      return value;
+    }
+    final gameKey = _prefsKeyCloudBackupLastHashForGame(game);
+    final value = prefs.getString(gameKey)?.trim();
+    if ((value == null || value.isEmpty) && game == AppTcgGame.mtg) {
+      final legacy = prefs.getString(_prefsKeyCloudBackupLastHash)?.trim();
+      if (legacy != null && legacy.isNotEmpty) {
+        await prefs.setString(gameKey, legacy);
+        return legacy;
+      }
+    }
     if (value == null || value.isEmpty) {
       return null;
     }
     return value;
   }
 
-  static Future<void> saveCloudBackupLastHash(String? value) async {
+  static Future<void> saveCloudBackupLastHash(
+    String? value, {
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) {
-      await prefs.remove(_prefsKeyCloudBackupLastHash);
+      await prefs.remove(
+        game == null ? _prefsKeyCloudBackupLastHash : _prefsKeyCloudBackupLastHashForGame(game),
+      );
       return;
     }
-    await prefs.setString(_prefsKeyCloudBackupLastHash, normalized);
+    await prefs.setString(
+      game == null ? _prefsKeyCloudBackupLastHash : _prefsKeyCloudBackupLastHashForGame(game),
+      normalized,
+    );
   }
 
-  static Future<int?> loadCloudBackupLastUploadedAtMs() async {
+  static Future<int?> loadCloudBackupLastUploadedAtMs({AppTcgGame? game}) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt(_prefsKeyCloudBackupLastUploadedAtMs);
+    if (game == null) {
+      return prefs.getInt(_prefsKeyCloudBackupLastUploadedAtMs);
+    }
+    final gameKey = _prefsKeyCloudBackupLastUploadedAtMsForGame(game);
+    final value = prefs.getInt(gameKey);
+    if (value == null && game == AppTcgGame.mtg) {
+      final legacy = prefs.getInt(_prefsKeyCloudBackupLastUploadedAtMs);
+      if (legacy != null) {
+        await prefs.setInt(gameKey, legacy);
+        return legacy;
+      }
+    }
+    return value;
   }
 
-  static Future<void> saveCloudBackupLastUploadedAtMs(int? value) async {
+  static Future<void> saveCloudBackupLastUploadedAtMs(
+    int? value, {
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    final gameKey = game == null
+        ? _prefsKeyCloudBackupLastUploadedAtMs
+        : _prefsKeyCloudBackupLastUploadedAtMsForGame(game);
     if (value == null || value <= 0) {
-      await prefs.remove(_prefsKeyCloudBackupLastUploadedAtMs);
+      await prefs.remove(gameKey);
       return;
     }
-    await prefs.setInt(_prefsKeyCloudBackupLastUploadedAtMs, value);
+    await prefs.setInt(gameKey, value);
   }
 
-  static Future<String?> loadCloudBackupLastError() async {
+  static Future<String?> loadCloudBackupLastError({AppTcgGame? game}) async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_prefsKeyCloudBackupLastError)?.trim();
+    if (game == null) {
+      final value = prefs.getString(_prefsKeyCloudBackupLastError)?.trim();
+      if (value == null || value.isEmpty) {
+        return null;
+      }
+      return value;
+    }
+    final gameKey = _prefsKeyCloudBackupLastErrorForGame(game);
+    final value = prefs.getString(gameKey)?.trim();
+    if ((value == null || value.isEmpty) && game == AppTcgGame.mtg) {
+      final legacy = prefs.getString(_prefsKeyCloudBackupLastError)?.trim();
+      if (legacy != null && legacy.isNotEmpty) {
+        await prefs.setString(gameKey, legacy);
+        return legacy;
+      }
+    }
     if (value == null || value.isEmpty) {
       return null;
     }
     return value;
   }
 
-  static Future<void> saveCloudBackupLastError(String? value) async {
+  static Future<void> saveCloudBackupLastError(
+    String? value, {
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    final gameKey = game == null
+        ? _prefsKeyCloudBackupLastError
+        : _prefsKeyCloudBackupLastErrorForGame(game);
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) {
-      await prefs.remove(_prefsKeyCloudBackupLastError);
+      await prefs.remove(gameKey);
       return;
     }
-    await prefs.setString(_prefsKeyCloudBackupLastError, normalized);
+    await prefs.setString(gameKey, normalized);
   }
 
-  static Future<String?> loadCloudBackupLastRemotePath() async {
+  static Future<String?> loadCloudBackupLastRemotePath({
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    final value = prefs.getString(_prefsKeyCloudBackupLastRemotePath)?.trim();
+    if (game == null) {
+      final value = prefs.getString(_prefsKeyCloudBackupLastRemotePath)?.trim();
+      if (value == null || value.isEmpty) {
+        return null;
+      }
+      return value;
+    }
+    final gameKey = _prefsKeyCloudBackupLastRemotePathForGame(game);
+    final value = prefs.getString(gameKey)?.trim();
+    if ((value == null || value.isEmpty) && game == AppTcgGame.mtg) {
+      final legacy = prefs.getString(_prefsKeyCloudBackupLastRemotePath)?.trim();
+      if (legacy != null && legacy.isNotEmpty) {
+        await prefs.setString(gameKey, legacy);
+        return legacy;
+      }
+    }
     if (value == null || value.isEmpty) {
       return null;
     }
     return value;
   }
 
-  static Future<void> saveCloudBackupLastRemotePath(String? value) async {
+  static Future<void> saveCloudBackupLastRemotePath(
+    String? value, {
+    AppTcgGame? game,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
+    final gameKey = game == null
+        ? _prefsKeyCloudBackupLastRemotePath
+        : _prefsKeyCloudBackupLastRemotePathForGame(game);
     final normalized = value?.trim() ?? '';
     if (normalized.isEmpty) {
-      await prefs.remove(_prefsKeyCloudBackupLastRemotePath);
+      await prefs.remove(gameKey);
       return;
     }
-    await prefs.setString(_prefsKeyCloudBackupLastRemotePath, normalized);
+    await prefs.setString(gameKey, normalized);
   }
 
   static Future<Set<String>> loadOwnedTcgs() async {
@@ -555,6 +676,28 @@ class AppSettings {
     await prefs.remove(_prefsKeyCloudBackupLastUploadedAtMs);
     await prefs.remove(_prefsKeyCloudBackupLastError);
     await prefs.remove(_prefsKeyCloudBackupLastRemotePath);
+    await prefs.remove(_prefsKeyCloudBackupAutoEnabledForGame(AppTcgGame.mtg));
+    await prefs.remove(
+      _prefsKeyCloudBackupAutoEnabledForGame(AppTcgGame.pokemon),
+    );
+    await prefs.remove(_prefsKeyCloudBackupLastHashForGame(AppTcgGame.mtg));
+    await prefs.remove(_prefsKeyCloudBackupLastHashForGame(AppTcgGame.pokemon));
+    await prefs.remove(
+      _prefsKeyCloudBackupLastUploadedAtMsForGame(AppTcgGame.mtg),
+    );
+    await prefs.remove(
+      _prefsKeyCloudBackupLastUploadedAtMsForGame(AppTcgGame.pokemon),
+    );
+    await prefs.remove(_prefsKeyCloudBackupLastErrorForGame(AppTcgGame.mtg));
+    await prefs.remove(
+      _prefsKeyCloudBackupLastErrorForGame(AppTcgGame.pokemon),
+    );
+    await prefs.remove(
+      _prefsKeyCloudBackupLastRemotePathForGame(AppTcgGame.mtg),
+    );
+    await prefs.remove(
+      _prefsKeyCloudBackupLastRemotePathForGame(AppTcgGame.pokemon),
+    );
     await prefs.remove(_prefsKeyFreeScanDate);
     await prefs.remove(_prefsKeyFreeScanCount);
     await prefs.remove(_prefsKeyFreeScanLastSeenEpochMs);

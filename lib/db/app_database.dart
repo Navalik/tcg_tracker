@@ -15,6 +15,7 @@ import '../domain/domain_models.dart';
 import '../models.dart';
 import '../services/app_settings.dart';
 import '../services/cloud_backup_signals.dart';
+import '../services/game_registry.dart';
 import '../services/price_provider.dart';
 import 'canonical_catalog_store.dart';
 
@@ -1457,10 +1458,16 @@ class ScryfallDatabase {
       cardRows.addAll(rows);
     }
 
+    final backupGame = _currentBackupGame();
+    final normalizedMetadata = <String, Object?>{
+      ...?metadata,
+      'game': backupGame.name,
+    };
+
     return <String, dynamic>{
       'schemaVersion': 2,
       'exportedAt': DateTime.now().toUtc().toIso8601String(),
-      'metadata': metadata,
+      'metadata': normalizedMetadata,
       'collections': collectionRows
           .map(
             (row) => <String, dynamic>{
@@ -1492,6 +1499,13 @@ class ScryfallDatabase {
     bool replaceExisting = true,
   }) async {
     final db = await open();
+    final expectedGame = _currentBackupGame();
+    final payloadGame = _inferBackupPayloadGame(payload);
+    if (payloadGame != null && payloadGame != expectedGame) {
+      throw FormatException(
+        'backup_game_mismatch:${payloadGame.name}:${expectedGame.name}',
+      );
+    }
     final collectionsRaw = payload['collections'];
     final collectionCardsRaw = payload['collectionCards'];
     final cardsRaw = payload['cards'];
@@ -1694,6 +1708,67 @@ class ScryfallDatabase {
       priceTix: Value(_asNullableString(json['priceTix'])),
       pricesUpdatedAt: Value(_asInt(json['pricesUpdatedAt'])),
     );
+  }
+
+  AppTcgGame _currentBackupGame() {
+    for (final definition in GameRegistry.instance.allDefinitions) {
+      final appGame = definition.appSettingsGame;
+      if (appGame == null) {
+        continue;
+      }
+      if (definition.dbFileName.trim().toLowerCase() ==
+          _dbFileName.trim().toLowerCase()) {
+        return appGame;
+      }
+    }
+    return AppTcgGame.mtg;
+  }
+
+  AppTcgGame? _inferBackupPayloadGame(Map<String, dynamic> payload) {
+    final metadata = payload['metadata'];
+    if (metadata is Map) {
+      final normalizedMetadata = _normalizeStringDynamicMap(metadata);
+      final gameValue = _asString(normalizedMetadata['game']).trim().toLowerCase();
+      if (gameValue == 'pokemon') {
+        return AppTcgGame.pokemon;
+      }
+      if (gameValue == 'mtg' || gameValue == 'magic') {
+        return AppTcgGame.mtg;
+      }
+    }
+
+    final collectionCardsRaw = payload['collectionCards'];
+    if (collectionCardsRaw is List) {
+      for (final relationRaw in collectionCardsRaw) {
+        if (relationRaw is! Map) {
+          continue;
+        }
+        final normalized = _normalizeStringDynamicMap(relationRaw);
+        final printingId = _asString(normalized['printingId']).trim().toLowerCase();
+        if (printingId.startsWith('pokemon:')) {
+          return AppTcgGame.pokemon;
+        }
+        if (printingId.startsWith('mtg:') || printingId.startsWith('scryfall:')) {
+          return AppTcgGame.mtg;
+        }
+      }
+    }
+
+    final cardsRaw = payload['cards'];
+    if (cardsRaw is List) {
+      for (final cardRaw in cardsRaw) {
+        if (cardRaw is! Map) {
+          continue;
+        }
+        final normalized = _normalizeStringDynamicMap(cardRaw);
+        final id = _asString(normalized['id']).trim().toLowerCase();
+        final cardJson = _asString(normalized['cardJson']).trim().toLowerCase();
+        if (id.startsWith('pokemon:') || cardJson.contains('"pokemon"')) {
+          return AppTcgGame.pokemon;
+        }
+      }
+    }
+    return null;
   }
 
   Map<String, dynamic> _normalizeStringDynamicMap(Map raw) {

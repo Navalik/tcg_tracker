@@ -154,6 +154,35 @@ extension _SettingsOperationsSection on _SettingsPageState {
     if (!await _ensureCloudBackupAvailable() || !mounted) {
       return;
     }
+    late final CloudBackupRestorePreview preview;
+    try {
+      preview = await CloudBackupService.instance.previewLatestBackupRestore();
+    } catch (error) {
+      await CloudBackupService.instance.saveLastError(error);
+      if (!mounted) {
+        return;
+      }
+      showAppSnackBar(
+        context,
+        _isItalianUi
+            ? 'Anteprima ripristino cloud non disponibile. Verifica che esista un backup valido.'
+            : 'Cloud restore preview unavailable. Make sure a valid backup exists.',
+      );
+      await _refreshCloudBackupStatus();
+      return;
+    }
+    final previewLines = preview.games
+        .map((item) {
+          final label = item.game == AppTcgGame.pokemon ? 'Pokemon' : 'Magic';
+          final backupText = item.presentInBackup
+              ? '${item.backupCollections}/${item.backupCollectionCards}'
+              : (_isItalianUi ? 'assente' : 'missing');
+          final suffix = item.destructive
+              ? (_isItalianUi ? ' [attenzione]' : ' [warning]')
+              : '';
+          return '$label: ${item.localCollections}/${item.localCollectionCards} -> $backupText$suffix';
+        })
+        .join('\n');
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -161,9 +190,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
           _isItalianUi ? 'Ripristinare backup cloud?' : 'Restore cloud backup?',
         ),
         content: Text(
-          _isItalianUi
-              ? 'Questo sostituira le collezioni correnti con l\'ultimo snapshot cloud.'
-              : 'This will replace current collections with the latest cloud snapshot.',
+          '${_isItalianUi ? 'Questo sostituira le collezioni salvate nei vari giochi con l\'ultimo snapshot cloud.' : 'This will replace the saved collections across games with the latest cloud snapshot.'}\n\n$previewLines${preview.requiresExplicitConfirmation ? (_isItalianUi ? '\n\nAttenzione: il ripristino riduce sensibilmente i dati locali in almeno un gioco.' : '\n\nWarning: this restore significantly reduces local data in at least one game.') : ''}',
         ),
         actions: [
           TextButton(
@@ -185,15 +212,18 @@ extension _SettingsOperationsSection on _SettingsPageState {
       _cloudBackupStatusBusy = true;
     });
     try {
-      final stats = await CloudBackupService.instance.restoreLatestBackup();
+      final result = await CloudBackupService.instance.restoreLatestBackup(
+        allowDestructive: true,
+      );
+      final stats = result.stats;
       if (!mounted) {
         return;
       }
       showAppSnackBar(
         context,
         _isItalianUi
-            ? 'Backup cloud ripristinato. Collezioni: ${stats['collections'] ?? 0}, voci: ${stats['collectionCards'] ?? 0}'
-            : 'Cloud backup restored. Collections: ${stats['collections'] ?? 0}, entries: ${stats['collectionCards'] ?? 0}',
+            ? 'Backup cloud ripristinato. Collezioni totali: ${stats['collections'] ?? 0}, voci: ${stats['collectionCards'] ?? 0}'
+            : 'Cloud backup restored. Total collections: ${stats['collections'] ?? 0}, entries: ${stats['collectionCards'] ?? 0}',
       );
       _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
       await _refreshCloudBackupStatus();
