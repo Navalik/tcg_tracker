@@ -24,37 +24,37 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Require-Command {
+function Assert-Command {
   param([string]$Name)
   if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
     throw "Required command not found: $Name"
   }
 }
 
-function Ensure-File {
+function Assert-File {
   param([string]$Path)
   if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
     throw "Missing required file: $Path"
   }
 }
 
-function Ensure-AnyFile {
+function Assert-AnyFile {
   param([array]$Files, [string]$Kind)
   if (-not $Files -or $Files.Count -eq 0) {
     throw "Missing required $Kind files in bundle directory."
   }
 }
 
-Require-Command -Name "gh"
+Assert-Command -Name "gh"
 
 $bundlePath = Resolve-Path -LiteralPath $BundleDir
 $snapshotFiles = @(Get-ChildItem -Path $bundlePath -Filter "canonical_catalog_snapshot*.json.gz" -File)
 $legacyDbFiles = @(Get-ChildItem -Path $bundlePath -Filter "pokemon_legacy*.db.gz" -File)
 $manifestFiles = @(Get-ChildItem -Path $bundlePath -Filter "manifest*.json" -File)
 
-Ensure-AnyFile -Files $snapshotFiles -Kind "snapshot"
-Ensure-AnyFile -Files $legacyDbFiles -Kind "legacy db"
-Ensure-AnyFile -Files $manifestFiles -Kind "manifest"
+Assert-AnyFile -Files $snapshotFiles -Kind "snapshot"
+Assert-AnyFile -Files $legacyDbFiles -Kind "legacy db"
+Assert-AnyFile -Files $manifestFiles -Kind "manifest"
 
 if ([string]::IsNullOrWhiteSpace($Tag)) {
   $utcNow = (Get-Date).ToUniversalTime()
