@@ -944,7 +944,7 @@
   "checkCoherenceLabel": "Check coherence",
   "copyDiagnosticsLabel": "Copy diagnostics",
   "whatsNewButtonLabel": "What's new",
-  "whatsNewDialogTitle": "What's new in 0.5.4",
+  "whatsNewDialogTitle": "What's new in 0.5.5",
   "whatsNewFeaturesTitle": "Main updates",
   "whatsNewBugFixesTitle": "Fixes",
   "whatsNewLine1": "Fixed issues around cloud backup protection and Plus access checks.",

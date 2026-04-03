@@ -2094,7 +2094,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.4';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.5';
 
   @override
   String get whatsNewFeaturesTitle => 'Main updates';
