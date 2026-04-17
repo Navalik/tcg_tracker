@@ -4054,7 +4054,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<_DeckImportSource?> _pickDeckImportSource() async {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['txt', 'dek'],
       withData: kIsWeb,
