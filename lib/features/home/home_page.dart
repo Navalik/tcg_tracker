@@ -835,7 +835,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _checkForAppUpdateOnStartup() async {
-    if (kIsWeb || !Platform.isAndroid) {
+    if (kDebugMode || kIsWeb || !Platform.isAndroid) {
       return;
     }
     try {
@@ -1168,44 +1168,44 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     final italian = _isItalianUi();
     if (value.contains('pokemon_hosted_bundle_timeout')) {
       return italian
-          ? 'Timeout durante il download del bundle Pokemon da GitHub.'
-          : 'Timed out while downloading the Pokemon bundle from GitHub.';
+          ? 'Timeout durante il download del bundle Pokemon da Firebase.'
+          : 'Timed out while downloading the Pokemon bundle from Firebase.';
     }
     if (value.contains('pokemon_hosted_bundle_unreachable')) {
       return italian
-          ? 'GitHub non raggiungibile durante il download del bundle Pokemon.'
-          : 'GitHub was unreachable while downloading the Pokemon bundle.';
+          ? 'Firebase non raggiungibile durante il download del bundle Pokemon.'
+          : 'Firebase was unreachable while downloading the Pokemon bundle.';
     }
     if (value.contains('pokemon_api_http_404') ||
         value.contains('pokemon_hosted_bundle_http_404')) {
       return italian
-          ? 'Asset del bundle Pokemon non trovato su GitHub.'
-          : 'Pokemon bundle asset was not found on GitHub.';
+          ? 'Asset del bundle Pokemon non trovato su Firebase.'
+          : 'Pokemon bundle asset was not found on Firebase.';
     }
     if (value.contains('pokemon_hosted_bundle_missing_languages')) {
       return italian
-          ? 'Il release bundle GitHub non contiene tutte le lingue richieste.'
-          : 'The GitHub release bundle does not contain all required languages.';
+          ? 'Il bundle Firebase non contiene tutte le lingue richieste.'
+          : 'The Firebase bundle does not contain all required languages.';
     }
     if (value.contains('pokemon_hosted_bundle_unavailable')) {
       return italian
-          ? 'Bundle Pokemon GitHub non disponibile per la selezione corrente.'
-          : 'The GitHub Pokemon bundle is unavailable for the current selection.';
+          ? 'Bundle Pokemon Firebase non disponibile per la selezione corrente.'
+          : 'The Firebase Pokemon bundle is unavailable for the current selection.';
     }
     if (value.contains('pokemon_hosted_bundle_incomplete')) {
       return italian
-          ? 'Bundle Pokemon GitHub scaricato ma incompleto.'
-          : 'The GitHub Pokemon bundle was downloaded but is incomplete.';
+          ? 'Bundle Pokemon Firebase scaricato ma incompleto.'
+          : 'The Firebase Pokemon bundle was downloaded but is incomplete.';
     }
     if (value.contains('pokemon_hosted_bundle_invalid_payload')) {
       return italian
-          ? 'Bundle Pokemon GitHub non valido o corrotto.'
-          : 'The GitHub Pokemon bundle is invalid or corrupted.';
+          ? 'Bundle Pokemon Firebase non valido o corrotto.'
+          : 'The Firebase Pokemon bundle is invalid or corrupted.';
     }
     if (value.contains('pokemon_hosted_bundle_failed')) {
       return italian
-          ? 'Errore durante il caricamento del bundle Pokemon da GitHub.'
-          : 'Failed while loading the Pokemon bundle from GitHub.';
+          ? 'Errore durante il caricamento del bundle Pokemon da Firebase.'
+          : 'Failed while loading the Pokemon bundle from Firebase.';
     }
     return raw;
   }
@@ -4602,6 +4602,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           hideProgress();
           await _yieldToUi();
         }
+
         final resolved = await _resolveSeedWithPrintingPicker(
           refinedSeed,
           onBeforePresentingUi: hideProgressBeforeUi,
@@ -4761,8 +4762,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<_ResolvedScanSelection> _resolveSeedWithPrintingPicker(
     _OcrSearchSeed seed, {
     Future<void> Function()? onBeforePresentingUi,
-  }
-  ) async {
+  }) async {
     final cardName = seed.cardName?.trim();
     if (cardName == null || cardName.isEmpty) {
       return _ResolvedScanSelection(seed: seed);
@@ -6121,7 +6121,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     int? allCardsId;
     if (foil) {
-      allCardsId = _findAllCardsCollection()?.id ??
+      allCardsId =
+          _findAllCardsCollection()?.id ??
           await ScryfallDatabase.instance.ensureAllCardsCollectionId();
     }
 

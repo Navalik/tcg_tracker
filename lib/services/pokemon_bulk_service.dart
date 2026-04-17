@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -365,6 +366,7 @@ class PokemonBulkService {
     try {
       onStatus?.call('Checking hosted Pokemon bundle');
       onProgress(0.05);
+      _logHostedBundleDownload('manifest $_hostedBundleManifestUrl');
       final manifestRaw = await _fetchJsonWithRetry(
         client: client,
         uri: Uri.parse(_hostedBundleManifestUrl),
@@ -395,7 +397,7 @@ class PokemonBulkService {
       if (bundles.isNotEmpty) {
         // Hosted bundle releases are the authoritative source for the
         // intermediate Pokemon flow. Ignore local snapshots here so we do not
-        // accidentally merge a fresh GitHub base with an older/incomplete
+        // accidentally merge a fresh remote base with an older/incomplete
         // distribution-derived snapshot.
         const existingLanguages = <String>{};
         final selectedBundles = _selectHostedBundlesForMissingLanguages(
@@ -420,6 +422,7 @@ class PokemonBulkService {
             return null;
           }
           stage = 'asset_download:$bundleId';
+          _logHostedBundleDownload('asset $bundleId $assetUri');
           onStatus?.call('Downloading hosted Pokemon snapshot');
           final gzipBytes = await _fetchBytesWithRetry(
             client: client,
@@ -552,6 +555,7 @@ class PokemonBulkService {
         return null;
       }
       stage = 'asset_download:canonical_catalog_snapshot';
+      _logHostedBundleDownload('asset canonical_catalog_snapshot $assetUri');
       onStatus?.call('Downloading hosted Pokemon snapshot');
       final gzipBytes = await _fetchBytesWithRetry(
         client: client,
@@ -1171,6 +1175,16 @@ class PokemonBulkService {
 
   bool isAllowedDownloadUriForTesting(String rawUri) {
     return _isAllowedDownloadUri(rawUri);
+  }
+
+  void _logHostedBundleDownload(String message) {
+    assert(() {
+      developer.log(
+        'pokemon_bundle_download $message',
+        name: 'PokemonBulkService',
+      );
+      return true;
+    }());
   }
 
   Uri? _resolveCanonicalSnapshotAssetUriFromBundle(
@@ -2212,6 +2226,7 @@ class PokemonBulkService {
   Future<_HostedBundleManifestInfo?> _fetchHostedManifestInfo() async {
     final client = http.Client();
     try {
+      _logHostedBundleDownload('manifest_info $_hostedBundleManifestUrl');
       final payload = await _fetchJsonWithRetry(
         client: client,
         uri: Uri.parse(_hostedBundleManifestUrl),
