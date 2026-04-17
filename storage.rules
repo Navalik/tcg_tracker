@@ -14,6 +14,11 @@ service firebase.storage {
       return isSignedIn() && request.auth.token.tier == 'plus';
     }
 
+    match /catalog/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /users/{uid}/cloud-backup/{allPaths=**} {
       allow read, write: if isOwner(uid) && isPlus();
     }
