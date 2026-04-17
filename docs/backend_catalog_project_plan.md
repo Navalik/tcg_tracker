@@ -52,8 +52,8 @@ Componenti gia presenti nel repo:
 - `functions/`: Firebase Functions attuali, oggi usate per entitlement Google Play;
 - `storage.rules`: regole Storage, oggi limitate ai backup utente;
 - `bindervault-site/`: sito statico pubblico esistente;
-- `tools/build_pokemon_bundle.py`: genera bundle Pokemon offline;
-- `tools/publish_pokemon_bundle_release.ps1`: pubblica bundle Pokemon su GitHub Release;
+- `tools/shared/build_pokemon_bundle.py`: genera bundle Pokemon offline;
+- `tools/prod/publish_pokemon_bundle_release.ps1`: pubblica bundle Pokemon su GitHub Release;
 - `lib/services/pokemon_bulk_service.dart`: scarica manifest e bundle Pokemon da GitHub Release;
 - `lib/db/canonical_catalog_store.dart`: storage canonico locale;
 - `lib/providers/provider_contracts.dart`: contratti provider lato app.
@@ -313,7 +313,7 @@ La scrittura deve avvenire tramite strumenti admin, Firebase CLI, service accoun
 Creare uno script dedicato:
 
 ```text
-tools/publish_catalog_bundle_firebase.ps1
+tools/firebase/publish_catalog_bundle_firebase.ps1
 ```
 
 Responsabilita:
@@ -402,7 +402,7 @@ Obiettivo:
 Task:
 - definire path Storage `catalog/pokemon/releases/{version}`;
 - aggiornare o adattare il manifest per includere `download_url`;
-- creare `tools/publish_catalog_bundle_firebase.ps1`;
+- creare `tools/firebase/publish_catalog_bundle_firebase.ps1`;
 - aggiornare `storage.rules` per lettura pubblica di `catalog/`;
 - pubblicare una release Pokemon su Firebase Storage;
 - modificare `PokemonBulkService` per leggere il nuovo manifest;
@@ -666,7 +666,7 @@ Implementare Fase 1.
 Checklist concreta:
 - aggiungere regola read-only per `catalog/` in `storage.rules`;
 - adattare manifest Pokemon con path Storage e `download_url`;
-- creare script `tools/publish_catalog_bundle_firebase.ps1`;
+- creare script `tools/firebase/publish_catalog_bundle_firebase.ps1`;
 - pubblicare un bundle Pokemon su Firebase Storage;
 - aggiungere configurazione manifest in app;
 - aggiornare `PokemonBulkService` per Firebase Storage;

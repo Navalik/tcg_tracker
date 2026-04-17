@@ -30,19 +30,20 @@ Usa questo script per aggiornare il bundle consumato dall'app attualmente in
 produzione:
 
 ```powershell
-.\tools\release_pokemon_bundle_prod.ps1
+.\tools\prod\release_pokemon_bundle_prod.ps1
 ```
 
 Questo flusso:
 
 - genera il bundle in `dist/pokemon_bundle`;
 - mantiene il versioning storico giornaliero usato dal flusso GitHub;
-- pubblica su GitHub Release tramite `tools/publish_pokemon_bundle_release.ps1`.
+- pubblica su GitHub Release tramite
+  `tools/prod/publish_pokemon_bundle_release.ps1`.
 
 Per forzare una build anche se il check sorgente non vede aggiornamenti:
 
 ```powershell
-.\tools\release_pokemon_bundle_prod.ps1 -ForceBuild
+.\tools\prod\release_pokemon_bundle_prod.ps1 -ForceBuild
 ```
 
 ## Firebase Storage
@@ -51,7 +52,7 @@ Usa questo script per preparare o pubblicare il bundle destinato alla nuova app
 che usera Firebase Storage:
 
 ```powershell
-.\tools\release_pokemon_bundle_firebase.ps1
+.\tools\firebase\release_pokemon_bundle_firebase.ps1
 ```
 
 Questo flusso:
@@ -59,19 +60,20 @@ Questo flusso:
 - genera il bundle in `dist/pokemon_bundle_firebase`;
 - usa una versione univoca con timestamp UTC e commit sorgente, ad esempio
   `20260417-071530-full-base-delta-compat2-tcgdex-5b2c205`;
-- pubblica su Firebase Storage tramite `tools/publish_catalog_bundle_firebase.ps1`;
+- pubblica su Firebase Storage tramite
+  `tools/firebase/publish_catalog_bundle_firebase.ps1`;
 - aggiorna `catalog/pokemon/latest/manifest.json`, salvo uso di `-SkipLatest`.
 
 Per provare il publish senza caricare file:
 
 ```powershell
-.\tools\release_pokemon_bundle_firebase.ps1 -ForceBuild -DryRunPublish
+.\tools\firebase\release_pokemon_bundle_firebase.ps1 -ForceBuild -DryRunPublish
 ```
 
 Per pubblicare senza aggiornare il puntatore `latest`:
 
 ```powershell
-.\tools\release_pokemon_bundle_firebase.ps1 -SkipLatest
+.\tools\firebase\release_pokemon_bundle_firebase.ps1 -SkipLatest
 ```
 
 ## Output
@@ -87,12 +89,17 @@ compatibilita client e sorgente dati.
 
 ## Script Di Basso Livello
 
-Gli script sotto sono usati dagli entrypoint sopra e di norma non servono per
-il rilascio manuale:
+La cartella `tools` e divisa cosi:
 
-- `tools/build_pokemon_bundle.py`: genera gli artefatti.
-- `tools/publish_pokemon_bundle_release.ps1`: pubblica su GitHub Release.
-- `tools/publish_catalog_bundle_firebase.ps1`: pubblica su Firebase Storage.
+- `tools/prod`: entrypoint e publish GitHub Release per l'app in produzione.
+- `tools/firebase`: entrypoint e publish Firebase Storage per la nuova app.
+- `tools/shared`: builder/checker condivisi, usati dagli entrypoint sopra.
+
+Gli script condivisi di norma non vanno lanciati manualmente durante un
+rilascio:
+
+- `tools/shared/build_pokemon_bundle.py`: genera gli artefatti.
+- `tools/shared/check_pokemon_bundle_updates.py`: confronta sorgente e manifest.
 
 ## Note
 

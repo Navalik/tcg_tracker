@@ -3,7 +3,13 @@ param(
   [string]$SourceDir = "C:\Users\Naval\Documents\TGC\cards-database",
 
   [Parameter(Mandatory = $false)]
-  [string]$Repo = "Navalik/tcg_tracker",
+  [string]$ProjectId = "",
+
+  [Parameter(Mandatory = $false)]
+  [string]$Bucket = "",
+
+  [Parameter(Mandatory = $false)]
+  [string]$Game = "pokemon",
 
   [Parameter(Mandatory = $false)]
   [string]$Profile = "full",
@@ -30,7 +36,10 @@ param(
   [string]$SourceRef = "master",
 
   [Parameter(Mandatory = $false)]
-  [string]$OutputDir = "dist/pokemon_bundle",
+  [string]$OutputDir = "dist/pokemon_bundle_firebase",
+
+  [Parameter(Mandatory = $false)]
+  [string]$Version = "",
 
   [Parameter(Mandatory = $false)]
   [switch]$SkipPull,
@@ -39,7 +48,16 @@ param(
   [switch]$SkipPublish,
 
   [Parameter(Mandatory = $false)]
-  [switch]$ForceBuild
+  [switch]$SkipLatest,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$ForceBuild,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$ForcePublish,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$DryRunPublish
 )
 
 Set-StrictMode -Version Latest
@@ -67,11 +85,12 @@ function Invoke-Step {
 
 Require-Command -Name "git"
 Require-Command -Name "python"
-if (-not $SkipPublish) {
-  Require-Command -Name "gh"
+if (-not $SkipPublish -and -not $DryRunPublish) {
+  Require-Command -Name "gcloud"
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$sharedToolsDir = Join-Path $repoRoot "tools/shared"
 $resolvedSourceDir = (Resolve-Path -LiteralPath $SourceDir).Path
 $resolvedOutputDir = Join-Path $repoRoot $OutputDir
 
@@ -85,7 +104,7 @@ if (-not $SkipPull) {
 }
 
 Invoke-Step "Check for upstream bundle updates" {
-  python (Join-Path $PSScriptRoot "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
+  python (Join-Path $sharedToolsDir "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
   $script:checkExit = $LASTEXITCODE
   if ($script:checkExit -ne 0 -and $script:checkExit -ne 10) {
     throw "update check failed with exit code $script:checkExit"
@@ -103,24 +122,23 @@ if (-not $sourceCommit) {
   throw "Could not resolve source commit from $resolvedSourceDir"
 }
 
-$dateCompact = Get-Date -Format "yyyyMMdd"
-$dateTitle = Get-Date -Format "yyyy-MM-dd"
-$version = "$dateCompact-$Profile-$PackageLayout-$CompatLabel"
-$tag = "pokemon-bundle-$dateCompact"
-$title = "Pokemon bundle $dateTitle"
-$notes = "Offline Pokemon bundle ($Profile, $Languages, $PackageLayout, $CompatLabel)"
+if ([string]::IsNullOrWhiteSpace($Version)) {
+  $dateTimeCompact = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
+  $shortCommit = $sourceCommit.Substring(0, 7)
+  $Version = "$dateTimeCompact-$Profile-$PackageLayout-$CompatLabel-tcgdex-$shortCommit"
+}
 
-Invoke-Step "Reset output directory" {
+Invoke-Step "Reset Firebase output directory" {
   Remove-Item $resolvedOutputDir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Path $resolvedOutputDir | Out-Null
 }
 
-Invoke-Step "Build bundle artifacts" {
-  python (Join-Path $PSScriptRoot "build_pokemon_bundle.py") `
+Invoke-Step "Build Firebase bundle artifacts" {
+  python (Join-Path $sharedToolsDir "build_pokemon_bundle.py") `
     --source-tcgdex-api `
     --output-dir $resolvedOutputDir `
     --profile $Profile `
-    --version $version `
+    --version $Version `
     --languages $Languages `
     --language-bundles $LanguageBundles `
     --package-layout $PackageLayout `
@@ -134,31 +152,36 @@ Invoke-Step "Build bundle artifacts" {
 }
 
 if (-not $SkipPublish) {
-  Invoke-Step "Publish GitHub release" {
-    powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "publish_pokemon_bundle_release.ps1") `
-      -Repo $Repo `
-      -Tag $tag `
-      -Title $title `
-      -Notes $notes `
-      -BundleDir $resolvedOutputDir
-    if ($LASTEXITCODE -ne 0) {
-      throw "release publish failed"
-    }
-  }
+  Invoke-Step "Publish Firebase Storage bundle" {
+    $publishArgs = @(
+      "-ExecutionPolicy", "Bypass",
+      "-File", (Join-Path $PSScriptRoot "publish_catalog_bundle_firebase.ps1"),
+      "-ProjectId", $ProjectId,
+      "-Bucket", $Bucket,
+      "-Game", $Game,
+      "-BundleDir", $resolvedOutputDir,
+      "-Version", $Version
+    )
+    if ($ForcePublish) { $publishArgs += "-Force" }
+    if ($SkipLatest) { $publishArgs += "-SkipLatest" }
+    if ($DryRunPublish) { $publishArgs += "-DryRun" }
 
-  Invoke-Step "Verify published manifest" {
-    python (Join-Path $PSScriptRoot "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
+    & powershell @publishArgs
     if ($LASTEXITCODE -ne 0) {
-      throw "final verification failed with exit code $LASTEXITCODE"
+      throw "Firebase publish failed with exit code $LASTEXITCODE"
     }
   }
 }
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
+Write-Host "channel:       Firebase Storage"
 Write-Host "source commit: $sourceCommit"
-Write-Host "version:      $version"
-Write-Host "tag:          $tag"
+Write-Host "version:       $Version"
+Write-Host "output:        $resolvedOutputDir"
 if (-not $SkipPublish) {
-  Write-Host "release:      https://github.com/$Repo/releases/tag/$tag"
+  Write-Host "release path:  catalog/$Game/releases/$Version"
+  if (-not $SkipLatest) {
+    Write-Host "latest path:   catalog/$Game/latest/manifest.json"
+  }
 }
