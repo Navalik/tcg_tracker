@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -1179,10 +1179,7 @@ class PokemonBulkService {
 
   void _logHostedBundleDownload(String message) {
     assert(() {
-      developer.log(
-        'pokemon_bundle_download $message',
-        name: 'PokemonBulkService',
-      );
+      debugPrint('pokemon_bundle_download $message');
       return true;
     }());
   }
