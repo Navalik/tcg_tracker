@@ -18,6 +18,12 @@ param(
   [string]$Version = "",
 
   [Parameter(Mandatory = $false)]
+  [string[]]$ArtifactPatterns = @(
+    "canonical_catalog_snapshot*.json.gz",
+    "pokemon_legacy*.db.gz"
+  ),
+
+  [Parameter(Mandatory = $false)]
   [switch]$Force,
 
   [Parameter(Mandatory = $false)]
@@ -213,8 +219,10 @@ if (-not $Force -and -not $DryRun) {
 }
 
 $artifactFiles = @()
-$artifactFiles += @(Get-ChildItem -Path $bundlePath -Filter "canonical_catalog_snapshot*.json.gz" -File)
-$artifactFiles += @(Get-ChildItem -Path $bundlePath -Filter "pokemon_legacy*.db.gz" -File)
+foreach ($pattern in $ArtifactPatterns) {
+  $artifactFiles += @(Get-ChildItem -Path $bundlePath -Filter $pattern -File)
+}
+$artifactFiles = @($artifactFiles | Sort-Object -Property FullName -Unique)
 if (-not $artifactFiles -or $artifactFiles.Count -eq 0) {
   throw "Missing bundle artifact files in $bundlePath."
 }
