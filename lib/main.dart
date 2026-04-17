@@ -76,6 +76,10 @@ bool _firebaseReady = false;
 bool _crashReportingReady = false;
 final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 Future<void>? _googleSignInInitialization;
+const bool _enableDebugAppCheck = bool.fromEnvironment(
+  'ENABLE_DEBUG_APP_CHECK',
+  defaultValue: false,
+);
 final GlobalKey<ScaffoldMessengerState> _rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -172,38 +176,41 @@ _AppVisualPalette _paletteForTheme(AppVisualTheme theme) {
 }
 
 Future<void> main() async {
-  await runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
-    if (Platform.isAndroid) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      SystemChrome.setSystemUIOverlayStyle(
-        const SystemUiOverlayStyle(
-          statusBarIconBrightness: Brightness.light,
-          systemNavigationBarIconBrightness: Brightness.light,
+  await runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
+      if (Platform.isAndroid) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+        SystemChrome.setSystemUIOverlayStyle(
+          const SystemUiOverlayStyle(
+            statusBarIconBrightness: Brightness.light,
+            systemNavigationBarIconBrightness: Brightness.light,
+          ),
+        );
+      }
+      if (Platform.isAndroid || Platform.isIOS) {
+        try {
+          await Firebase.initializeApp().timeout(const Duration(seconds: 8));
+          _firebaseReady = true;
+        } catch (_) {
+          _firebaseReady = false;
+        }
+      }
+      runApp(const TCGTracker());
+      unawaited(_finishDeferredAppBootstrap());
+    },
+    (error, stackTrace) {
+      final reason = 'run_zoned_guarded';
+      unawaited(
+        _recordAppError(
+          error,
+          stackTrace,
+          fatal: !_isNonFatalUiResourceError(error, reason: reason),
+          reason: reason,
         ),
       );
-    }
-    if (Platform.isAndroid || Platform.isIOS) {
-      try {
-        await Firebase.initializeApp().timeout(const Duration(seconds: 8));
-        _firebaseReady = true;
-      } catch (_) {
-        _firebaseReady = false;
-      }
-    }
-    runApp(const TCGTracker());
-    unawaited(_finishDeferredAppBootstrap());
-  }, (error, stackTrace) {
-    final reason = 'run_zoned_guarded';
-    unawaited(
-      _recordAppError(
-        error,
-        stackTrace,
-        fatal: !_isNonFatalUiResourceError(error, reason: reason),
-        reason: reason,
-      ),
-    );
-  });
+    },
+  );
 }
 
 Future<void> _finishDeferredAppBootstrap() async {
@@ -212,10 +219,7 @@ Future<void> _finishDeferredAppBootstrap() async {
   }
   try {
     await Future<void>.delayed(const Duration(milliseconds: 250));
-    _googleSignInInitialization ??= _googleSignIn.initialize();
-    unawaited(
-      _activateFirebaseAppCheck().timeout(const Duration(seconds: 8)),
-    );
+    unawaited(_activateFirebaseAppCheck().timeout(const Duration(seconds: 8)));
     unawaited(
       AnalyticsService.instance.init().timeout(const Duration(seconds: 5)),
     );
@@ -228,6 +232,9 @@ Future<void> _finishDeferredAppBootstrap() async {
 
 Future<void> _activateFirebaseAppCheck() async {
   if (!(Platform.isAndroid || Platform.isIOS)) {
+    return;
+  }
+  if (kDebugMode && !_enableDebugAppCheck) {
     return;
   }
   await FirebaseAppCheck.instance.activate(
