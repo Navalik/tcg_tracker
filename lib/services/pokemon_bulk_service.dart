@@ -28,7 +28,8 @@ class PokemonBulkService {
       'pokemon_dataset_manifest_fingerprint';
   static const String _prefsKeyInstalledSourceRepo =
       'pokemon_dataset_source_repo';
-  static const String _prefsKeyInstalledSourceRef = 'pokemon_dataset_source_ref';
+  static const String _prefsKeyInstalledSourceRef =
+      'pokemon_dataset_source_ref';
   static const String _prefsKeyInstalledSourceCommit =
       'pokemon_dataset_source_commit';
   static const String _prefsKeyInstalledProfile =
@@ -45,8 +46,11 @@ class PokemonBulkService {
       'canonical_catalog_snapshot.json';
   static const int _canonicalSnapshotSchemaVersion = 2;
   static const int _hostedBundleCompatibilityVersion = 2;
+  static const String _firebaseCatalogBucket =
+      'bindervault.firebasestorage.app';
+  static const String _firebaseCatalogObjectPrefix = 'catalog/pokemon/';
   static const String _hostedBundleManifestUrl =
-      'https://github.com/Navalik/tcg_tracker/releases/latest/download/manifest.json';
+      'https://firebasestorage.googleapis.com/v0/b/$_firebaseCatalogBucket/o/catalog%2Fpokemon%2Flatest%2Fmanifest.json?alt=media';
   static const String _hostedCanonicalSnapshotAssetName =
       'canonical_catalog_snapshot.json.gz';
   static const String _fixedProfile = 'full';
@@ -78,7 +82,9 @@ class PokemonBulkService {
     final installedFingerprint = prefs.getString(_prefsKeyManifestFingerprint);
     final installedSourceRepo = prefs.getString(_prefsKeyInstalledSourceRepo);
     final installedSourceRef = prefs.getString(_prefsKeyInstalledSourceRef);
-    final installedSourceCommit = prefs.getString(_prefsKeyInstalledSourceCommit);
+    final installedSourceCommit = prefs.getString(
+      _prefsKeyInstalledSourceCommit,
+    );
     final selectedLanguages = await _selectedPokemonLanguageSignature();
     final installedProfile = prefs.getString(_prefsKeyInstalledProfile);
     final installedLanguages = prefs.getString(_prefsKeyInstalledLanguages);
@@ -177,7 +183,7 @@ class PokemonBulkService {
     final totalStopwatch = Stopwatch()..start();
     final canonicalDownloadStopwatch = Stopwatch()..start();
     onStatus?.call(
-      'Downloading Pokemon bundle (GitHub, profile=${_fixedProfile.toUpperCase()}, lang=${languageLabel.join(",")})',
+      'Downloading Pokemon bundle (Firebase, profile=${_fixedProfile.toUpperCase()}, lang=${languageLabel.join(",")})',
     );
     onProgress(0.01);
     final canonicalBatch = await _downloadCanonicalCatalogSnapshot(
@@ -237,7 +243,7 @@ class PokemonBulkService {
     onProgress(0.99);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKeyInstalledVersion, datasetVersion);
-    await prefs.setString(_prefsKeyInstalledSource, 'github_hosted_bundle');
+    await prefs.setString(_prefsKeyInstalledSource, 'firebase_catalog_bundle');
     await prefs.setInt(
       _prefsKeyInstalledAt,
       DateTime.now().toUtc().millisecondsSinceEpoch,
@@ -409,16 +415,8 @@ class PokemonBulkService {
               ((bundle['id'] as String?)?.trim().toLowerCase() ?? '').isEmpty
               ? 'bundle_$i'
               : (bundle['id'] as String).trim().toLowerCase();
-          final assetPath = _resolveCanonicalSnapshotAssetPathFromBundle(
-            bundle,
-          );
-          if (assetPath == null || assetPath.trim().isEmpty) {
-            return null;
-          }
-          final assetUri = Uri.parse(
-            'https://github.com/Navalik/tcg_tracker/releases/latest/download/$assetPath',
-          );
-          if (!_isAllowedDownloadUri(assetUri.toString())) {
+          final assetUri = _resolveCanonicalSnapshotAssetUriFromBundle(bundle);
+          if (assetUri == null || !_isAllowedDownloadUri(assetUri.toString())) {
             return null;
           }
           stage = 'asset_download:$bundleId';
@@ -512,7 +510,7 @@ class PokemonBulkService {
         return mergedBatch;
       }
 
-      String? assetPath;
+      Uri? assetUri;
       final manifestProfile =
           (manifestParsed['profile'] as String?)?.trim().toLowerCase() ?? '';
       if (manifestProfile.isNotEmpty && manifestProfile != profile) {
@@ -543,15 +541,14 @@ class PokemonBulkService {
         final path = (artifact['path'] as String?)?.trim() ?? '';
         if (name == _hostedCanonicalSnapshotAssetName ||
             path == _hostedCanonicalSnapshotAssetName) {
-          assetPath = path.isEmpty ? name : path;
+          assetUri = _resolveHostedArtifactUri(artifact);
           break;
         }
       }
-      assetPath ??= _hostedCanonicalSnapshotAssetName;
-      final assetUri = Uri.parse(
-        'https://github.com/Navalik/tcg_tracker/releases/latest/download/$assetPath',
+      assetUri ??= _firebaseDownloadUriForObjectPath(
+        '$_firebaseCatalogObjectPrefix$_hostedCanonicalSnapshotAssetName',
       );
-      if (!_isAllowedDownloadUri(assetUri.toString())) {
+      if (assetUri == null || !_isAllowedDownloadUri(assetUri.toString())) {
         return null;
       }
       stage = 'asset_download:canonical_catalog_snapshot';
@@ -912,7 +909,9 @@ class PokemonBulkService {
       ),
       'installed_source_repo': prefs.getString(_prefsKeyInstalledSourceRepo),
       'installed_source_ref': prefs.getString(_prefsKeyInstalledSourceRef),
-      'installed_source_commit': prefs.getString(_prefsKeyInstalledSourceCommit),
+      'installed_source_commit': prefs.getString(
+        _prefsKeyInstalledSourceCommit,
+      ),
       'expected_bundle_compatibility_version':
           _hostedBundleCompatibilityVersion,
     };
@@ -1164,7 +1163,17 @@ class PokemonBulkService {
         .toList(growable: false);
   }
 
-  String? _resolveCanonicalSnapshotAssetPathFromBundle(
+  Uri? resolveCanonicalSnapshotAssetUriFromBundleForTesting(
+    Map<String, dynamic> bundle,
+  ) {
+    return _resolveCanonicalSnapshotAssetUriFromBundle(bundle);
+  }
+
+  bool isAllowedDownloadUriForTesting(String rawUri) {
+    return _isAllowedDownloadUri(rawUri);
+  }
+
+  Uri? _resolveCanonicalSnapshotAssetUriFromBundle(
     Map<String, dynamic> bundle,
   ) {
     final artifacts =
@@ -1175,14 +1184,59 @@ class PokemonBulkService {
     for (final artifact in artifacts) {
       final name = (artifact['name'] as String?)?.trim() ?? '';
       final path = (artifact['path'] as String?)?.trim() ?? '';
+      final downloadUrl = (artifact['download_url'] as String?)?.trim() ?? '';
       final candidate = path.isEmpty ? name : path;
-      final normalized = candidate.toLowerCase();
-      if (normalized.endsWith('.json.gz') &&
-          normalized.contains('canonical_catalog_snapshot')) {
-        return candidate;
+      final normalizedCandidate = candidate.toLowerCase();
+      final normalizedDownloadUrl = downloadUrl.toLowerCase();
+      final hasCanonicalSnapshotName =
+          normalizedCandidate.contains('canonical_catalog_snapshot') ||
+          normalizedDownloadUrl.contains('canonical_catalog_snapshot');
+      final hasJsonGzipName =
+          normalizedCandidate.endsWith('.json.gz') ||
+          normalizedDownloadUrl.contains('.json.gz');
+      if (hasCanonicalSnapshotName && hasJsonGzipName) {
+        return _resolveHostedArtifactUri(artifact);
       }
     }
     return null;
+  }
+
+  Uri? _resolveHostedArtifactUri(Map<String, dynamic> artifact) {
+    final downloadUrl = (artifact['download_url'] as String?)?.trim() ?? '';
+    if (downloadUrl.isNotEmpty) {
+      final uri = Uri.tryParse(downloadUrl);
+      if (uri != null && uri.hasScheme) {
+        return uri;
+      }
+    }
+
+    final path = (artifact['path'] as String?)?.trim() ?? '';
+    final name = (artifact['name'] as String?)?.trim() ?? '';
+    final candidate = path.isEmpty ? name : path;
+    if (candidate.isEmpty) {
+      return null;
+    }
+    final absoluteUri = Uri.tryParse(candidate);
+    if (absoluteUri != null && absoluteUri.hasScheme) {
+      return absoluteUri;
+    }
+    final objectPath = candidate.startsWith(_firebaseCatalogObjectPrefix)
+        ? candidate
+        : '$_firebaseCatalogObjectPrefix$candidate';
+    return _firebaseDownloadUriForObjectPath(objectPath);
+  }
+
+  Uri? _firebaseDownloadUriForObjectPath(String objectPath) {
+    final normalized = objectPath.trim().replaceAll('\\', '/');
+    if (normalized.isEmpty ||
+        !normalized.startsWith(_firebaseCatalogObjectPrefix)) {
+      return null;
+    }
+    return Uri.https(
+      'firebasestorage.googleapis.com',
+      '/v0/b/$_firebaseCatalogBucket/o/${Uri.encodeComponent(normalized)}',
+      const <String, String>{'alt': 'media'},
+    );
   }
 
   List<Map<String, dynamic>>? _selectHostedBundlesForMissingLanguages({
@@ -2066,19 +2120,18 @@ class PokemonBulkService {
       return false;
     }
     final host = uri.host.toLowerCase();
-    if (host == 'api.pokemontcg.io') {
-      return true;
-    }
-    if (host == 'raw.githubusercontent.com') {
-      final normalizedPath = uri.path.toLowerCase();
-      return normalizedPath.startsWith('/pokemontcg/pokemon-tcg-data/');
-    }
-    if (host == 'github.com') {
-      final normalizedPath = uri.path.toLowerCase();
-      return normalizedPath.startsWith(
-            '/navalik/tcg_tracker/releases/latest/download/',
-          ) ||
-          normalizedPath.startsWith('/navalik/tcg_tracker/releases/download/');
+    if (host == 'firebasestorage.googleapis.com') {
+      const objectPathPrefix = '/v0/b/$_firebaseCatalogBucket/o/';
+      if (!uri.path.startsWith(objectPathPrefix)) {
+        return false;
+      }
+      final encodedObjectPath = uri.path.substring(objectPathPrefix.length);
+      final objectPath = Uri.decodeComponent(encodedObjectPath);
+      if (!objectPath.startsWith(_firebaseCatalogObjectPrefix)) {
+        return false;
+      }
+      final alt = uri.queryParameters['alt'];
+      return alt == null || alt == 'media';
     }
     return false;
   }
