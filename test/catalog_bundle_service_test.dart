@@ -111,4 +111,68 @@ void main() {
       contains('catalog/pokemon/releases/v'),
     );
   });
+
+  test('selects language bundles with required dependencies first', () {
+    final manifest = CatalogBundleService.parseManifest('''
+      {
+        "bundle": "pokemon",
+        "version": "v",
+        "schema_version": 2,
+        "compatibility_version": 2,
+        "bundles": [
+          {
+            "id": "delta_it",
+            "kind": "delta",
+            "schema_version": 2,
+            "compatibility_version": 2,
+            "languages": ["it"],
+            "requires": ["base_en"],
+            "artifacts": []
+          },
+          {
+            "id": "base_en",
+            "kind": "base",
+            "schema_version": 2,
+            "compatibility_version": 2,
+            "languages": ["en"],
+            "requires": [],
+            "artifacts": []
+          }
+        ]
+      }
+      ''', expectedGame: 'pokemon');
+
+    final selected = CatalogBundleService.selectBundlesForLanguages(
+      bundles: manifest.bundles,
+      requiredLanguages: const <String>{'it'},
+      minCompatibilityVersion: 2,
+    );
+
+    expect(selected, isNotNull);
+    expect(
+      selected!.map((bundle) => bundle.id),
+      orderedEquals(const <String>['base_en', 'delta_it']),
+    );
+  });
+
+  test('returns null when a required dependency is missing', () {
+    final selected = CatalogBundleService.selectBundlesForLanguages(
+      bundles: const <CatalogBundle>[
+        CatalogBundle(
+          id: 'delta_it',
+          kind: 'delta',
+          schemaVersion: 2,
+          compatibilityVersion: 2,
+          languages: <String>['it'],
+          requires: <String>['base_en'],
+          artifacts: <CatalogBundleArtifact>[],
+          raw: <String, dynamic>{},
+        ),
+      ],
+      requiredLanguages: const <String>{'it'},
+      minCompatibilityVersion: 2,
+    );
+
+    expect(selected, isNull);
+  });
 }

@@ -197,17 +197,22 @@ class MtgHostedBundleService {
         .where((language) => language.isNotEmpty)
         .toSet();
     final includeItalian = normalizedLanguages.contains('it');
-    final wantedBundleIds = <String>{'base_en'};
+    final requiredLanguages = <String>{'en'};
     if (includeItalian) {
-      wantedBundleIds.add('delta_it');
+      requiredLanguages.add('it');
     }
 
     final selected = <MtgHostedBundleArtifact>[];
-    for (final bundle in manifest.bundles) {
+    final bundles = CatalogBundleService.selectBundlesForLanguages(
+      bundles: manifest.bundles,
+      requiredLanguages: requiredLanguages,
+      minCompatibilityVersion: 1,
+    );
+    if (bundles == null) {
+      return selected;
+    }
+    for (final bundle in bundles) {
       final id = bundle.id;
-      if (!wantedBundleIds.contains(id)) {
-        continue;
-      }
       final language = bundle.language ?? '';
       for (final artifact in bundle.artifacts) {
         final name = artifact.name;

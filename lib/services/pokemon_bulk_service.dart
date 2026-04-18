@@ -1130,15 +1130,7 @@ class PokemonBulkService {
   }
 
   Set<String> _bundleLanguageSet(Map<String, dynamic> bundle) {
-    return (bundle['languages'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .map((code) => code.trim().toLowerCase())
-        .where((code) => code.isNotEmpty)
-        .toSet();
-  }
-
-  int _bundleCompatibilityVersion(Map<String, dynamic> bundle) {
-    return (bundle['compatibility_version'] as num?)?.toInt() ?? 1;
+    return CatalogBundle.fromJson(bundle).languageCodes;
   }
 
   List<Map<String, dynamic>>? selectHostedBundlesForMissingLanguagesForTesting({
@@ -1157,14 +1149,6 @@ class PokemonBulkService {
 
   bool _isSupportedHostedCompatibilityVersion(int version) {
     return version >= _hostedBundleCompatibilityVersion;
-  }
-
-  List<String> _bundleRequiresList(Map<String, dynamic> bundle) {
-    return (bundle['requires'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .map((id) => id.trim())
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
   }
 
   Uri? resolveCanonicalSnapshotAssetUriFromBundleForTesting(
@@ -1239,106 +1223,14 @@ class PokemonBulkService {
     required Set<String> requiredLanguages,
     required Set<String> existingLanguages,
   }) {
-    final profileBundles = bundles
-        .where((bundle) {
-          final bundleProfile =
-              (bundle['profile'] as String?)?.trim().toLowerCase() ?? '';
-          return (bundleProfile.isEmpty ||
-                  bundleProfile == profile.trim().toLowerCase()) &&
-              _isSupportedHostedCompatibilityVersion(
-                _bundleCompatibilityVersion(bundle),
-              );
-        })
-        .toList(growable: false);
-    final byId = <String, Map<String, dynamic>>{};
-    for (final bundle in profileBundles) {
-      final id = (bundle['id'] as String?)?.trim();
-      if (id != null && id.isNotEmpty) {
-        byId[id] = bundle;
-      }
-    }
-
-    final targetMissing = requiredLanguages.difference(existingLanguages);
-    if (targetMissing.isEmpty) {
-      return const <Map<String, dynamic>>[];
-    }
-
-    final selected = <Map<String, dynamic>>[];
-    final selectedIds = <String>{};
-    var covered = <String>{...existingLanguages};
-
-    while (!covered.containsAll(requiredLanguages)) {
-      Map<String, dynamic>? best;
-      var bestNewCoverage = 0;
-      var bestExtra = 1 << 30;
-      for (final bundle in profileBundles) {
-        final id = (bundle['id'] as String?)?.trim();
-        if (id != null && id.isNotEmpty && selectedIds.contains(id)) {
-          continue;
-        }
-        final languages = _bundleLanguageSet(bundle);
-        final newCoverage = languages
-            .intersection(requiredLanguages)
-            .difference(covered);
-        if (newCoverage.isEmpty) {
-          continue;
-        }
-        final extra = languages.length - newCoverage.length;
-        if (newCoverage.length > bestNewCoverage ||
-            (newCoverage.length == bestNewCoverage && extra < bestExtra)) {
-          best = bundle;
-          bestNewCoverage = newCoverage.length;
-          bestExtra = extra;
-        }
-      }
-      if (best == null) {
-        return null;
-      }
-      final id = (best['id'] as String?)?.trim();
-      if (id != null && id.isNotEmpty) {
-        selectedIds.add(id);
-      }
-      selected.add(best);
-      covered.addAll(_bundleLanguageSet(best));
-    }
-
-    final queue = List<Map<String, dynamic>>.from(selected);
-    var index = 0;
-    while (index < queue.length) {
-      final bundle = queue[index];
-      index += 1;
-      for (final dependencyId in _bundleRequiresList(bundle)) {
-        if (selectedIds.contains(dependencyId)) {
-          continue;
-        }
-        final dependency = byId[dependencyId];
-        if (dependency == null) {
-          return null;
-        }
-        final dependencyLanguages = _bundleLanguageSet(dependency);
-        if (covered.containsAll(dependencyLanguages)) {
-          continue;
-        }
-        selectedIds.add(dependencyId);
-        selected.add(dependency);
-        covered.addAll(dependencyLanguages);
-        queue.add(dependency);
-      }
-    }
-
-    selected.sort((a, b) {
-      final kindA = (a['kind'] as String?)?.trim().toLowerCase() ?? '';
-      final kindB = (b['kind'] as String?)?.trim().toLowerCase() ?? '';
-      final scoreA = kindA == 'base' ? 0 : 1;
-      final scoreB = kindB == 'base' ? 0 : 1;
-      if (scoreA != scoreB) {
-        return scoreA.compareTo(scoreB);
-      }
-      final idA = (a['id'] as String?)?.trim() ?? '';
-      final idB = (b['id'] as String?)?.trim() ?? '';
-      return idA.compareTo(idB);
-    });
-    return selected;
+    final selected = CatalogBundleService.selectBundlesForLanguages(
+      bundles: bundles.map(CatalogBundle.fromJson),
+      requiredLanguages: requiredLanguages,
+      existingLanguages: existingLanguages,
+      profile: profile,
+      minCompatibilityVersion: _hostedBundleCompatibilityVersion,
+    );
+    return selected?.map((bundle) => bundle.raw).toList(growable: false);
   }
 
   bool _signatureContainsRequiredLanguages({

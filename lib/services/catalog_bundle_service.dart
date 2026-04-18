@@ -189,6 +189,112 @@ class CatalogBundleService {
     throw HttpException('${errorPrefix}_failed');
   }
 
+  static List<CatalogBundle>? selectBundlesForLanguages({
+    required Iterable<CatalogBundle> bundles,
+    required Set<String> requiredLanguages,
+    Set<String> existingLanguages = const <String>{},
+    String? profile,
+    int minCompatibilityVersion = 1,
+  }) {
+    final normalizedProfile = profile?.trim().toLowerCase();
+    final normalizedRequired = _normalizeLanguageSet(requiredLanguages);
+    final normalizedExisting = _normalizeLanguageSet(existingLanguages);
+    final candidates = bundles
+        .where((bundle) {
+          final bundleProfile = bundle.profile ?? '';
+          final profileMatches =
+              normalizedProfile == null ||
+              normalizedProfile.isEmpty ||
+              bundleProfile.isEmpty ||
+              bundleProfile == normalizedProfile;
+          return profileMatches &&
+              bundle.compatibilityVersion >= minCompatibilityVersion;
+        })
+        .toList(growable: false);
+    final byId = <String, CatalogBundle>{
+      for (final bundle in candidates)
+        if (bundle.id.isNotEmpty) bundle.id: bundle,
+    };
+
+    final targetMissing = normalizedRequired.difference(normalizedExisting);
+    if (targetMissing.isEmpty) {
+      return const <CatalogBundle>[];
+    }
+
+    final selected = <CatalogBundle>[];
+    final selectedIds = <String>{};
+    var covered = <String>{...normalizedExisting};
+
+    while (!covered.containsAll(normalizedRequired)) {
+      CatalogBundle? best;
+      var bestNewCoverage = 0;
+      var bestExtra = 1 << 30;
+      for (final bundle in candidates) {
+        if (bundle.id.isNotEmpty && selectedIds.contains(bundle.id)) {
+          continue;
+        }
+        final languages = bundle.languageCodes;
+        final newCoverage = languages
+            .intersection(normalizedRequired)
+            .difference(covered);
+        if (newCoverage.isEmpty) {
+          continue;
+        }
+        final extra = languages.length - newCoverage.length;
+        if (newCoverage.length > bestNewCoverage ||
+            (newCoverage.length == bestNewCoverage && extra < bestExtra)) {
+          best = bundle;
+          bestNewCoverage = newCoverage.length;
+          bestExtra = extra;
+        }
+      }
+      if (best == null) {
+        return null;
+      }
+      if (best.id.isNotEmpty) {
+        selectedIds.add(best.id);
+      }
+      selected.add(best);
+      covered.addAll(best.languageCodes);
+    }
+
+    final queue = List<CatalogBundle>.from(selected);
+    var index = 0;
+    while (index < queue.length) {
+      final bundle = queue[index];
+      index += 1;
+      for (final dependencyId in bundle.requires) {
+        if (selectedIds.contains(dependencyId)) {
+          continue;
+        }
+        final dependency = byId[dependencyId];
+        if (dependency == null) {
+          return null;
+        }
+        final dependencyLanguages = dependency.languageCodes;
+        if (covered.containsAll(dependencyLanguages)) {
+          continue;
+        }
+        selectedIds.add(dependencyId);
+        selected.add(dependency);
+        covered.addAll(dependencyLanguages);
+        queue.add(dependency);
+      }
+    }
+
+    selected.sort(compareBundlesForInstallOrder);
+    return selected;
+  }
+
+  static int compareBundlesForInstallOrder(CatalogBundle a, CatalogBundle b) {
+    final scoreA = a.kind == 'base' ? 0 : 1;
+    final scoreB = b.kind == 'base' ? 0 : 1;
+    if (scoreA != scoreB) {
+      return scoreA.compareTo(scoreB);
+    }
+    return a.id.compareTo(b.id);
+  }
+
   static Duration _retryDelay(int attempt) {
     switch (attempt) {
       case 1:
@@ -198,6 +304,13 @@ class CatalogBundleService {
       default:
         return const Duration(seconds: 2);
     }
+  }
+
+  static Set<String> _normalizeLanguageSet(Iterable<String> values) {
+    return values
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
   }
 }
 
@@ -355,6 +468,15 @@ class CatalogBundle {
   final List<String> requires;
   final List<CatalogBundleArtifact> artifacts;
   final Map<String, dynamic> raw;
+
+  Set<String> get languageCodes {
+    final values = <String>{...languages};
+    final singleLanguage = language;
+    if (singleLanguage != null && singleLanguage.isNotEmpty) {
+      values.add(singleLanguage);
+    }
+    return values;
+  }
 }
 
 class CatalogBundleArtifact {
