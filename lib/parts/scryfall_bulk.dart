@@ -33,6 +33,251 @@ bool _isAllowedScryfallDownloadUri(String? rawUri) {
       host.endsWith('.scryfall.io');
 }
 
+bool _isAllowedMtgFirebaseDownloadUri(String? rawUri) {
+  if (rawUri == null || rawUri.trim().isEmpty) {
+    return false;
+  }
+  final uri = Uri.tryParse(rawUri.trim());
+  if (uri == null) {
+    return false;
+  }
+  if (uri.scheme.toLowerCase() != 'https') {
+    return false;
+  }
+  if (uri.userInfo.isNotEmpty || uri.host.trim().isEmpty) {
+    return false;
+  }
+  if (uri.host.toLowerCase() != 'firebasestorage.googleapis.com') {
+    return false;
+  }
+  if (uri.path !=
+          '/v0/b/bindervault.firebasestorage.app/o/catalog%2Fmtg%2Flatest%2Fmanifest.json' &&
+      !uri.path.startsWith('/v0/b/bindervault.firebasestorage.app/o/')) {
+    return false;
+  }
+  final encodedObject = uri.pathSegments.length >= 5 ? uri.pathSegments[4] : '';
+  final objectName = Uri.decodeComponent(encodedObject);
+  return objectName == 'catalog/mtg/latest/manifest.json' ||
+      objectName.startsWith('catalog/mtg/releases/');
+}
+
+class MtgHostedBundleArtifact {
+  const MtgHostedBundleArtifact({
+    required this.id,
+    required this.language,
+    required this.name,
+    required this.downloadUrl,
+    required this.sizeBytes,
+  });
+
+  final String id;
+  final String language;
+  final String name;
+  final String downloadUrl;
+  final int sizeBytes;
+}
+
+class MtgHostedBundleCheckResult {
+  const MtgHostedBundleCheckResult({
+    required this.updateAvailable,
+    required this.version,
+    required this.updatedAtRaw,
+    required this.artifacts,
+    this.updatedAt,
+  });
+
+  final bool updateAvailable;
+  final String version;
+  final String updatedAtRaw;
+  final DateTime? updatedAt;
+  final List<MtgHostedBundleArtifact> artifacts;
+
+  int get sizeBytes =>
+      artifacts.fold<int>(0, (total, artifact) => total + artifact.sizeBytes);
+}
+
+class MtgHostedBundleService {
+  static const manifestUrl =
+      'https://firebasestorage.googleapis.com/v0/b/bindervault.firebasestorage.app/o/catalog%2Fmtg%2Flatest%2Fmanifest.json?alt=media';
+  static const _installedVersionKey = 'mtg_firebase_installed_version';
+
+  Future<MtgHostedBundleCheckResult> checkForUpdate({
+    required Set<String> languages,
+  }) async {
+    final uri = Uri.parse(manifestUrl);
+    if (!_isAllowedMtgFirebaseDownloadUri(uri.toString())) {
+      throw const FormatException('mtg_manifest_url_not_allowed');
+    }
+    if (kDebugMode) {
+      debugPrint('mtg_bundle_download manifest $manifestUrl');
+    }
+    final response = await http.get(uri).timeout(const Duration(seconds: 20));
+    if (response.statusCode != 200) {
+      throw HttpException('HTTP ${response.statusCode}');
+    }
+    var manifestBody = response.body;
+    if (manifestBody.isNotEmpty && manifestBody.codeUnitAt(0) == 0xFEFF) {
+      manifestBody = manifestBody.substring(1);
+    }
+    final manifest = jsonDecode(manifestBody) as Map<String, dynamic>;
+    final version = (manifest['version'] as String?)?.trim();
+    if (version == null || version.isEmpty) {
+      throw const FormatException('mtg_manifest_missing_version');
+    }
+    final source = manifest['source'];
+    final updatedAtRaw = source is Map
+        ? ((source['updated_at'] as String?)?.trim() ?? version)
+        : version;
+    final updatedAt = DateTime.tryParse(updatedAtRaw);
+    final artifacts = _selectArtifacts(manifest, languages);
+    if (artifacts.isEmpty) {
+      throw const FormatException('mtg_manifest_missing_artifacts');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final installedVersion = prefs.getString(_installedVersionKey);
+    return MtgHostedBundleCheckResult(
+      updateAvailable: installedVersion != version,
+      version: version,
+      updatedAtRaw: updatedAtRaw,
+      updatedAt: updatedAt,
+      artifacts: artifacts,
+    );
+  }
+
+  Future<void> markInstalled(String version) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_installedVersionKey, version);
+  }
+
+  Future<String> downloadCombinedJson({
+    required MtgHostedBundleCheckResult bundle,
+    required String targetPath,
+    required void Function(int receivedBytes, int totalBytes) onProgress,
+  }) async {
+    final targetFile = File('$targetPath.download');
+    final sink = targetFile.openWrite();
+    final client = http.Client();
+    var received = 0;
+    var firstObject = true;
+
+    try {
+      sink.write('[');
+      for (final artifact in bundle.artifacts) {
+        final url = artifact.downloadUrl.trim();
+        if (!_isAllowedMtgFirebaseDownloadUri(url)) {
+          throw const FormatException('mtg_artifact_url_not_allowed');
+        }
+        if (kDebugMode) {
+          debugPrint('mtg_bundle_download asset ${artifact.id} $url');
+        }
+        final request = http.Request('GET', Uri.parse(url));
+        final response = await client.send(request);
+        if (response.statusCode != 200) {
+          throw HttpException('HTTP ${response.statusCode}');
+        }
+        final compressedStream = response.stream.map((chunk) {
+          received += chunk.length;
+          onProgress(received, bundle.sizeBytes);
+          return chunk;
+        });
+        final decodedStream = compressedStream
+            .transform(gzip.decoder)
+            .transform(utf8.decoder);
+        final parser = JsonArrayObjectParser(decodedStream);
+        await for (final card in parser.objects()) {
+          if (!firstObject) {
+            sink.write(',');
+          }
+          firstObject = false;
+          sink.write(jsonEncode(card));
+        }
+      }
+      sink.write(']');
+      await sink.flush();
+      await sink.close();
+      final finalFile = File(targetPath);
+      if (await finalFile.exists()) {
+        await finalFile.delete();
+      }
+      await targetFile.rename(targetPath);
+      onProgress(bundle.sizeBytes, bundle.sizeBytes);
+      return targetPath;
+    } catch (_) {
+      await sink.close();
+      try {
+        if (await targetFile.exists()) {
+          await targetFile.delete();
+        }
+      } catch (_) {}
+      rethrow;
+    } finally {
+      client.close();
+    }
+  }
+
+  List<MtgHostedBundleArtifact> _selectArtifacts(
+    Map<String, dynamic> manifest,
+    Set<String> languages,
+  ) {
+    final normalizedLanguages = languages
+        .map((language) => language.trim().toLowerCase())
+        .where((language) => language.isNotEmpty)
+        .toSet();
+    final includeItalian = normalizedLanguages.contains('it');
+    final wantedBundleIds = <String>{'base_en'};
+    if (includeItalian) {
+      wantedBundleIds.add('delta_it');
+    }
+
+    final selected = <MtgHostedBundleArtifact>[];
+    final bundles = manifest['bundles'];
+    if (bundles is! List) {
+      return selected;
+    }
+    for (final bundle in bundles) {
+      if (bundle is! Map) {
+        continue;
+      }
+      final id = (bundle['id'] as String?)?.trim() ?? '';
+      if (!wantedBundleIds.contains(id)) {
+        continue;
+      }
+      final language = (bundle['language'] as String?)?.trim() ?? '';
+      final artifacts = bundle['artifacts'];
+      if (artifacts is! List) {
+        continue;
+      }
+      for (final artifact in artifacts) {
+        if (artifact is! Map) {
+          continue;
+        }
+        final name = (artifact['name'] as String?)?.trim() ?? '';
+        final downloadUrl = (artifact['download_url'] as String?)?.trim() ?? '';
+        final sizeBytes = artifact['size_bytes'];
+        if (name.isEmpty ||
+            downloadUrl.isEmpty ||
+            !_isAllowedMtgFirebaseDownloadUri(downloadUrl)) {
+          continue;
+        }
+        selected.add(
+          MtgHostedBundleArtifact(
+            id: id,
+            language: language,
+            name: name,
+            downloadUrl: downloadUrl,
+            sizeBytes: sizeBytes is int ? sizeBytes : 0,
+          ),
+        );
+      }
+    }
+    selected.sort((a, b) {
+      const order = {'base_en': 0, 'delta_it': 1};
+      return (order[a.id] ?? 99).compareTo(order[b.id] ?? 99);
+    });
+    return selected;
+  }
+}
+
 class ScryfallBulkImporter {
   static const _batchSize = 20;
 
@@ -45,7 +290,9 @@ class ScryfallBulkImporter {
       throw FileSystemException('bulk_file_not_found', filePath);
     }
     final counts = <String, int>{};
-    final parser = JsonArrayObjectParser(file.openRead().transform(utf8.decoder));
+    final parser = JsonArrayObjectParser(
+      file.openRead().transform(utf8.decoder),
+    );
     var read = 0;
     await for (final card in parser.objects()) {
       final lang = (card['lang'] as String?)?.trim().toLowerCase();
@@ -96,12 +343,10 @@ class ScryfallBulkImporter {
             final progress = message['progress'] as double? ?? 0;
             onProgress(count, progress);
           } else if (type == 'batch') {
-            final items = (message['items'] as List?)?.cast<Map<String, dynamic>>();
+            final items = (message['items'] as List?)
+                ?.cast<Map<String, dynamic>>();
             final mapped = items ?? const <Map<String, dynamic>>[];
-            await ScryfallDatabase.instance.insertCardsBatch(
-              database,
-              mapped,
-            );
+            await ScryfallDatabase.instance.insertCardsBatch(database, mapped);
             count += mapped.length;
             onProgress(count, message['progress'] as double? ?? 0);
           } else if (type == 'done') {
@@ -126,8 +371,10 @@ class ScryfallBulkImporter {
     await ScryfallDatabase.instance.rebuildPrintedNameSearchIndex();
 
     if (updatedAtRaw != null && bulkType != null) {
-      await ScryfallBulkChecker()
-          .markAllCardsInstalled(updatedAtRaw, bulkType: bulkType);
+      await ScryfallBulkChecker().markAllCardsInstalled(
+        updatedAtRaw,
+        bulkType: bulkType,
+      );
     }
   }
 }
@@ -234,15 +481,18 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
   }
 
   try {
-    final stream = file.openRead().map((chunk) {
-      bytesRead += chunk.length;
-      final now = DateTime.now();
-      if (now.difference(lastProgress).inMilliseconds > 200) {
-        lastProgress = now;
-        sendProgress();
-      }
-      return chunk;
-    }).transform(utf8.decoder);
+    final stream = file
+        .openRead()
+        .map((chunk) {
+          bytesRead += chunk.length;
+          final now = DateTime.now();
+          if (now.difference(lastProgress).inMilliseconds > 200) {
+            lastProgress = now;
+            sendProgress();
+          }
+          return chunk;
+        })
+        .transform(utf8.decoder);
 
     final parser = JsonArrayObjectParser(stream);
     await for (final card in parser.objects()) {
@@ -275,15 +525,9 @@ Future<void> _scryfallParseIsolate(_ScryfallParseConfig config) async {
       });
     }
 
-    config.sendPort.send({
-      'type': 'done',
-      'count': count,
-    });
+    config.sendPort.send({'type': 'done', 'count': count});
   } catch (_) {
-    config.sendPort.send({
-      'type': 'error',
-      'message': 'parse_failed',
-    });
+    config.sendPort.send({'type': 'error', 'message': 'parse_failed'});
   }
 }
 
@@ -315,6 +559,8 @@ Map<String, dynamic> _compactScryfallCard(Map<String, dynamic> card) {
   copyScalar('lang');
   copyScalar('released_at');
   copyScalar('printed_name');
+  copyScalar('printed_text');
+  copyScalar('printed_type_line');
   copyScalar('set_type');
 
   final colors = card['colors'];
@@ -323,9 +569,9 @@ Map<String, dynamic> _compactScryfallCard(Map<String, dynamic> card) {
   }
   final colorIdentity = card['color_identity'];
   if (colorIdentity is List) {
-    compact['color_identity'] = colorIdentity
-        .whereType<String>()
-        .toList(growable: false);
+    compact['color_identity'] = colorIdentity.whereType<String>().toList(
+      growable: false,
+    );
   }
   final imageUris = card['image_uris'];
   if (imageUris is Map) {
@@ -343,6 +589,8 @@ Map<String, dynamic> _compactScryfallCard(Map<String, dynamic> card) {
       for (final key in const [
         'name',
         'printed_name',
+        'printed_text',
+        'printed_type_line',
         'type_line',
         'oracle_text',
         'mana_cost',
@@ -395,8 +643,6 @@ Map<String, dynamic> _compactScryfallCard(Map<String, dynamic> card) {
   return compact;
 }
 
-
-
 class ScryfallBulkCheckResult {
   const ScryfallBulkCheckResult({
     required this.updateAvailable,
@@ -427,10 +673,14 @@ class ScryfallBulkChecker {
   Future<ScryfallBulkCheckResult> _cachedResult(String bulkType) async {
     final prefs = await SharedPreferences.getInstance();
     final latestUpdatedAt = prefs.getString(_prefsKeyLatestUpdatedAt(bulkType));
-    final installedUpdatedAt =
-        prefs.getString(_prefsKeyInstalledUpdatedAt(bulkType));
-    final cachedDownloadUriRaw = prefs.getString(_prefsKeyDownloadUri(bulkType));
-    final cachedDownloadUri = _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
+    final installedUpdatedAt = prefs.getString(
+      _prefsKeyInstalledUpdatedAt(bulkType),
+    );
+    final cachedDownloadUriRaw = prefs.getString(
+      _prefsKeyDownloadUri(bulkType),
+    );
+    final cachedDownloadUri =
+        _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
         ? cachedDownloadUriRaw
         : null;
     final sizeRaw = prefs.getString(_prefsKeyExpectedSize(bulkType));
@@ -467,9 +717,9 @@ class ScryfallBulkChecker {
       }
 
       final entry = data.whereType<Map<String, dynamic>>().firstWhere(
-            (item) => item['type'] == bulkType,
-            orElse: () => const {},
-          );
+        (item) => item['type'] == bulkType,
+        orElse: () => const {},
+      );
       if (entry.isEmpty) {
         return _cachedResult(bulkType);
       }
@@ -480,8 +730,9 @@ class ScryfallBulkChecker {
       final downloadUri = _isAllowedScryfallDownloadUri(downloadUriRaw)
           ? downloadUriRaw
           : null;
-      final updatedAt =
-          updatedAtRaw != null ? DateTime.tryParse(updatedAtRaw) : null;
+      final updatedAt = updatedAtRaw != null
+          ? DateTime.tryParse(updatedAtRaw)
+          : null;
 
       final prefs = await SharedPreferences.getInstance();
       if (updatedAtRaw != null) {
@@ -493,14 +744,17 @@ class ScryfallBulkChecker {
       if (sizeBytes != null && sizeBytes > 0) {
         await prefs.setString(_prefsKeyExpectedSize(bulkType), '$sizeBytes');
       }
-      final cachedDownloadUriRaw = prefs.getString(_prefsKeyDownloadUri(bulkType));
+      final cachedDownloadUriRaw = prefs.getString(
+        _prefsKeyDownloadUri(bulkType),
+      );
       final cachedDownloadUri =
           _isAllowedScryfallDownloadUri(cachedDownloadUriRaw)
           ? cachedDownloadUriRaw
           : null;
 
-      final installedUpdatedAt =
-          prefs.getString(_prefsKeyInstalledUpdatedAt(bulkType));
+      final installedUpdatedAt = prefs.getString(
+        _prefsKeyInstalledUpdatedAt(bulkType),
+      );
       final updateAvailable =
           updatedAtRaw != null && updatedAtRaw != installedUpdatedAt;
 

@@ -38,6 +38,24 @@ Per forzare riscaricamento del bulk Scryfall:
 .\tools\firebase\release_mtg_bundle_firebase.ps1 -ForceDownload -ForceBuild
 ```
 
+## Validazione Manifest Locale
+
+Dopo la generazione e prima del publish, validare il contratto del manifest e
+gli artifact locali:
+
+```powershell
+python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\mtg_bundle_firebase\manifest.json --game mtg --verify-local-artifacts
+```
+
+## Verifica Post-Pubblicazione
+
+Dopo un publish reale, verificare che il manifest `latest` e gli artifact
+referenziati siano scaricabili e coerenti con `size_bytes` e `sha256`:
+
+```powershell
+.\tools\firebase\verify_catalog_bundle_firebase.ps1 -Game mtg
+```
+
 ## Output
 
 ```text
@@ -59,6 +77,7 @@ catalog/mtg/latest/manifest.json
 Gli artifact contengono array JSON di carte Scryfall compattate. Una volta
 decompressi, mantengono la forma dati gia usata dall'importer Magic attuale.
 
-Il client non e ancora stato spostato su questo bundle. La produzione attuale
-puo continuare a usare Scryfall direttamente finche la nuova app non integra
-`catalog/mtg/latest/manifest.json`.
+Il client usa `catalog/mtg/latest/manifest.json` come fonte del download
+runtime. Il bundle viene ricombinato localmente e importato nel database
+legacy, quindi la pipeline Firebase sostituisce il download diretto da
+Scryfall ma non ancora lo storage locale dell'app.

@@ -29,6 +29,17 @@ SCHEMA_VERSION = 1
 COMPATIBILITY_VERSION = 1
 
 
+def safe_version_token(value: str) -> str:
+    return (
+        value.strip()
+        .replace("-", "")
+        .replace(":", "")
+        .replace(".", "")
+        .replace("+", "")
+        .replace("Z", "Z")
+    )
+
+
 def compact_scryfall_card(card: dict[str, Any]) -> dict[str, Any]:
     compact: dict[str, Any] = {}
 
@@ -180,9 +191,7 @@ def ensure_bulk_file(
     if not updated_at or not download_uri:
         raise RuntimeError("Scryfall bulk entry is missing updated_at/download_uri.")
 
-    safe_updated_at = (
-        updated_at.replace(":", "").replace("-", "").replace(".", "").replace("Z", "Z")
-    )
+    safe_updated_at = safe_version_token(updated_at)
     target = cache_dir / f"scryfall_{bulk_type}_{safe_updated_at}.json"
     metadata_path = cache_dir / f"scryfall_{bulk_type}_latest.json"
     if force_download or not target.exists():
@@ -378,12 +387,7 @@ def main() -> int:
         raise RuntimeError("Scryfall bulk updated_at is missing.")
     version = args.version.strip()
     if not version:
-        source_part = (
-            updated_at.replace("-", "")
-            .replace(":", "")
-            .replace(".", "")
-            .replace("Z", "Z")
-        )
+        source_part = safe_version_token(updated_at)
         version = f"{source_part}-full-base-delta-compat1"
 
     existing_manifest = output_dir / "manifest.json"

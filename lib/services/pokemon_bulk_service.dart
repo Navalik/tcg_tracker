@@ -373,7 +373,7 @@ class PokemonBulkService {
         requestTimeout: const Duration(seconds: 20),
       );
       stage = 'manifest_parse';
-      final manifestParsed = jsonDecode(manifestRaw);
+      final manifestParsed = jsonDecode(_stripUtf8Bom(manifestRaw));
       if (manifestParsed is! Map<String, dynamic>) {
         return null;
       }
@@ -2229,11 +2229,12 @@ class PokemonBulkService {
         retryAttempts: 2,
         requestTimeout: const Duration(seconds: 20),
       );
+      final normalizedPayload = _stripUtf8Bom(payload);
       var hash = 0;
-      for (final unit in payload.codeUnits) {
+      for (final unit in normalizedPayload.codeUnits) {
         hash = ((hash * 31) + unit) & 0x7fffffff;
       }
-      final parsed = jsonDecode(payload);
+      final parsed = jsonDecode(normalizedPayload);
       String? sourceRepo;
       String? sourceRef;
       String? sourceCommit;
@@ -2313,6 +2314,13 @@ class PokemonBulkService {
       default:
         return const Duration(seconds: 2);
     }
+  }
+
+  String _stripUtf8Bom(String value) {
+    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
+      return value.substring(1);
+    }
+    return value;
   }
 }
 

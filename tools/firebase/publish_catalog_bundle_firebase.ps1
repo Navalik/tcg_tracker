@@ -246,9 +246,12 @@ foreach ($manifestFile in $manifestFiles) {
     -ReleasePrefix $releasePrefix
   $stagedManifestPath = Join-Path $stagingPath $manifestFile.Name
   if (-not $DryRun) {
-    $storageManifest |
-      ConvertTo-Json -Depth 100 -Compress |
-      Set-Content -LiteralPath $stagedManifestPath -Encoding UTF8
+    $manifestJson = $storageManifest | ConvertTo-Json -Depth 100 -Compress
+    [System.IO.File]::WriteAllText(
+      $stagedManifestPath,
+      $manifestJson,
+      [System.Text.UTF8Encoding]::new($false)
+    )
   } else {
     Write-Host "[publish] stage manifest $($manifestFile.Name)"
   }

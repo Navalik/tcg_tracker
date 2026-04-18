@@ -443,7 +443,6 @@ extension _SettingsOperationsSection on _SettingsPageState {
       languages.add('it');
     }
     await AppSettings.saveCardLanguagesForGame(target, languages);
-    final bulkType = await AppSettings.loadBulkTypeForGame(target);
     if (!mounted) {
       return;
     }
@@ -455,117 +454,32 @@ extension _SettingsOperationsSection on _SettingsPageState {
       }
     });
     final gameLabel = game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
-    final normalizedBulk = (bulkType ?? '').trim().toLowerCase();
-    final requiresAllCards =
-        game == TcgGame.mtg && enabled && normalizedBulk != 'all_cards';
-    final canReimportNow = !requiresAllCards;
     final shouldReimportNow = await showDialog<bool>(
       context: context,
       builder: (context) {
         final l10n = AppLocalizations.of(context)!;
-        final body = requiresAllCards
-            ? (_isItalianUi
-                  ? 'Lingue $gameLabel aggiornate. Con il database corrente il catalogo locale non copre ancora tutte le lingue attive. Per applicarle offline serve un reimport completo.'
-                  : '$gameLabel languages updated. With the current database, the local catalog does not yet cover all active languages. A full reimport is required for offline support.')
-            : (_isItalianUi
-                  ? 'Lingue $gameLabel aggiornate. Per applicare la modifica devi reimportare il database locale.'
-                  : '$gameLabel languages updated. Reimport the local database to apply this change.');
+        final body = _isItalianUi
+            ? 'Lingue $gameLabel aggiornate. Per applicare la modifica devi reimportare il database locale.'
+            : '$gameLabel languages updated. Reimport the local database to apply this change.';
         return AlertDialog(
           title: Text(_isItalianUi ? 'Lingue aggiornate' : 'Languages updated'),
           content: Text(body),
-          actions: canReimportNow
-              ? [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(l10n.notNow),
-                  ),
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    child: Text(_reimportLabel()),
-                  ),
-                ]
-              : [
-                  FilledButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    child: Text(l10n.continueLabel),
-                  ),
-                ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(l10n.notNow),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(_reimportLabel()),
+            ),
+          ],
         );
       },
     );
     if (shouldReimportNow == true && mounted) {
       await _reimportDatabaseForGame(game, skipConfirmation: true);
     }
-  }
-
-  Future<void> _changeBulkType() async {
-    final l10n = AppLocalizations.of(context)!;
-    final selected = await _showBulkTypePicker(
-      context,
-      allowCancel: true,
-      selectedType: _bulkType,
-      requireConfirmation: true,
-      confirmLabel: l10n.downloadUpdate,
-      allowResetAction: true,
-      resetLabel: l10n.resetMagicDatabaseLabel,
-    );
-    if (selected == null) {
-      return;
-    }
-    if (selected == _bulkPickerResetAction) {
-      await _resetDatabaseForGame(TcgGame.mtg);
-      return;
-    }
-    if (selected == _bulkType) {
-      return;
-    }
-    if (!mounted) {
-      return;
-    }
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
-        return AlertDialog(
-          title: Text(l10n.updatingDatabaseTitle),
-          content: Row(
-            children: [
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 12),
-              Expanded(child: Text(l10n.preparingDatabaseBody)),
-            ],
-          ),
-        );
-      },
-    );
-
-    try {
-      await AppSettings.saveBulkTypeForGame(AppTcgGame.mtg, selected);
-      await ScryfallBulkChecker().resetState();
-      await ScryfallDatabase.instance.hardReset();
-      await _deleteBulkFiles();
-    } finally {
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    }
-
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _bulkType = selected;
-    });
-    _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
-    Navigator.of(
-      context,
-    ).pop(SettingsPostAction.startMtgDownload(bulkType: selected));
   }
 
   Future<void> _resetDatabaseForGame(TcgGame game) async {
@@ -687,7 +601,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
         return 'Reimport fallito: file bulk locale non trovato.';
       }
       if (text.contains('bulk_local_missing_it')) {
-        return 'Reimport fallito: il file locale non contiene abbastanza carte italiane. Scarica di nuovo "All printings".';
+        return 'Reimport fallito: il file locale non contiene abbastanza carte italiane. Scarica di nuovo il bundle Firebase.';
       }
       return 'Reimport fallito: $text';
     }
@@ -704,7 +618,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       return 'Reimport failed: local bulk file not found.';
     }
     if (text.contains('bulk_local_missing_it')) {
-      return 'Reimport failed: local file has too few Italian cards. Download "All printings" again.';
+      return 'Reimport failed: local file has too few Italian cards. Download the Firebase bundle again.';
     }
     return 'Reimport failed: $text';
   }
@@ -859,10 +773,9 @@ extension _SettingsOperationsSection on _SettingsPageState {
       return;
     }
     await _refreshLatestPokemonAutomaticBackup();
-    final pokemonBackupFile =
-        game == TcgGame.pokemon
-            ? PokemonBulkService.instance.lastAutomaticCollectionsBackupFile
-            : null;
+    final pokemonBackupFile = game == TcgGame.pokemon
+        ? PokemonBulkService.instance.lastAutomaticCollectionsBackupFile
+        : null;
     final doneLabel = _reimportDoneLabel(gameLabel);
     final message = pokemonBackupFile == null
         ? doneLabel

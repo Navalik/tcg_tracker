@@ -43,6 +43,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Timer? _pokemonSyncUiTimer;
   int _pokemonSyncElapsedSeconds = 0;
   String? _bulkUpdatedAtRaw;
+  MtgHostedBundleCheckResult? _mtgHostedBundleResult;
   bool _cardsMissing = false;
   String _priceCurrency = 'eur';
   bool _showPrices = true;
@@ -418,8 +419,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                                           ? 'Se attivi anche italiano, il download iniziale sara piu lungo e il database locale occupera piu spazio. Potrai comunque cambiare questa scelta in seguito.'
                                           : 'If you also enable Italian, the initial download will take longer and the local database will use more storage. You can change this later.')
                                     : (italian
-                                          ? 'Attenzione: le lingue aggiuntive funzionano offline solo con il database "All Cards". Con database piu piccoli, ricerca e risultati nelle lingue aggiuntive useranno internet.'
-                                          : 'Warning: additional languages work offline only with the "All Cards" database. With smaller databases, search and results in additional languages will use internet.'),
+                                          ? 'Se attivi anche italiano, il download iniziale includera anche il bundle IT da Firebase.'
+                                          : 'If you also enable Italian, the initial download also includes the IT bundle from Firebase.'),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
@@ -2795,9 +2796,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _initializeStartup() async {
-    final storedBulkType = await AppSettings.loadBulkTypeForGame(
+    final storedBulkTypeRaw = await AppSettings.loadBulkTypeForGame(
       _activeSettingsGame,
     );
+    final storedBulkType = _isMtgActiveGame ? 'all_cards' : storedBulkTypeRaw;
+    if (_isMtgActiveGame && storedBulkTypeRaw != 'all_cards') {
+      await AppSettings.saveBulkTypeForGame(_activeSettingsGame, 'all_cards');
+    }
     if (!mounted) {
       return;
     }
@@ -2809,6 +2814,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       _bulkUpdatedAtRaw = null;
       _bulkExpectedSizeBytes = null;
       _bulkDownloadError = null;
+      _mtgHostedBundleResult = null;
     });
 
     await _checkCardsInstalled();
@@ -2818,30 +2824,14 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     var forceBootstrapDownload = false;
     if (_cardsMissing) {
-      await Future<void>.delayed(Duration.zero);
+      await AppSettings.saveBulkTypeForGame(_activeSettingsGame, 'all_cards');
       if (!mounted) {
         return;
       }
-      final selected = await _showBulkTypePicker(
-        context,
-        allowCancel: false,
-        selectedType: _selectedBulkType,
-        requireConfirmation: true,
-        confirmLabel: AppLocalizations.of(context)!.downloadUpdate,
-      );
-      if (!mounted) {
-        return;
-      }
-      if (selected != null) {
-        await AppSettings.saveBulkTypeForGame(_activeSettingsGame, selected);
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _selectedBulkType = selected;
-        });
-        forceBootstrapDownload = true;
-      }
+      setState(() {
+        _selectedBulkType = 'all_cards';
+      });
+      forceBootstrapDownload = true;
     }
 
     if (_selectedBulkType != null) {
@@ -2856,6 +2846,13 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     bool forceDownload = false,
     bool restartAfterImport = false,
   }) async {
+    if (_isMtgActiveGame) {
+      await _checkMtgHostedBulk(
+        forceDownload: forceDownload,
+        restartAfterImport: restartAfterImport,
+      );
+      return;
+    }
     if (_checkingBulk) {
       return;
     }
@@ -2895,6 +2892,61 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     }
   }
 
+  Future<void> _checkMtgHostedBulk({
+    bool forceDownload = false,
+    bool restartAfterImport = false,
+  }) async {
+    if (_checkingBulk) {
+      return;
+    }
+    setState(() {
+      _checkingBulk = true;
+      _bulkDownloadError = null;
+    });
+
+    try {
+      final languages = (await AppSettings.loadCardLanguagesForGame(
+        _activeSettingsGame,
+      )).toSet();
+      final result = await MtgHostedBundleService().checkForUpdate(
+        languages: languages,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _checkingBulk = false;
+        _bulkUpdateAvailable = result.updateAvailable;
+        _bulkDownloadUri = MtgHostedBundleService.manifestUrl;
+        _bulkUpdatedAt = result.updatedAt;
+        _bulkUpdatedAtRaw = result.updatedAtRaw;
+        _bulkExpectedSizeBytes = result.sizeBytes;
+        _mtgHostedBundleResult = result;
+      });
+
+      if (result.updateAvailable) {
+        showAppSnackBar(
+          context,
+          AppLocalizations.of(context)!.scryfallBulkUpdateAvailable,
+        );
+      }
+      if (forceDownload || _cardsMissing) {
+        await _maybeStartBulkDownload(
+          forceDownload: forceDownload || _cardsMissing,
+          restartAfterImport: restartAfterImport,
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _checkingBulk = false;
+        _bulkDownloadError = error.toString();
+      });
+    }
+  }
+
   Future<void> _checkCardsInstalled() async {
     final count = await ScryfallDatabase.instance.countCards();
     final owned = await ScryfallDatabase.instance.countOwnedCards();
@@ -2929,6 +2981,38 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     if (bulkType == null) {
       return;
     }
+    if (_isMtgActiveGame) {
+      try {
+        final languages = (await AppSettings.loadCardLanguagesForGame(
+          _activeSettingsGame,
+        )).toSet();
+        final result = await MtgHostedBundleService().checkForUpdate(
+          languages: languages,
+        );
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _bulkDownloadUri = MtgHostedBundleService.manifestUrl;
+          _bulkUpdatedAt = result.updatedAt;
+          _bulkUpdatedAtRaw = result.updatedAtRaw;
+          _bulkUpdateAvailable = result.updateAvailable || _cardsMissing;
+          _bulkExpectedSizeBytes = result.sizeBytes;
+          _mtgHostedBundleResult = result;
+        });
+        if (!_cardsMissing) {
+          await _maybeStartBulkDownload();
+        }
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _bulkDownloadError = error.toString();
+        });
+      }
+      return;
+    }
     final result = await ScryfallBulkChecker().checkAllCardsUpdate(bulkType);
     if (!mounted) {
       return;
@@ -2953,6 +3037,20 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (_bulkDownloadUri == null) {
+      return;
+    }
+    if (_isMtgActiveGame) {
+      final hostedBundle = _mtgHostedBundleResult;
+      if (hostedBundle == null) {
+        return;
+      }
+      if (!forceDownload && !_cardsMissing && !_bulkUpdateAvailable) {
+        return;
+      }
+      await _downloadMtgHostedBundle(
+        hostedBundle,
+        restartAfterImport: restartAfterImport,
+      );
       return;
     }
     if (!_isAllowedBulkDownloadUri(_bulkDownloadUri!)) {
@@ -6537,6 +6635,92 @@ class _CollectionHomePageState extends State<CollectionHomePage>
     showAppSnackBar(context, AppLocalizations.of(context)!.collectionDeleted);
   }
 
+  Future<void> _downloadMtgHostedBundle(
+    MtgHostedBundleCheckResult bundle, {
+    bool restartAfterImport = false,
+  }) async {
+    const bulkType = 'all_cards';
+    if (_selectedBulkType != bulkType) {
+      await AppSettings.saveBulkTypeForGame(_activeSettingsGame, bulkType);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _selectedBulkType = bulkType;
+      });
+    }
+    setState(() {
+      _bulkDownloading = true;
+      _bulkDownloadProgress = 0;
+      _bulkDownloadReceived = 0;
+      _bulkDownloadTotal = bundle.sizeBytes;
+      _bulkExpectedSizeBytes = bundle.sizeBytes;
+      _bulkDownloadError = null;
+      _mtgSyncStatus = _isItalianUi()
+          ? 'Download database da Firebase...'
+          : 'Downloading database from Firebase...';
+    });
+
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final targetPath = '${directory.path}/${_bulkTypeFileName(bulkType)}';
+      final progressThrottle = Stopwatch()..start();
+      const minProgressInterval = Duration(milliseconds: 120);
+      await MtgHostedBundleService().downloadCombinedJson(
+        bundle: bundle,
+        targetPath: targetPath,
+        onProgress: (received, total) {
+          if (!mounted) {
+            return;
+          }
+          final shouldReport =
+              progressThrottle.elapsed >= minProgressInterval ||
+              (total > 0 && received >= total);
+          if (!shouldReport) {
+            return;
+          }
+          progressThrottle.reset();
+          setState(() {
+            _bulkDownloadReceived = received;
+            _bulkDownloadTotal = total;
+            if (total > 0) {
+              _bulkDownloadProgress = received / total;
+            }
+          });
+        },
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bulkDownloadReceived = bundle.sizeBytes;
+        _bulkDownloadTotal = bundle.sizeBytes;
+        _bulkDownloadProgress = 1;
+        _bulkDownloading = false;
+        _mtgSyncStatus = _isItalianUi()
+            ? 'Preparazione import locale...'
+            : 'Preparing local import...';
+      });
+      await _importBulkFile(targetPath, restartAfterImport: restartAfterImport);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final l10n = AppLocalizations.of(context)!;
+      final message = _isStorageSpaceError(error)
+          ? _storageSpaceErrorMessage(italian: _isItalianUi())
+          : ((error is HttpException || error is SocketException)
+                ? l10n.networkErrorTryAgain
+                : l10n.downloadFailedGeneric);
+      setState(() {
+        _bulkDownloading = false;
+        _bulkDownloadError = message;
+        _mtgSyncStatus = null;
+      });
+      showAppSnackBar(context, message);
+    }
+  }
+
   Future<void> _downloadBulkFile(
     String downloadUri, {
     bool restartAfterImport = false,
@@ -6692,7 +6876,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
 
     try {
       final importer = ScryfallBulkImporter();
-      final preflight = await importer.inspectLocalBulkLanguageCounts(filePath);
+      final preflight = await importer.inspectLocalBulkLanguageCounts(
+        filePath,
+        maxCards: _mtgHostedBundleResult == null ? 120000 : 300000,
+      );
       if (normalizedBulkType == 'all_cards' &&
           allowedLanguages.contains('it')) {
         final sampleIt = preflight.languageCounts['it'] ?? 0;
@@ -6727,6 +6914,10 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       );
       if (_selectedBulkType != null) {
         await _cleanupMtgBulkFilesKeepingType(_selectedBulkType!);
+      }
+      final hostedBundleVersion = _mtgHostedBundleResult?.version;
+      if (hostedBundleVersion != null) {
+        await MtgHostedBundleService().markInstalled(hostedBundleVersion);
       }
 
       if (!mounted) {
@@ -6784,8 +6975,8 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       });
       final msg = error.toString().contains('bulk_local_missing_it')
           ? (_isItalianUi()
-                ? 'File locale non coerente: poche carte IT. Riscarica All printings.'
-                : 'Local file mismatch: too few IT cards. Download All printings again.')
+                ? 'File locale non coerente: poche carte IT. Riscarica il bundle Firebase.'
+                : 'Local file mismatch: too few IT cards. Download the Firebase bundle again.')
           : (_isStorageSpaceError(error)
                 ? _storageSpaceErrorMessage(italian: _isItalianUi())
                 : l10n.importFailed('import_failed'));
@@ -7124,7 +7315,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
             metaLine: mtgMeta,
           )
         : null;
-    final bulkLabel = _bulkTypeLabel(l10n, _selectedBulkType);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: Stack(
@@ -7241,11 +7431,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
                       else if (_cardsMissing)
                         Text(
                           _isMtgActiveGame
-                              ? (_selectedBulkType == null
-                                    ? l10n.selectDatabaseToDownload
-                                    : l10n.databaseMissingDownloadRequired(
-                                        bulkLabel,
-                                      ))
+                              ? (_isItalianUi()
+                                    ? 'Database Magic mancante. Tocca Riprova per scaricare il bundle Firebase.'
+                                    : 'Magic database missing. Tap Retry to download the Firebase bundle.')
                               : (_isItalianUi()
                                     ? 'Database Pokemon mancante. Tocca Riprova.'
                                     : 'Pokemon database missing. Tap Retry.'),

@@ -76,6 +76,25 @@ Per pubblicare senza aggiornare il puntatore `latest`:
 .\tools\firebase\release_pokemon_bundle_firebase.ps1 -SkipLatest
 ```
 
+## Validazione Manifest Locale
+
+Dopo la generazione e prima del publish, validare il contratto del manifest e
+gli artifact locali:
+
+```powershell
+python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\pokemon_bundle_firebase\manifest.json --game pokemon --verify-local-artifacts
+```
+
+## Verifica Firebase Post-Pubblicazione
+
+Dopo un publish reale sul canale Firebase, verificare che il manifest `latest`
+e gli artifact referenziati siano scaricabili e coerenti con `size_bytes` e
+`sha256`:
+
+```powershell
+.\tools\firebase\verify_catalog_bundle_firebase.ps1 -Game pokemon
+```
+
 ## Output
 
 Ogni bundle include:
@@ -100,6 +119,8 @@ rilascio:
 
 - `tools/shared/build_pokemon_bundle.py`: genera gli artefatti.
 - `tools/shared/check_pokemon_bundle_updates.py`: confronta sorgente e manifest.
+- `tools/shared/validate_catalog_manifest.py`: valida il contratto manifest e,
+  se richiesto, hash/dimensioni degli artifact locali.
 
 ## Note
 
