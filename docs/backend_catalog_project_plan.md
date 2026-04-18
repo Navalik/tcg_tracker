@@ -50,17 +50,25 @@ Cloud e servizi gia presenti:
 
 Componenti gia presenti nel repo:
 - `functions/`: Firebase Functions attuali, oggi usate per entitlement Google Play;
-- `storage.rules`: regole Storage, oggi limitate ai backup utente;
+- `storage.rules`: regole Storage per cataloghi pubblici in lettura e backup utente Plus;
 - `bindervault-site/`: sito statico pubblico esistente;
-- `tools/build_pokemon_bundle.py`: genera bundle Pokemon offline;
-- `tools/publish_pokemon_bundle_release.ps1`: pubblica bundle Pokemon su GitHub Release;
-- `lib/services/pokemon_bulk_service.dart`: scarica manifest e bundle Pokemon da GitHub Release;
+- `tools/shared/build_pokemon_bundle.py`: genera bundle Pokemon offline;
+- `tools/shared/build_mtg_bundle.py`: genera bundle MTG da Scryfall bulk;
+- `tools/prod/publish_pokemon_bundle_release.ps1`: pubblica bundle Pokemon su GitHub Release;
+- `tools/firebase/publish_catalog_bundle_firebase.ps1`: pubblica bundle catalogo su Firebase Storage;
+- `tools/firebase/release_pokemon_bundle_firebase.ps1`: genera e pubblica bundle Pokemon Firebase;
+- `tools/firebase/release_mtg_bundle_firebase.ps1`: genera e pubblica bundle MTG Firebase;
+- `lib/services/pokemon_bulk_service.dart`: scarica manifest e bundle Pokemon da Firebase Storage;
+- `lib/parts/scryfall_bulk.dart`: scarica manifest e artifact MTG da Firebase Storage e li importa nel DB locale legacy;
 - `lib/db/canonical_catalog_store.dart`: storage canonico locale;
 - `lib/providers/provider_contracts.dart`: contratti provider lato app.
 
 Dipendenze esterne ancora lato app:
-- Pokemon scarica da GitHub Release;
-- MTG usa ancora Scryfall per bulk, lookup, search, scanner e prezzi;
+- Pokemon usa Firebase Storage come fonte catalogo per la nuova app;
+- MTG usa Firebase Storage come fonte catalogo per la nuova app;
+- Pokemon GitHub Release resta solo canale della produzione precedente finche non viene sostituita dalla release mobile Firebase;
+- MTG puo avere ancora fallback/lookup runtime Scryfall in flussi non migrati;
+- prezzi MTG restano orientati a Scryfall/provider legacy;
 - ci sono ancora URL `api.scryfall.com` nel codice app.
 
 ## Direzione Architetturale
@@ -123,7 +131,7 @@ Web catalog
 
 Non conviene attivare subito tutto lo stack backend.
 
-La sequenza consigliata e:
+La sequenza consigliata era:
 
 1. Spostare Pokemon da GitHub Release a Firebase Storage.
 2. Rendere generico il contratto manifest/artifact.
@@ -131,7 +139,16 @@ La sequenza consigliata e:
 4. Usare lo stesso meccanismo per MTG.
 5. Solo dopo introdurre DB centrale e API web catalog.
 
-Questo permette di ridurre subito le dipendenze runtime senza pagare complessita infrastrutturale prematura.
+Stato aggiornato:
+- Pokemon e stato spostato su Firebase Storage per la nuova app.
+- MTG e stato aggiunto a Firebase Storage con bundle `base_en` + `delta_it`.
+- Il contratto manifest/artifact e gia molto simile tra i due giochi, ma non e ancora espresso in un parser/verifier unico.
+- Il download layer nell'app resta parzialmente duplicato tra Pokemon e MTG.
+- DB centrale e API web catalog restano fuori scope per il momento.
+
+Questo mantiene basso il rischio infrastrutturale: Firebase Storage distribuisce
+i cataloghi versionati, mentre l'app resta offline-first e importa nei database
+locali esistenti.
 
 ## Architettura MVP
 
@@ -167,6 +184,14 @@ catalog/
         canonical_catalog_snapshot_it.json.gz
         pokemon_legacy_en.db.gz
         pokemon_legacy_it.db.gz
+  mtg/
+    latest/
+      manifest.json
+    releases/
+      20260417T0920027840000-full-base-delta-compat1/
+        manifest.json
+        mtg_base_en.json.gz
+        mtg_delta_it.json.gz
 ```
 
 Regole:
@@ -313,7 +338,7 @@ La scrittura deve avvenire tramite strumenti admin, Firebase CLI, service accoun
 Creare uno script dedicato:
 
 ```text
-tools/publish_catalog_bundle_firebase.ps1
+tools/firebase/publish_catalog_bundle_firebase.ps1
 ```
 
 Responsabilita:
@@ -350,21 +375,43 @@ Checklist post-pubblicazione:
 - `latest/manifest.json` scaricabile;
 - ogni `download_url` scaricabile;
 - hash remoto uguale a quello del manifest;
-- install pulita Pokemon completata;
+- install pulita completata per il gioco pubblicato;
 - versione precedente ancora presente in `releases/`;
 - eventuale fallback GitHub ancora funzionante finche previsto.
 
+### Compatibilita App Pubblicata E Dati Utente
+
+Il progetto catalogo non deve rompere l'app gia installata dagli utenti e non
+deve mettere a rischio database locali, collezioni, wishlist o deck.
+
+Regole obbligatorie:
+- non rimuovere o sovrascrivere gli artifact usati dalla produzione corrente;
+- non rimuovere il canale GitHub Pokemon finche la release mobile Firebase non
+  ha sostituito la produzione precedente;
+- trattare Firebase Storage `catalog/{game}/releases/{version}` come
+  append-only;
+- aggiornare solo `latest/manifest.json` per promozione o rollback;
+- non cambiare nomi file DB locali, schema o identita carte senza una
+  migrazione versionata e testata;
+- prima di ogni migrazione distruttiva, creare backup locale delle collezioni;
+- i bundle catalogo possono aggiornare carte e set, ma non devono cancellare o
+  riscrivere direttamente dati utente;
+- ogni release candidata deve passare almeno verifier catalogo e test di
+  install/reimport su un profilo con collezioni esistenti.
+
+Il verifier Firebase e read-only: scarica manifest e artifact pubblicati e ne
+controlla integrita. Non modifica Storage, database locali o dati utente.
+
 ### Modifica App MVP
 
-Primo intervento lato app:
-- sostituire URL GitHub hardcoded in `PokemonBulkService`;
-- introdurre configurazione centralizzata per manifest catalogo;
-- permettere download da Firebase Storage;
-- mantenere GitHub Release come fallback temporaneo;
-- aggiornare messaggi UI che citano GitHub;
-- lasciare invariato l'import locale.
+Stato lato app:
+- Pokemon scarica da Firebase Storage tramite `PokemonBulkService`;
+- MTG scarica da Firebase Storage tramite `MtgHostedBundleService`;
+- l'import locale resta invariato e continua a usare i database locali esistenti;
+- il download layer non e ancora generico;
+- il fallback GitHub resta solo legato alla produzione Pokemon precedente.
 
-Posizione consigliata:
+Posizione consigliata per la prossima estrazione:
 
 ```text
 lib/services/tcg_environment.dart
@@ -372,10 +419,9 @@ lib/services/catalog_manifest.dart
 lib/services/catalog_bundle_service.dart
 ```
 
-Per il primo step si puo anche fare una modifica piu piccola:
-- aggiungere `pokemonManifestUrl` centralizzato;
-- riusare la logica esistente in `PokemonBulkService`;
-- estrarre il servizio generico nella fase successiva.
+La prossima modifica app non deve cambiare il formato locale: deve solo
+spostare parsing manifest, selezione bundle, download, size check e SHA-256 in
+un servizio comune usato da Pokemon e MTG.
 
 ### Rollback MVP
 
@@ -399,15 +445,21 @@ Regola:
 Obiettivo:
 - sostituire GitHub Release come host principale dei bundle Pokemon.
 
+Stato:
+- completata per la nuova app Firebase;
+- il canale GitHub Release resta solo per la produzione precedente finche serve;
+- i manifest Firebase includono `download_url`, `path`, `size_bytes` e `sha256`;
+- il client Pokemon legge `catalog/pokemon/latest/manifest.json`.
+
 Task:
-- definire path Storage `catalog/pokemon/releases/{version}`;
-- aggiornare o adattare il manifest per includere `download_url`;
-- creare `tools/publish_catalog_bundle_firebase.ps1`;
-- aggiornare `storage.rules` per lettura pubblica di `catalog/`;
-- pubblicare una release Pokemon su Firebase Storage;
-- modificare `PokemonBulkService` per leggere il nuovo manifest;
+- definire path Storage `catalog/pokemon/releases/{version}`; **done**
+- aggiornare o adattare il manifest per includere `download_url`; **done**
+- creare `tools/firebase/publish_catalog_bundle_firebase.ps1`; **done**
+- aggiornare `storage.rules` per lettura pubblica di `catalog/`; **done**
+- pubblicare una release Pokemon su Firebase Storage; **done**
+- modificare `PokemonBulkService` per leggere il nuovo manifest; **done**
 - mantenere GitHub Release come fallback temporaneo;
-- testare install pulita e aggiornamento.
+- testare install pulita e aggiornamento su build release candidata.
 
 Regola obbligatoria sul fallback:
 - GitHub Release resta disponibile per una sola release mobile dopo il passaggio a Firebase Storage;
@@ -428,36 +480,47 @@ Obiettivo:
 - rendere il download cataloghi riusabile per Pokemon e MTG.
 
 Task:
+- creare verifier post-pubblicazione per manifest e artifact Firebase;
 - creare parser manifest generico;
 - creare servizio download artifact con verifica hash;
-- spostare logica comune fuori da `PokemonBulkService`;
-- mantenere import specifico Pokemon separato;
+- spostare logica comune fuori da `PokemonBulkService` e `MtgHostedBundleService`;
+- mantenere import specifici Pokemon e MTG separati;
 - aggiungere test del parser manifest;
 - documentare compatibilita manifest.
 
 Criteri di successo:
 - Pokemon continua a funzionare;
-- il codice per scaricare artifact non e Pokemon-specific;
-- MTG puo riusare lo stesso layer.
+- MTG continua a funzionare;
+- il codice per scaricare e verificare artifact non e specifico di un gioco;
+- un comando locale puo verificare `latest/manifest.json`, `download_url`, `size_bytes` e `sha256` per ogni gioco.
 
 ### Fase 3 - MTG Snapshot Da Backend/Builder
 
 Obiettivo:
 - iniziare a spostare MTG fuori dal runtime Scryfall lato app.
 
+Stato:
+- parzialmente completata;
+- esiste `tools/shared/build_mtg_bundle.py`;
+- esiste `tools/firebase/release_mtg_bundle_firebase.ps1`;
+- Firebase Storage espone `catalog/mtg/latest/manifest.json`;
+- il client usa `MtgHostedBundleService` per scaricare `base_en` e `delta_it`, ricombinarli e importarli nel DB locale legacy;
+- MTG non e ancora uno snapshot canonico BinderVault completo: gli artifact mantengono forma compatibile Scryfall compattata.
+
 Task:
-- creare builder MTG locale partendo da Scryfall bulk;
-- generare snapshot canonico BinderVault;
-- preservare mapping da Scryfall ID legacy;
-- pubblicare artifact MTG su Firebase Storage;
-- aggiungere manifest MTG;
-- aggiungere download/import MTG nell'app;
+- creare builder MTG locale partendo da Scryfall bulk; **done**
+- generare snapshot compatibile BinderVault/Scryfall compattato; **done**
+- preservare mapping da Scryfall ID legacy; **implicitamente preservato tramite `id` Scryfall, da formalizzare come mapping canonico**
+- pubblicare artifact MTG su Firebase Storage; **done**
+- aggiungere manifest MTG; **done**
+- aggiungere download/import MTG nell'app; **done**
+- generare snapshot canonico MTG vero;
 - mantenere fallback Scryfall temporaneo.
 
 Criteri di successo:
-- MTG puo installare un catalogo da artifact BinderVault;
-- Scryfall resta necessario solo per builder/fallback;
-- il runtime app riduce le chiamate dirette a Scryfall.
+- MTG puo installare un catalogo da artifact Firebase;
+- Scryfall resta necessario per builder e per eventuali flussi runtime non ancora migrati;
+- il runtime app riduce le chiamate dirette a Scryfall per il bulk catalogo.
 
 ### Fase 4 - Backend Centrale
 
@@ -481,7 +544,10 @@ Responsabilita:
 - set pages;
 - prezzi come dominio separato.
 
-Non attivare questa fase solo per spostare Pokemon da GitHub a Firebase Storage.
+Non attivare questa fase solo per distribuire cataloghi mobile da Firebase
+Storage: Pokemon e MTG sono gia coperti dal modello artifact/manifest. Cloud
+Run e Cloud SQL diventano utili quando servono API web, ricerca server-side,
+ingestion automatica o un catalogo centrale interrogabile.
 
 ### Fase 5 - Web Catalog
 
@@ -639,16 +705,16 @@ Per restare nel budget:
 Decisioni da prendere subito:
 
 1. Artifact catalogo pubblici o accessibili solo con token?
-   - Consiglio MVP: pubblici in lettura, nessun dato utente.
+   - Decisione MVP: pubblici in lettura, nessun dato utente.
 
 2. Manifest con `download_url` o solo `path` Storage?
-   - Consiglio MVP: entrambi, ma il client usa `download_url`.
+   - Decisione MVP: entrambi, ma il client usa `download_url`.
 
 3. GitHub fallback per quanto tempo?
-   - Consiglio: tenerlo per una release, poi rimuoverlo.
+   - Decisione operativa: tenerlo solo finche la produzione Pokemon precedente non viene sostituita dalla release mobile Firebase.
 
 4. Estrarre subito `CatalogBundleService`?
-   - Consiglio: prima migrazione piccola in `PokemonBulkService`, poi estrazione.
+   - Prossima decisione tecnica: si, dopo aver aggiunto un verifier post-pubblicazione e test del manifest contract.
 
 Decisioni da rinviare:
 
@@ -661,17 +727,20 @@ Decisioni da rinviare:
 
 ## Prossimo Step Consigliato
 
-Implementare Fase 1.
+Implementare la parte operativa della Fase 2: verifier post-pubblicazione e
+contratto manifest condiviso.
 
 Checklist concreta:
-- aggiungere regola read-only per `catalog/` in `storage.rules`;
-- adattare manifest Pokemon con path Storage e `download_url`;
-- creare script `tools/publish_catalog_bundle_firebase.ps1`;
-- pubblicare un bundle Pokemon su Firebase Storage;
-- aggiungere configurazione manifest in app;
-- aggiornare `PokemonBulkService` per Firebase Storage;
-- lasciare GitHub come fallback temporaneo;
-- testare install pulita Pokemon;
-- aggiornare documentazione del release flow.
+- creare `tools/firebase/verify_catalog_bundle_firebase.ps1`;
+- supportare almeno `-Game pokemon` e `-Game mtg`;
+- scaricare `catalog/{game}/latest/manifest.json`;
+- validare JSON, `bundle`, `version`, `schema_version`, `compatibility_version` e lista `bundles`;
+- per ogni artifact verificare `download_url`, `size_bytes` e `sha256`;
+- fallire con messaggio chiaro se un artifact manca o non corrisponde;
+- documentare il comando nei release flow Pokemon e MTG;
+- poi estrarre parser/downloader condiviso nell'app.
 
-Questo e il passo con miglior rapporto valore/rischio: riduce subito la dipendenza da GitHub Release, valida Firebase Storage come distribution layer e prepara il terreno per MTG senza introdurre ancora un backend complesso.
+Questo e il passo con miglior rapporto valore/rischio adesso: Pokemon e MTG
+sono gia distribuiti da Firebase Storage, quindi serve una garanzia automatica
+che ogni publish sia scaricabile e coerente prima di costruire ulteriore
+backend.

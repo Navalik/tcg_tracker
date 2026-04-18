@@ -1,3 +1,6 @@
+# Publishes the Pokemon bundle to GitHub Releases.
+# This is the channel used by the current production app.
+
 param(
   [Parameter(Mandatory = $false)]
   [string]$Repo = "Navalik/tcg_tracker",

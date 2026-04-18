@@ -7,7 +7,7 @@ Default comparison target:
   https://github.com/Navalik/tcg_tracker/releases/latest/download/manifest.json
 
 Typical usage:
-  python tools/check_pokemon_bundle_updates.py ^
+  python tools/shared/check_pokemon_bundle_updates.py ^
     --source-dir C:\path\to\cards-database
 """
 

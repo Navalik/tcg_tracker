@@ -24,7 +24,6 @@ class _SettingsPageState extends State<SettingsPage> {
       PurchaseManager.pokemonOwnershipKey;
   static const Duration _storeOperationTimeout = Duration(seconds: 20);
   bool _loading = true;
-  String? _bulkType;
   String _priceSource = 'scryfall';
   String _priceCurrency = 'eur';
   bool _showPrices = true;
@@ -234,7 +233,6 @@ class _SettingsPageState extends State<SettingsPage> {
     await _purchaseManager.syncPrimaryGameFromSettings();
     final selectedGameFuture = AppSettings.loadSelectedTcgGame();
     final primaryGameFuture = AppSettings.loadPrimaryTcgGameOrNull();
-    final bulkTypeFuture = AppSettings.loadBulkTypeForGame(AppTcgGame.mtg);
     final priceCurrencyFuture = AppSettings.loadPriceCurrency();
     final showPricesFuture = AppSettings.loadShowPrices();
     final appLocaleCodeFuture = AppSettings.loadAppLocale();
@@ -252,13 +250,13 @@ class _SettingsPageState extends State<SettingsPage> {
           prefix: LocalBackupService.pokemonAutomaticBackupPrefix,
         );
     final cloudAutoEnabledFuture = AppSettings.loadCloudBackupAutoEnabled();
-    final cloudEligibilityFuture = CloudBackupService.instance.checkEligibility();
+    final cloudEligibilityFuture = CloudBackupService.instance
+        .checkEligibility();
     final cloudLastErrorFuture = AppSettings.loadCloudBackupLastError();
     final packageInfoFuture = PackageInfo.fromPlatform();
 
     final selectedGame = await selectedGameFuture;
     final primaryGame = await primaryGameFuture;
-    final bulkType = await bulkTypeFuture;
     final priceCurrency = await priceCurrencyFuture;
     final showPrices = await showPricesFuture;
     final appLocaleCode = await appLocaleCodeFuture;
@@ -289,7 +287,6 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     setState(() {
-      _bulkType = bulkType;
       _priceCurrency = priceCurrency;
       _showPrices = showPrices;
       _mtgItalianCardsEnabled = mtgCardLanguages.contains('it');
@@ -305,7 +302,9 @@ class _SettingsPageState extends State<SettingsPage> {
       _cloudBackupSignedIn = cloudEligibility.signedIn;
       _cloudBackupPlus = cloudEligibility.plus;
       _cloudBackupLastUploadedAt = cloudSnapshot?.updatedAt?.toLocal();
-      _cloudBackupLastError = cloudEligibility.canAccess ? cloudLastError : null;
+      _cloudBackupLastError = cloudEligibility.canAccess
+          ? cloudLastError
+          : null;
       _primaryGame = (primaryGame ?? selectedGame) == AppTcgGame.pokemon
           ? TcgGame.pokemon
           : TcgGame.mtg;
@@ -918,14 +917,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      _bulkTypeLabel(l10n, _bulkType),
+                      _isItalianUi
+                          ? 'Bundle Firebase completo'
+                          : 'Full Firebase bundle',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFFBFAE95),
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      _bulkTypeDescription(l10n, _bulkType ?? ''),
+                      _isItalianUi
+                          ? 'Database Magic offline con inglese sempre incluso e italiano opzionale.'
+                          : 'Offline Magic database with English always included and optional Italian.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: const Color(0xFF8F816B),
                       ),
@@ -950,13 +953,6 @@ class _SettingsPageState extends State<SettingsPage> {
                               side: const BorderSide(color: Color(0xFF5D4731)),
                             ),
                             child: Text(_reimportLabel()),
-                          ),
-                          OutlinedButton(
-                            onPressed: _changeBulkType,
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF5D4731)),
-                            ),
-                            child: Text(l10n.change),
                           ),
                         ],
                       ),
@@ -1017,64 +1013,38 @@ class _SettingsPageState extends State<SettingsPage> {
                       ? 'Lingue carte (database e ricerca)'
                       : 'Card languages (database and search)',
                   subtitle: _isItalianUi
-                      ? 'Inglese sempre attivo. Per ricerca locale offline multilingua in Magic serve il database "All Cards".'
-                      : 'English is always active. For multilingual offline local search in Magic, use the "All Cards" database.',
+                      ? 'Inglese sempre attivo. Se abiliti italiano, il prossimo reimport scarichera anche il bundle IT.'
+                      : 'English is always active. If you enable Italian, the next reimport also downloads the IT bundle.',
                   children: [
-                    Builder(
-                      builder: (context) {
-                        final normalizedBulk = (_bulkType ?? '')
-                            .trim()
-                            .toLowerCase();
-                        final mtgOfflineReady =
-                            !_mtgItalianCardsEnabled ||
-                            normalizedBulk == 'all_cards';
-                        return Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 10),
-                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                          decoration: BoxDecoration(
-                            color: mtgOfflineReady
-                                ? const Color(0x1A2A4D30)
-                                : const Color(0x33A06A1A),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: mtgOfflineReady
-                                  ? const Color(0xFF4D8B58)
-                                  : const Color(0xFFE9C46A),
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0x1A2A4D30),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF4D8B58)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.verified_rounded,
+                            size: 18,
+                            color: Color(0xFF8DD39A),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _isItalianUi
+                                  ? 'Magic offline: configurazione gestita dal bundle Firebase.'
+                                  : 'Magic offline: configuration managed by the Firebase bundle.',
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: const Color(0xFFDFC9A3)),
                             ),
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                mtgOfflineReady
-                                    ? Icons.verified_rounded
-                                    : Icons.warning_amber_rounded,
-                                size: 18,
-                                color: mtgOfflineReady
-                                    ? const Color(0xFF8DD39A)
-                                    : const Color(0xFFE9C46A),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  mtgOfflineReady
-                                      ? (_isItalianUi
-                                            ? 'Magic offline: configurazione OK per ricerca multilingua locale.'
-                                            : 'Magic offline: configuration OK for multilingual local search.')
-                                      : (_isItalianUi
-                                            ? 'Attenzione: con italiano attivo, la ricerca locale Magic funziona correttamente solo con database "All Cards".'
-                                            : 'Warning: with Italian enabled, Magic local search works correctly only with the "All Cards" database.'),
-                                  style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(
-                                        color: const Color(0xFFDFC9A3),
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                        ],
+                      ),
                     ),
                     Text(
                       'Magic',
@@ -1390,7 +1360,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             decoration: BoxDecoration(
                               color: const Color(0x221D1712),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFF3A2F24)),
+                              border: Border.all(
+                                color: const Color(0xFF3A2F24),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1411,7 +1383,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                             ? 'Ultimo snapshot: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'
                                             : 'Latest snapshot: ${_formatBackupTimestamp(_latestPokemonAutoBackupAt!)}'),
                                   style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: const Color(0xFFBFAE95)),
+                                      ?.copyWith(
+                                        color: const Color(0xFFBFAE95),
+                                      ),
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
@@ -1419,7 +1393,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                       ? 'Backup locale completo creato automaticamente prima degli aggiornamenti del database, cosi puoi tornare indietro se qualcosa va storto.'
                                       : 'Full local backup created automatically before database updates, so you can roll back if something goes wrong.',
                                   style: Theme.of(context).textTheme.bodySmall
-                                      ?.copyWith(color: const Color(0xFF8F816B)),
+                                      ?.copyWith(
+                                        color: const Color(0xFF8F816B),
+                                      ),
                                 ),
                                 const SizedBox(height: 10),
                                 Align(

@@ -71,7 +71,8 @@ if (-not $SkipPublish) {
   Require-Command -Name "gh"
 }
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$sharedToolsDir = Join-Path $repoRoot "tools/shared"
 $resolvedSourceDir = (Resolve-Path -LiteralPath $SourceDir).Path
 $resolvedOutputDir = Join-Path $repoRoot $OutputDir
 
@@ -85,7 +86,7 @@ if (-not $SkipPull) {
 }
 
 Invoke-Step "Check for upstream bundle updates" {
-  python (Join-Path $PSScriptRoot "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
+  python (Join-Path $sharedToolsDir "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
   $script:checkExit = $LASTEXITCODE
   if ($script:checkExit -ne 0 -and $script:checkExit -ne 10) {
     throw "update check failed with exit code $script:checkExit"
@@ -116,7 +117,7 @@ Invoke-Step "Reset output directory" {
 }
 
 Invoke-Step "Build bundle artifacts" {
-  python (Join-Path $PSScriptRoot "build_pokemon_bundle.py") `
+  python (Join-Path $sharedToolsDir "build_pokemon_bundle.py") `
     --source-tcgdex-api `
     --output-dir $resolvedOutputDir `
     --profile $Profile `
@@ -147,7 +148,7 @@ if (-not $SkipPublish) {
   }
 
   Invoke-Step "Verify published manifest" {
-    python (Join-Path $PSScriptRoot "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
+    python (Join-Path $sharedToolsDir "check_pokemon_bundle_updates.py") --source-dir $resolvedSourceDir
     if ($LASTEXITCODE -ne 0) {
       throw "final verification failed with exit code $LASTEXITCODE"
     }

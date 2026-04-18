@@ -1234,7 +1234,10 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
             cardId,
             printingId: _cards
                 .cast<CollectionCardEntry?>()
-                .firstWhere((item) => item?.cardId == cardId, orElse: () => null)
+                .firstWhere(
+                  (item) => item?.cardId == cardId,
+                  orElse: () => null,
+                )
                 ?.printingId,
             collectionId: lookupCollectionId,
           ),
@@ -1550,8 +1553,8 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
                           ? (Localizations.localeOf(
                                   context,
                                 ).languageCode.toLowerCase().startsWith('it')
-                                ? 'Questa collezione usa lingue aggiuntive (es. IT). Per ricerca offline serve il database "All Cards". Con il database attuale, i risultati in lingua aggiuntiva sono disponibili solo online.'
-                                : 'This collection uses additional languages (for example IT). Offline search requires the "All Cards" database. With the current database, additional-language results are available online only.')
+                                ? 'Questa collezione usa lingue aggiuntive (es. IT). Reimporta il bundle Firebase dopo aver abilitato la lingua.'
+                                : 'This collection uses additional languages (for example IT). Reimport the Firebase bundle after enabling the language.')
                           : (_isFilterCollection
                                 ? l10n.tryEnablingOwnedOrMissing
                                 : widget.isAllCards

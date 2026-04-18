@@ -54,13 +54,13 @@ It reflects current behavior and the intended target model.
 
 | Capability | MTG current | Pokemon current | Notes |
 | --- | --- | --- | --- |
-| `catalog.install` | yes | yes | MTG via Scryfall bulk; Pokemon via custom dataset import |
+| `catalog.install` | yes | yes | MTG and Pokemon install from Firebase catalog bundles |
 | `catalog.reimport` | yes | yes | Both exposed in settings |
 | `catalog.update_check` | yes | yes | Different implementations |
-| `catalog.multilingual_storage` | partial | no | MTG supports selected languages; Pokemon currently forced to English |
-| `catalog.provider_mapping` | no | no | Missing as explicit concept |
+| `catalog.multilingual_storage` | partial | partial | MTG imports selected bundle languages into legacy storage; Pokemon uses canonical EN base plus IT delta |
+| `catalog.provider_mapping` | partial | partial | Pokemon has compatibility mappings; provider mapping is not yet a full cross-game capability |
 | `search.name` | yes | yes | Shared generic search pipeline |
-| `search.localized_name` | partial | no | MTG has partial printed-name support; Pokemon lacks real localized support |
+| `search.localized_name` | partial | partial | MTG has printed-name support; Pokemon has localized canonical search for imported languages |
 | `search.collector_number` | yes | yes | Shared generic search logic |
 | `search.advanced_filters` | partial | partial | Shared `CollectionFilter`, not capability-driven |
 | `search.offline_full_fidelity` | partial | partial | Depends on dataset/profile and current storage compromises |
