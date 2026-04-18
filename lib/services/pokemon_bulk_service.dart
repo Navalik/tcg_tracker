@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../db/app_database.dart';
 import '../db/canonical_catalog_store.dart';
 import '../domain/domain_models.dart';
+import 'catalog_bundle_service.dart';
 import 'local_backup_service.dart';
 import 'pokemon_dataset_manifest.dart';
 
@@ -1129,15 +1130,7 @@ class PokemonBulkService {
   }
 
   Set<String> _bundleLanguageSet(Map<String, dynamic> bundle) {
-    return (bundle['languages'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .map((code) => code.trim().toLowerCase())
-        .where((code) => code.isNotEmpty)
-        .toSet();
-  }
-
-  int _bundleCompatibilityVersion(Map<String, dynamic> bundle) {
-    return (bundle['compatibility_version'] as num?)?.toInt() ?? 1;
+    return CatalogBundle.fromJson(bundle).languageCodes;
   }
 
   List<Map<String, dynamic>>? selectHostedBundlesForMissingLanguagesForTesting({
@@ -1156,14 +1149,6 @@ class PokemonBulkService {
 
   bool _isSupportedHostedCompatibilityVersion(int version) {
     return version >= _hostedBundleCompatibilityVersion;
-  }
-
-  List<String> _bundleRequiresList(Map<String, dynamic> bundle) {
-    return (bundle['requires'] as List<dynamic>? ?? const <dynamic>[])
-        .whereType<String>()
-        .map((id) => id.trim())
-        .where((id) => id.isNotEmpty)
-        .toList(growable: false);
   }
 
   Uri? resolveCanonicalSnapshotAssetUriFromBundleForTesting(
@@ -1212,40 +1197,23 @@ class PokemonBulkService {
   }
 
   Uri? _resolveHostedArtifactUri(Map<String, dynamic> artifact) {
-    final downloadUrl = (artifact['download_url'] as String?)?.trim() ?? '';
-    if (downloadUrl.isNotEmpty) {
-      final uri = Uri.tryParse(downloadUrl);
-      if (uri != null && uri.hasScheme) {
-        return uri;
-      }
-    }
-
-    final path = (artifact['path'] as String?)?.trim() ?? '';
-    final name = (artifact['name'] as String?)?.trim() ?? '';
-    final candidate = path.isEmpty ? name : path;
-    if (candidate.isEmpty) {
-      return null;
-    }
-    final absoluteUri = Uri.tryParse(candidate);
-    if (absoluteUri != null && absoluteUri.hasScheme) {
-      return absoluteUri;
-    }
-    final objectPath = candidate.startsWith(_firebaseCatalogObjectPrefix)
-        ? candidate
-        : '$_firebaseCatalogObjectPrefix$candidate';
-    return _firebaseDownloadUriForObjectPath(objectPath);
+    return CatalogBundleService.resolveArtifactUri(
+      CatalogBundleArtifact.fromJson(artifact),
+      bucket: _firebaseCatalogBucket,
+      game: 'pokemon',
+    );
   }
 
   Uri? _firebaseDownloadUriForObjectPath(String objectPath) {
-    final normalized = objectPath.trim().replaceAll('\\', '/');
+    final normalized = CatalogBundleService.normalizeObjectPath(objectPath);
     if (normalized.isEmpty ||
         !normalized.startsWith(_firebaseCatalogObjectPrefix)) {
       return null;
     }
-    return Uri.https(
-      'firebasestorage.googleapis.com',
-      '/v0/b/$_firebaseCatalogBucket/o/${Uri.encodeComponent(normalized)}',
-      const <String, String>{'alt': 'media'},
+    return CatalogBundleService.firebaseDownloadUriForObjectPath(
+      bucket: _firebaseCatalogBucket,
+      game: 'pokemon',
+      objectPath: normalized,
     );
   }
 
@@ -1255,106 +1223,14 @@ class PokemonBulkService {
     required Set<String> requiredLanguages,
     required Set<String> existingLanguages,
   }) {
-    final profileBundles = bundles
-        .where((bundle) {
-          final bundleProfile =
-              (bundle['profile'] as String?)?.trim().toLowerCase() ?? '';
-          return (bundleProfile.isEmpty ||
-                  bundleProfile == profile.trim().toLowerCase()) &&
-              _isSupportedHostedCompatibilityVersion(
-                _bundleCompatibilityVersion(bundle),
-              );
-        })
-        .toList(growable: false);
-    final byId = <String, Map<String, dynamic>>{};
-    for (final bundle in profileBundles) {
-      final id = (bundle['id'] as String?)?.trim();
-      if (id != null && id.isNotEmpty) {
-        byId[id] = bundle;
-      }
-    }
-
-    final targetMissing = requiredLanguages.difference(existingLanguages);
-    if (targetMissing.isEmpty) {
-      return const <Map<String, dynamic>>[];
-    }
-
-    final selected = <Map<String, dynamic>>[];
-    final selectedIds = <String>{};
-    var covered = <String>{...existingLanguages};
-
-    while (!covered.containsAll(requiredLanguages)) {
-      Map<String, dynamic>? best;
-      var bestNewCoverage = 0;
-      var bestExtra = 1 << 30;
-      for (final bundle in profileBundles) {
-        final id = (bundle['id'] as String?)?.trim();
-        if (id != null && id.isNotEmpty && selectedIds.contains(id)) {
-          continue;
-        }
-        final languages = _bundleLanguageSet(bundle);
-        final newCoverage = languages
-            .intersection(requiredLanguages)
-            .difference(covered);
-        if (newCoverage.isEmpty) {
-          continue;
-        }
-        final extra = languages.length - newCoverage.length;
-        if (newCoverage.length > bestNewCoverage ||
-            (newCoverage.length == bestNewCoverage && extra < bestExtra)) {
-          best = bundle;
-          bestNewCoverage = newCoverage.length;
-          bestExtra = extra;
-        }
-      }
-      if (best == null) {
-        return null;
-      }
-      final id = (best['id'] as String?)?.trim();
-      if (id != null && id.isNotEmpty) {
-        selectedIds.add(id);
-      }
-      selected.add(best);
-      covered.addAll(_bundleLanguageSet(best));
-    }
-
-    final queue = List<Map<String, dynamic>>.from(selected);
-    var index = 0;
-    while (index < queue.length) {
-      final bundle = queue[index];
-      index += 1;
-      for (final dependencyId in _bundleRequiresList(bundle)) {
-        if (selectedIds.contains(dependencyId)) {
-          continue;
-        }
-        final dependency = byId[dependencyId];
-        if (dependency == null) {
-          return null;
-        }
-        final dependencyLanguages = _bundleLanguageSet(dependency);
-        if (covered.containsAll(dependencyLanguages)) {
-          continue;
-        }
-        selectedIds.add(dependencyId);
-        selected.add(dependency);
-        covered.addAll(dependencyLanguages);
-        queue.add(dependency);
-      }
-    }
-
-    selected.sort((a, b) {
-      final kindA = (a['kind'] as String?)?.trim().toLowerCase() ?? '';
-      final kindB = (b['kind'] as String?)?.trim().toLowerCase() ?? '';
-      final scoreA = kindA == 'base' ? 0 : 1;
-      final scoreB = kindB == 'base' ? 0 : 1;
-      if (scoreA != scoreB) {
-        return scoreA.compareTo(scoreB);
-      }
-      final idA = (a['id'] as String?)?.trim() ?? '';
-      final idB = (b['id'] as String?)?.trim() ?? '';
-      return idA.compareTo(idB);
-    });
-    return selected;
+    final selected = CatalogBundleService.selectBundlesForLanguages(
+      bundles: bundles.map(CatalogBundle.fromJson),
+      requiredLanguages: requiredLanguages,
+      existingLanguages: existingLanguages,
+      profile: profile,
+      minCompatibilityVersion: _hostedBundleCompatibilityVersion,
+    );
+    return selected?.map((bundle) => bundle.raw).toList(growable: false);
   }
 
   bool _signatureContainsRequiredLanguages({
@@ -2119,31 +1995,11 @@ class PokemonBulkService {
   }
 
   bool _isAllowedDownloadUri(String rawUri) {
-    final uri = Uri.tryParse(rawUri.trim());
-    if (uri == null) {
-      return false;
-    }
-    if (uri.scheme.toLowerCase() != 'https') {
-      return false;
-    }
-    if (uri.userInfo.isNotEmpty || uri.host.trim().isEmpty) {
-      return false;
-    }
-    final host = uri.host.toLowerCase();
-    if (host == 'firebasestorage.googleapis.com') {
-      const objectPathPrefix = '/v0/b/$_firebaseCatalogBucket/o/';
-      if (!uri.path.startsWith(objectPathPrefix)) {
-        return false;
-      }
-      final encodedObjectPath = uri.path.substring(objectPathPrefix.length);
-      final objectPath = Uri.decodeComponent(encodedObjectPath);
-      if (!objectPath.startsWith(_firebaseCatalogObjectPrefix)) {
-        return false;
-      }
-      final alt = uri.queryParameters['alt'];
-      return alt == null || alt == 'media';
-    }
-    return false;
+    return CatalogBundleService.isAllowedFirebaseCatalogUri(
+      rawUri,
+      bucket: _firebaseCatalogBucket,
+      game: 'pokemon',
+    );
   }
 
   Future<String> _fetchJsonWithRetry({
@@ -2152,51 +2008,13 @@ class PokemonBulkService {
     int retryAttempts = _maxAttemptsPerPage,
     Duration requestTimeout = const Duration(seconds: 35),
   }) async {
-    final headers = <String, String>{
-      'accept': 'application/json',
-      'user-agent': 'bindervault/1.0',
-    };
-    Object? lastError;
-    for (var attempt = 1; attempt <= retryAttempts; attempt++) {
-      try {
-        final response = await client
-            .get(uri, headers: headers)
-            .timeout(requestTimeout);
-        if (response.statusCode == 200) {
-          return response.body;
-        }
-        final retryable =
-            response.statusCode == 404 ||
-            response.statusCode == 429 ||
-            response.statusCode >= 500;
-        if (!retryable || attempt == retryAttempts) {
-          throw HttpException('pokemon_api_http_${response.statusCode}');
-        }
-        lastError = HttpException('pokemon_api_http_${response.statusCode}');
-      } on TimeoutException catch (error) {
-        lastError = error;
-      } on SocketException catch (error) {
-        lastError = error;
-      } on http.ClientException catch (error) {
-        lastError = error;
-      }
-      if (attempt < retryAttempts) {
-        await Future<void>.delayed(_retryDelay(attempt));
-      }
-    }
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
+    return CatalogBundleService.fetchJsonWithRetry(
+      client: client,
+      uri: uri,
+      errorPrefix: 'pokemon_api',
+      retryAttempts: retryAttempts,
+      requestTimeout: requestTimeout,
+    );
   }
 
   Future<void> _saveInstalledSourceMetadata(
@@ -2317,10 +2135,7 @@ class PokemonBulkService {
   }
 
   String _stripUtf8Bom(String value) {
-    if (value.isNotEmpty && value.codeUnitAt(0) == 0xFEFF) {
-      return value.substring(1);
-    }
-    return value;
+    return CatalogBundleService.stripUtf8Bom(value);
   }
 }
 

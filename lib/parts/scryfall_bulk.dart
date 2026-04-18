@@ -34,31 +34,11 @@ bool _isAllowedScryfallDownloadUri(String? rawUri) {
 }
 
 bool _isAllowedMtgFirebaseDownloadUri(String? rawUri) {
-  if (rawUri == null || rawUri.trim().isEmpty) {
-    return false;
-  }
-  final uri = Uri.tryParse(rawUri.trim());
-  if (uri == null) {
-    return false;
-  }
-  if (uri.scheme.toLowerCase() != 'https') {
-    return false;
-  }
-  if (uri.userInfo.isNotEmpty || uri.host.trim().isEmpty) {
-    return false;
-  }
-  if (uri.host.toLowerCase() != 'firebasestorage.googleapis.com') {
-    return false;
-  }
-  if (uri.path !=
-          '/v0/b/bindervault.firebasestorage.app/o/catalog%2Fmtg%2Flatest%2Fmanifest.json' &&
-      !uri.path.startsWith('/v0/b/bindervault.firebasestorage.app/o/')) {
-    return false;
-  }
-  final encodedObject = uri.pathSegments.length >= 5 ? uri.pathSegments[4] : '';
-  final objectName = Uri.decodeComponent(encodedObject);
-  return objectName == 'catalog/mtg/latest/manifest.json' ||
-      objectName.startsWith('catalog/mtg/releases/');
+  return CatalogBundleService.isAllowedFirebaseCatalogUri(
+    rawUri,
+    bucket: CatalogBundleService.defaultFirebaseBucket,
+    game: 'mtg',
+  );
 }
 
 class MtgHostedBundleArtifact {
@@ -115,19 +95,12 @@ class MtgHostedBundleService {
     if (response.statusCode != 200) {
       throw HttpException('HTTP ${response.statusCode}');
     }
-    var manifestBody = response.body;
-    if (manifestBody.isNotEmpty && manifestBody.codeUnitAt(0) == 0xFEFF) {
-      manifestBody = manifestBody.substring(1);
-    }
-    final manifest = jsonDecode(manifestBody) as Map<String, dynamic>;
-    final version = (manifest['version'] as String?)?.trim();
-    if (version == null || version.isEmpty) {
-      throw const FormatException('mtg_manifest_missing_version');
-    }
-    final source = manifest['source'];
-    final updatedAtRaw = source is Map
-        ? ((source['updated_at'] as String?)?.trim() ?? version)
-        : version;
+    final manifest = CatalogBundleService.parseManifest(
+      response.body,
+      expectedGame: 'mtg',
+    );
+    final updatedAtRaw =
+        (manifest.source?['updated_at'] as String?)?.trim() ?? manifest.version;
     final updatedAt = DateTime.tryParse(updatedAtRaw);
     final artifacts = _selectArtifacts(manifest, languages);
     if (artifacts.isEmpty) {
@@ -136,8 +109,8 @@ class MtgHostedBundleService {
     final prefs = await SharedPreferences.getInstance();
     final installedVersion = prefs.getString(_installedVersionKey);
     return MtgHostedBundleCheckResult(
-      updateAvailable: installedVersion != version,
-      version: version,
+      updateAvailable: installedVersion != manifest.version,
+      version: manifest.version,
       updatedAtRaw: updatedAtRaw,
       updatedAt: updatedAt,
       artifacts: artifacts,
@@ -216,7 +189,7 @@ class MtgHostedBundleService {
   }
 
   List<MtgHostedBundleArtifact> _selectArtifacts(
-    Map<String, dynamic> manifest,
+    CatalogManifest manifest,
     Set<String> languages,
   ) {
     final normalizedLanguages = languages
@@ -224,36 +197,27 @@ class MtgHostedBundleService {
         .where((language) => language.isNotEmpty)
         .toSet();
     final includeItalian = normalizedLanguages.contains('it');
-    final wantedBundleIds = <String>{'base_en'};
+    final requiredLanguages = <String>{'en'};
     if (includeItalian) {
-      wantedBundleIds.add('delta_it');
+      requiredLanguages.add('it');
     }
 
     final selected = <MtgHostedBundleArtifact>[];
-    final bundles = manifest['bundles'];
-    if (bundles is! List) {
+    final bundles = CatalogBundleService.selectBundlesForLanguages(
+      bundles: manifest.bundles,
+      requiredLanguages: requiredLanguages,
+      minCompatibilityVersion: 1,
+    );
+    if (bundles == null) {
       return selected;
     }
     for (final bundle in bundles) {
-      if (bundle is! Map) {
-        continue;
-      }
-      final id = (bundle['id'] as String?)?.trim() ?? '';
-      if (!wantedBundleIds.contains(id)) {
-        continue;
-      }
-      final language = (bundle['language'] as String?)?.trim() ?? '';
-      final artifacts = bundle['artifacts'];
-      if (artifacts is! List) {
-        continue;
-      }
-      for (final artifact in artifacts) {
-        if (artifact is! Map) {
-          continue;
-        }
-        final name = (artifact['name'] as String?)?.trim() ?? '';
-        final downloadUrl = (artifact['download_url'] as String?)?.trim() ?? '';
-        final sizeBytes = artifact['size_bytes'];
+      final id = bundle.id;
+      final language = bundle.language ?? '';
+      for (final artifact in bundle.artifacts) {
+        final name = artifact.name;
+        final downloadUrl = artifact.downloadUrl ?? '';
+        final sizeBytes = artifact.sizeBytes ?? 0;
         if (name.isEmpty ||
             downloadUrl.isEmpty ||
             !_isAllowedMtgFirebaseDownloadUri(downloadUrl)) {
@@ -265,7 +229,7 @@ class MtgHostedBundleService {
             language: language,
             name: name,
             downloadUrl: downloadUrl,
-            sizeBytes: sizeBytes is int ? sizeBytes : 0,
+            sizeBytes: sizeBytes,
           ),
         );
       }
