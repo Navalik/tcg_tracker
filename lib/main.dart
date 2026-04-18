@@ -37,6 +37,7 @@ import 'services/analytics_service.dart';
 import 'services/auth_email_support.dart';
 import 'services/cloud_backup_scheduler.dart';
 import 'services/cloud_backup_service.dart';
+import 'services/catalog_bundle_service.dart';
 import 'services/local_backup_service.dart';
 import 'services/price_repository.dart';
 import 'services/inventory_service.dart';
