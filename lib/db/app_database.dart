@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
@@ -90,6 +91,260 @@ LazyDatabase _openConnection(String fileName) {
         : Directory(debugAppDatabaseDirectoryOverride!);
     final dbFile = File(path.join(directory.path, fileName));
     return NativeDatabase.createInBackground(dbFile, setup: _setupAppDatabase);
+  });
+}
+
+class _PokemonOwnedCardRawRow {
+  const _PokemonOwnedCardRawRow({
+    required this.cardId,
+    required this.printingId,
+    required this.quantity,
+    required this.foil,
+    required this.altArt,
+  });
+
+  final String cardId;
+  final String? printingId;
+  final int quantity;
+  final bool foil;
+  final bool altArt;
+}
+
+class _PokemonPrintingRepair {
+  const _PokemonPrintingRepair({
+    required this.cardId,
+    required this.printingId,
+  });
+
+  final String cardId;
+  final String printingId;
+}
+
+class _PokemonOwnedCardsRequest {
+  const _PokemonOwnedCardsRequest({
+    required this.databasePath,
+    required this.preferredLanguages,
+    required this.rows,
+    required this.searchQuery,
+    required this.limit,
+    required this.offset,
+  });
+
+  final String databasePath;
+  final List<String> preferredLanguages;
+  final List<_PokemonOwnedCardRawRow> rows;
+  final String? searchQuery;
+  final int? limit;
+  final int? offset;
+}
+
+class _PokemonOwnedCardsResult {
+  const _PokemonOwnedCardsResult({
+    required this.entries,
+    required this.repairs,
+  });
+
+  final List<CollectionCardEntry> entries;
+  final List<_PokemonPrintingRepair> repairs;
+}
+
+class _CanonicalPokemonRowsRequest {
+  const _CanonicalPokemonRowsRequest({
+    required this.databasePath,
+    required this.filter,
+    required this.searchQuery,
+    required this.preferredLanguages,
+  });
+
+  final String databasePath;
+  final CollectionFilter filter;
+  final String? searchQuery;
+  final List<String> preferredLanguages;
+}
+
+class _CanonicalPrintingViewRequest {
+  const _CanonicalPrintingViewRequest({
+    required this.databasePath,
+    required this.printingId,
+    required this.preferredLanguages,
+  });
+
+  final String databasePath;
+  final String printingId;
+  final List<String> preferredLanguages;
+}
+
+class _ResolvedPokemonOwnedCardRow {
+  const _ResolvedPokemonOwnedCardRow({
+    required this.row,
+    required this.printingId,
+  });
+
+  final _PokemonOwnedCardRawRow row;
+  final String printingId;
+}
+
+Future<T?> _withCanonicalPokemonStoreInBackground<T>(
+  String databasePath,
+  T? Function(CanonicalCatalogStore store) action,
+) async {
+  final store = await CanonicalCatalogStore.openAtPath(databasePath);
+  try {
+    if (!store.hasCatalogForGame(TcgGameId.pokemon)) {
+      return null;
+    }
+    return action(store);
+  } finally {
+    store.dispose();
+  }
+}
+
+Future<_PokemonOwnedCardsResult?> _fetchPokemonOwnedCardsInBackground(
+  _PokemonOwnedCardsRequest request,
+) {
+  return _withCanonicalPokemonStoreInBackground(request.databasePath, (store) {
+    final normalizedQuery = request.searchQuery?.trim().toLowerCase() ?? '';
+    final resolvedRows = <_ResolvedPokemonOwnedCardRow>[];
+    final repairs = <_PokemonPrintingRepair>[];
+
+    for (final row in request.rows) {
+      final cardId = row.cardId.trim();
+      final rawPrintingId = row.printingId?.trim();
+      final resolvedPrintingId =
+          (rawPrintingId?.isNotEmpty == true
+              ? store.resolvePrintingIdForLegacyCardId(rawPrintingId!)
+              : null) ??
+          store.resolvePrintingIdForLegacyCardId(cardId);
+      if (resolvedPrintingId == null || resolvedPrintingId.isEmpty) {
+        continue;
+      }
+      if (rawPrintingId != resolvedPrintingId) {
+        repairs.add(
+          _PokemonPrintingRepair(
+            cardId: cardId,
+            printingId: resolvedPrintingId,
+          ),
+        );
+      }
+      resolvedRows.add(
+        _ResolvedPokemonOwnedCardRow(row: row, printingId: resolvedPrintingId),
+      );
+    }
+
+    final views = <String, CanonicalPrintingViewData>{};
+    const batchSize = 200;
+    for (var index = 0; index < resolvedRows.length; index += batchSize) {
+      final ids = resolvedRows
+          .skip(index)
+          .take(batchSize)
+          .map((row) => row.printingId)
+          .toSet()
+          .toList(growable: false);
+      views.addAll(
+        store.fetchPrintingViews(
+          ids,
+          preferredLanguages: request.preferredLanguages,
+        ),
+      );
+    }
+
+    final entries = <CollectionCardEntry>[];
+    for (final resolved in resolvedRows) {
+      final row = resolved.row;
+      final view = views[resolved.printingId];
+      if (view == null) {
+        continue;
+      }
+      if (normalizedQuery.isNotEmpty) {
+        final name = view.name.toLowerCase();
+        final collectorNumber = view.collectorNumber.toLowerCase();
+        if (!name.contains(normalizedQuery) &&
+            !collectorNumber.contains(normalizedQuery)) {
+          continue;
+        }
+      }
+      entries.add(
+        CollectionCardEntry(
+          cardId: row.cardId,
+          printingId: resolved.printingId,
+          name: view.name,
+          setCode: view.setCode,
+          setName: view.setName,
+          setTotal: view.setTotal,
+          collectorNumber: view.collectorNumber,
+          rarity: view.rarity,
+          typeLine: view.typeLine,
+          manaCost: view.manaCost,
+          oracleText: view.oracleText,
+          manaValue: view.manaValue,
+          lang: view.lang,
+          artist: view.artist,
+          power: view.power,
+          toughness: view.toughness,
+          loyalty: view.loyalty,
+          colors: view.colors,
+          colorIdentity: view.colorIdentity,
+          releasedAt: view.releasedAt,
+          quantity: row.quantity,
+          foil: row.foil,
+          altArt: row.altArt,
+          imageUri: view.imageUri,
+        ),
+      );
+    }
+
+    entries.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    final normalizedOffset = request.offset ?? 0;
+    final sliced = normalizedOffset >= entries.length
+        ? const <CollectionCardEntry>[]
+        : entries.sublist(normalizedOffset);
+    final limited = request.limit == null
+        ? sliced
+        : sliced.take(request.limit!).toList(growable: false);
+    return _PokemonOwnedCardsResult(entries: limited, repairs: repairs);
+  });
+}
+
+Future<List<CanonicalCollectionCardData>?>
+_fetchCanonicalPokemonRowsInBackground(_CanonicalPokemonRowsRequest request) {
+  return _withCanonicalPokemonStoreInBackground(request.databasePath, (store) {
+    final rows = <CanonicalCollectionCardData>[];
+    var offset = 0;
+    const batchSize = 400;
+    while (true) {
+      final batch = store.fetchCollectionCardsForGame(
+        gameId: TcgGameId.pokemon,
+        filter: request.filter,
+        ownedCollectionId: -1,
+        searchQuery: request.searchQuery,
+        ownedOnly: false,
+        missingOnly: false,
+        preferredLanguages: request.preferredLanguages,
+        limit: batchSize,
+        offset: offset,
+      );
+      if (batch.isEmpty) {
+        break;
+      }
+      rows.addAll(batch);
+      if (batch.length < batchSize) {
+        break;
+      }
+      offset += batch.length;
+    }
+    return rows;
+  });
+}
+
+Future<CanonicalPrintingViewData?> _fetchCanonicalPrintingViewInBackground(
+  _CanonicalPrintingViewRequest request,
+) {
+  return _withCanonicalPokemonStoreInBackground(request.databasePath, (store) {
+    return store.fetchPrintingViews(<String>[
+      request.printingId,
+    ], preferredLanguages: request.preferredLanguages)[request.printingId];
   });
 }
 
@@ -1727,7 +1982,9 @@ class ScryfallDatabase {
     final metadata = payload['metadata'];
     if (metadata is Map) {
       final normalizedMetadata = _normalizeStringDynamicMap(metadata);
-      final gameValue = _asString(normalizedMetadata['game']).trim().toLowerCase();
+      final gameValue = _asString(
+        normalizedMetadata['game'],
+      ).trim().toLowerCase();
       if (gameValue == 'pokemon') {
         return AppTcgGame.pokemon;
       }
@@ -1743,11 +2000,14 @@ class ScryfallDatabase {
           continue;
         }
         final normalized = _normalizeStringDynamicMap(relationRaw);
-        final printingId = _asString(normalized['printingId']).trim().toLowerCase();
+        final printingId = _asString(
+          normalized['printingId'],
+        ).trim().toLowerCase();
         if (printingId.startsWith('pokemon:')) {
           return AppTcgGame.pokemon;
         }
-        if (printingId.startsWith('mtg:') || printingId.startsWith('scryfall:')) {
+        if (printingId.startsWith('mtg:') ||
+            printingId.startsWith('scryfall:')) {
           return AppTcgGame.mtg;
         }
       }
@@ -2481,20 +2741,17 @@ class ScryfallDatabase {
   }) async {
     final selectedGame = await AppSettings.loadSelectedTcgGame();
     if (selectedGame == AppTcgGame.pokemon) {
-      final store = await _openCanonicalPokemonStore();
-      if (store != null) {
-        try {
-          final allCardsId = await fetchAllCardsCollectionId();
-          if (allCardsId == null) {
-            return const <CollectionCardEntry>[];
-          }
-          final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
-            AppTcgGame.pokemon,
-          );
-          final db = await open();
-          final rawRows = await db
-              .customSelect(
-                '''
+      final allCardsId = await fetchAllCardsCollectionId();
+      if (allCardsId == null) {
+        return const <CollectionCardEntry>[];
+      }
+      final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+        AppTcgGame.pokemon,
+      );
+      final db = await open();
+      final rawRows = await db
+          .customSelect(
+            '''
             SELECT
               card_id,
               printing_id,
@@ -2506,97 +2763,46 @@ class ScryfallDatabase {
               AND COALESCE(quantity, 0) > 0
             ORDER BY card_id ASC
             ''',
-                variables: <Variable>[Variable.withInt(allCardsId)],
-              )
-              .get();
-          final normalizedQuery = searchQuery?.trim().toLowerCase() ?? '';
-          final repairedEntries = <CollectionCardEntry>[];
-          final viewCache = <String, CanonicalPrintingViewData>{};
-          for (final row in rawRows) {
-            final cardId = row.read<String>('card_id').trim();
-            final rawPrintingId = row
-                .readNullable<String>('printing_id')
-                ?.trim();
-            final resolvedPrintingId =
-                (rawPrintingId?.isNotEmpty == true
-                    ? store.resolvePrintingIdForLegacyCardId(rawPrintingId!)
-                    : null) ??
-                store.resolvePrintingIdForLegacyCardId(cardId);
-            if (resolvedPrintingId == null || resolvedPrintingId.isEmpty) {
-              continue;
-            }
-            if (rawPrintingId != resolvedPrintingId) {
-              await db.customStatement(
-                '''
+            variables: <Variable>[Variable.withInt(allCardsId)],
+          )
+          .get();
+      final ownedRows = rawRows
+          .map(
+            (row) => _PokemonOwnedCardRawRow(
+              cardId: row.read<String>('card_id').trim(),
+              printingId: row.readNullable<String>('printing_id')?.trim(),
+              quantity: row.read<int>('quantity'),
+              foil: row.read<int>('foil') == 1,
+              altArt: row.read<int>('alt_art') == 1,
+            ),
+          )
+          .toList(growable: false);
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final result = await Isolate.run(
+        () => _fetchPokemonOwnedCardsInBackground(
+          _PokemonOwnedCardsRequest(
+            databasePath: databasePath,
+            preferredLanguages: preferredLanguages,
+            rows: ownedRows,
+            searchQuery: searchQuery,
+            limit: limit,
+            offset: offset,
+          ),
+        ),
+      );
+      if (result != null) {
+        for (final repair in result.repairs) {
+          await db.customStatement(
+            '''
                 UPDATE collection_cards
                 SET printing_id = ?
                 WHERE collection_id = ?
                   AND card_id = ?
                 ''',
-                <Object?>[resolvedPrintingId, allCardsId, cardId],
-              );
-            }
-            final view =
-                viewCache[resolvedPrintingId] ??
-                store.fetchPrintingViews(<String>[
-                  resolvedPrintingId,
-                ], preferredLanguages: preferredLanguages)[resolvedPrintingId];
-            if (view == null) {
-              continue;
-            }
-            viewCache[resolvedPrintingId] = view;
-            if (normalizedQuery.isNotEmpty) {
-              final name = view.name.toLowerCase();
-              final collectorNumber = view.collectorNumber.toLowerCase();
-              if (!name.contains(normalizedQuery) &&
-                  !collectorNumber.contains(normalizedQuery)) {
-                continue;
-              }
-            }
-            repairedEntries.add(
-              CollectionCardEntry(
-                cardId: cardId,
-                printingId: resolvedPrintingId,
-                name: view.name,
-                setCode: view.setCode,
-                setName: view.setName,
-                setTotal: view.setTotal,
-                collectorNumber: view.collectorNumber,
-                rarity: view.rarity,
-                typeLine: view.typeLine,
-                manaCost: view.manaCost,
-                oracleText: view.oracleText,
-                manaValue: view.manaValue,
-                lang: view.lang,
-                artist: view.artist,
-                power: view.power,
-                toughness: view.toughness,
-                loyalty: view.loyalty,
-                colors: view.colors,
-                colorIdentity: view.colorIdentity,
-                releasedAt: view.releasedAt,
-                quantity: row.read<int>('quantity'),
-                foil: row.read<int>('foil') == 1,
-                altArt: row.read<int>('alt_art') == 1,
-                imageUri: view.imageUri,
-              ),
-            );
-          }
-          repairedEntries.sort(
-            (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+            <Object?>[repair.printingId, allCardsId, repair.cardId],
           );
-          final normalizedOffset = offset ?? 0;
-          if (normalizedOffset >= repairedEntries.length) {
-            return const <CollectionCardEntry>[];
-          }
-          final sliced = repairedEntries.sublist(normalizedOffset);
-          if (limit == null) {
-            return sliced;
-          }
-          return sliced.take(limit).toList(growable: false);
-        } finally {
-          store.dispose();
         }
+        return result.entries;
       }
     }
     final db = await open();
@@ -3122,13 +3328,6 @@ class ScryfallDatabase {
     if (selectedGame != AppTcgGame.pokemon) {
       return null;
     }
-    final store = await _openCanonicalPokemonStore();
-    if (store == null) {
-      debugPrint(
-        '[pokemon-multilang] canonical fetch skipped: catalog store unavailable',
-      );
-      return null;
-    }
     try {
       final allCardsId = await fetchAllCardsCollectionId();
       if (allCardsId == null) {
@@ -3148,12 +3347,17 @@ class ScryfallDatabase {
         'ownedOnly=$ownedOnly missingOnly=$missingOnly '
         'search=${searchQuery ?? ""} limit=${limit ?? 200} offset=${offset ?? 0}',
       );
-      final rawRows = _fetchCanonicalPokemonRowsForFilter(
-        store,
+      final rawRows = await _fetchCanonicalPokemonRowsForFilter(
         filter: filter,
         searchQuery: searchQuery,
         preferredLanguages: preferredLanguages,
       );
+      if (rawRows == null) {
+        debugPrint(
+          '[pokemon-multilang] canonical fetch skipped: catalog store unavailable',
+        );
+        return null;
+      }
       final collapsedRows = _collapseCanonicalPokemonRowsByPreferredLanguage(
         rawRows,
         preferredLanguages: _canonicalPokemonPreferredRowLanguages(
@@ -3202,8 +3406,6 @@ class ScryfallDatabase {
       debugPrint('[pokemon-multilang] canonical fetch failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       rethrow;
-    } finally {
-      store.dispose();
     }
   }
 
@@ -3215,13 +3417,6 @@ class ScryfallDatabase {
   }) async {
     final selectedGame = await AppSettings.loadSelectedTcgGame();
     if (selectedGame != AppTcgGame.pokemon) {
-      return null;
-    }
-    final store = await _openCanonicalPokemonStore();
-    if (store == null) {
-      debugPrint(
-        '[pokemon-multilang] canonical count skipped: catalog store unavailable',
-      );
       return null;
     }
     try {
@@ -3243,12 +3438,17 @@ class ScryfallDatabase {
         'ownedOnly=$ownedOnly missingOnly=$missingOnly '
         'search=${searchQuery ?? ""}',
       );
-      final rawRows = _fetchCanonicalPokemonRowsForFilter(
-        store,
+      final rawRows = await _fetchCanonicalPokemonRowsForFilter(
         filter: filter,
         searchQuery: searchQuery,
         preferredLanguages: preferredLanguages,
       );
+      if (rawRows == null) {
+        debugPrint(
+          '[pokemon-multilang] canonical count skipped: catalog store unavailable',
+        );
+        return null;
+      }
       final collapsedRows = _collapseCanonicalPokemonRowsByPreferredLanguage(
         rawRows,
         preferredLanguages: _canonicalPokemonPreferredRowLanguages(
@@ -3276,18 +3476,7 @@ class ScryfallDatabase {
       debugPrint('[pokemon-multilang] canonical count failed: $error');
       debugPrintStack(stackTrace: stackTrace);
       rethrow;
-    } finally {
-      store.dispose();
     }
-  }
-
-  Future<CanonicalCatalogStore?> _openCanonicalPokemonStore() async {
-    final store = await CanonicalCatalogStore.openDefault();
-    if (!store.hasCatalogForGame(TcgGameId.pokemon)) {
-      store.dispose();
-      return null;
-    }
-    return store;
   }
 
   Future<Map<String, ({int quantity, bool foil, bool altArt})>>
@@ -3357,12 +3546,12 @@ class ScryfallDatabase {
     return result;
   }
 
-  List<CanonicalCollectionCardData> _fetchCanonicalPokemonRowsForFilter(
-    CanonicalCatalogStore store, {
+  Future<List<CanonicalCollectionCardData>?>
+  _fetchCanonicalPokemonRowsForFilter({
     required CollectionFilter filter,
     required String? searchQuery,
     required List<String> preferredLanguages,
-  }) {
+  }) async {
     final cacheKey = _canonicalPokemonRowsCacheKey(
       filter: filter,
       searchQuery: searchQuery,
@@ -3372,29 +3561,19 @@ class ScryfallDatabase {
     if (cached != null) {
       return cached;
     }
-    final rows = <CanonicalCollectionCardData>[];
-    var offset = 0;
-    const batchSize = 400;
-    while (true) {
-      final batch = store.fetchCollectionCardsForGame(
-        gameId: TcgGameId.pokemon,
-        filter: filter,
-        ownedCollectionId: -1,
-        searchQuery: searchQuery,
-        ownedOnly: false,
-        missingOnly: false,
-        preferredLanguages: preferredLanguages,
-        limit: batchSize,
-        offset: offset,
-      );
-      if (batch.isEmpty) {
-        break;
-      }
-      rows.addAll(batch);
-      if (batch.length < batchSize) {
-        break;
-      }
-      offset += batch.length;
+    final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+    final rows = await Isolate.run(
+      () => _fetchCanonicalPokemonRowsInBackground(
+        _CanonicalPokemonRowsRequest(
+          databasePath: databasePath,
+          filter: filter,
+          searchQuery: searchQuery,
+          preferredLanguages: preferredLanguages,
+        ),
+      ),
+    );
+    if (rows == null) {
+      return null;
     }
     if (_canonicalPokemonRowsCache.length >= _canonicalPokemonRowsCacheLimit) {
       _canonicalPokemonRowsCache.remove(_canonicalPokemonRowsCache.keys.first);
@@ -4632,28 +4811,30 @@ class ScryfallDatabase {
     required String printingId,
     required int? collectionId,
   }) async {
-    final store = await _openCanonicalPokemonStore();
-    if (store == null) {
+    final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
+      AppTcgGame.pokemon,
+    );
+    final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+    final view = await Isolate.run(
+      () => _fetchCanonicalPrintingViewInBackground(
+        _CanonicalPrintingViewRequest(
+          databasePath: databasePath,
+          printingId: printingId,
+          preferredLanguages: preferredLanguages,
+        ),
+      ),
+    );
+    if (view == null) {
       return null;
     }
-    try {
-      final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
-        AppTcgGame.pokemon,
-      );
-      final view = store.fetchPrintingViews(<String>[
-        printingId,
-      ], preferredLanguages: preferredLanguages)[printingId];
-      if (view == null) {
-        return null;
-      }
-      var quantity = 0;
-      var foil = false;
-      var altArt = false;
-      if (collectionId != null) {
-        final db = await open();
-        final row = await db
-            .customSelect(
-              '''
+    var quantity = 0;
+    var foil = false;
+    var altArt = false;
+    if (collectionId != null) {
+      final db = await open();
+      final row = await db
+          .customSelect(
+            '''
           SELECT
             COALESCE(quantity, 0) AS quantity,
             COALESCE(foil, 0) AS foil,
@@ -4664,49 +4845,46 @@ class ScryfallDatabase {
           ORDER BY CASE WHEN printing_id = ? THEN 0 ELSE 1 END
           LIMIT 1
           ''',
-              variables: <Variable>[
-                Variable.withInt(collectionId),
-                Variable.withString(cardId.trim()),
-                Variable.withString(printingId),
-                Variable.withString(printingId),
-              ],
-            )
-            .getSingleOrNull();
-        if (row != null) {
-          quantity = row.read<int>('quantity');
-          foil = row.read<int>('foil') == 1;
-          altArt = row.read<int>('alt_art') == 1;
-        }
+            variables: <Variable>[
+              Variable.withInt(collectionId),
+              Variable.withString(cardId.trim()),
+              Variable.withString(printingId),
+              Variable.withString(printingId),
+            ],
+          )
+          .getSingleOrNull();
+      if (row != null) {
+        quantity = row.read<int>('quantity');
+        foil = row.read<int>('foil') == 1;
+        altArt = row.read<int>('alt_art') == 1;
       }
-      return CollectionCardEntry(
-        cardId: cardId.trim().isEmpty ? view.printingId : cardId.trim(),
-        printingId: view.printingId,
-        name: view.name,
-        setCode: view.setCode,
-        setName: view.setName,
-        setTotal: view.setTotal,
-        collectorNumber: view.collectorNumber,
-        rarity: view.rarity,
-        typeLine: view.typeLine,
-        manaCost: view.manaCost,
-        oracleText: view.oracleText,
-        manaValue: view.manaValue,
-        lang: view.lang,
-        artist: view.artist,
-        power: view.power,
-        toughness: view.toughness,
-        loyalty: view.loyalty,
-        colors: view.colors,
-        colorIdentity: view.colorIdentity,
-        releasedAt: view.releasedAt,
-        quantity: quantity,
-        foil: foil,
-        altArt: altArt,
-        imageUri: view.imageUri,
-      );
-    } finally {
-      store.dispose();
     }
+    return CollectionCardEntry(
+      cardId: cardId.trim().isEmpty ? view.printingId : cardId.trim(),
+      printingId: view.printingId,
+      name: view.name,
+      setCode: view.setCode,
+      setName: view.setName,
+      setTotal: view.setTotal,
+      collectorNumber: view.collectorNumber,
+      rarity: view.rarity,
+      typeLine: view.typeLine,
+      manaCost: view.manaCost,
+      oracleText: view.oracleText,
+      manaValue: view.manaValue,
+      lang: view.lang,
+      artist: view.artist,
+      power: view.power,
+      toughness: view.toughness,
+      loyalty: view.loyalty,
+      colors: view.colors,
+      colorIdentity: view.colorIdentity,
+      releasedAt: view.releasedAt,
+      quantity: quantity,
+      foil: foil,
+      altArt: altArt,
+      imageUri: view.imageUri,
+    );
   }
 
   Future<void> rebuildCardsFts() async {
