@@ -269,7 +269,7 @@ abstract class AppLocalizations {
   /// No description provided for @cardDatabaseSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Configure local databases: Magic from Scryfall, Pokemon from the hosted bundle.'**
+  /// **'Configure local databases: Magic from the hosted Scryfall-based catalog, Pokemon from the hosted bundle.'**
   String get cardDatabaseSubtitle;
 
   /// No description provided for @selectedType.
@@ -2363,7 +2363,7 @@ abstract class AppLocalizations {
   /// No description provided for @limitedCoverageTapAllArtworks.
   ///
   /// In en, this message translates to:
-  /// **'Limited local coverage\nTap \"Search online\" to see more cards'**
+  /// **'Local catalog installed\nSearch uses the downloaded database'**
   String get limitedCoverageTapAllArtworks;
 
   /// No description provided for @planSelectedPreview.

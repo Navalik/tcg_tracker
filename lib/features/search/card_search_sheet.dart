@@ -208,19 +208,15 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         TcgEnvironmentController.instance.currentGame == TcgGame.pokemon
         ? AppTcgGame.pokemon
         : AppTcgGame.mtg;
-    final bulkType = await AppSettings.loadBulkTypeForGame(runtimeGame);
     final cardLanguages = await AppSettings.loadCardLanguagesForGame(
       runtimeGame,
     );
     if (!mounted) {
       return;
     }
-    final isPokemonRuntime = runtimeGame == AppTcgGame.pokemon;
     setState(() {
       _activeSearchGame = runtimeGame;
-      _limitedPrintCoverage = isPokemonRuntime
-          ? false
-          : _isLimitedPrintCoverage(bulkType);
+      _limitedPrintCoverage = false;
       _searchLanguages = cardLanguages;
     });
     if (_shouldAutoLoadInitialResults) {
@@ -1552,11 +1548,11 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
           ..sort();
     final readableLangs = langs.map((lang) => lang.toUpperCase()).join(', ');
     if (isItalian) {
-      return 'Copertura locale limitata ($readableLangs). '
-          'Per Pokemon, aggiorna o reimporta il catalogo locale per completare le lingue attive.';
+      return 'Catalogo locale installato ($readableLangs). '
+          'La ricerca usa il database scaricato.';
     }
-    return 'Limited local coverage ($readableLangs). '
-        'For Pokemon, refresh or reimport the local catalog to complete the active languages.';
+    return 'Local catalog installed ($readableLangs). '
+        'Search uses the downloaded database.';
   }
 
   bool _isMissingCard(CardSearchResult card) {
@@ -1909,7 +1905,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                           .bodyMedium
                                           ?.copyWith(
                                             color: const Color(0xFFBFAE95),
-                                      ),
+                                          ),
                                       textAlign: TextAlign.center,
                                     ),
                                     if (widget.showRetryScanOnNoResults &&
@@ -1921,13 +1917,16 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                         runSpacing: 12,
                                         children: [
                                           OutlinedButton.icon(
-                                            onPressed: _focusAndSelectSearchQuery,
-                                            icon: const Icon(Icons.edit_outlined),
+                                            onPressed:
+                                                _focusAndSelectSearchQuery,
+                                            icon: const Icon(
+                                              Icons.edit_outlined,
+                                            ),
                                             label: Text(l10n.typeCardNameHint),
                                           ),
                                           FilledButton.icon(
-                                            onPressed: () => Navigator.of(context)
-                                                .pop(
+                                            onPressed: () =>
+                                                Navigator.of(context).pop(
                                                   _CardSearchSheetDismissAction
                                                       .retryScan,
                                                 ),
@@ -2030,7 +2029,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                                         ? null
                                                         : () async {
                                                             setState(() {
-                                                              _showResults = true;
+                                                              _showResults =
+                                                                  true;
                                                             });
                                                             await _runSearch();
                                                           },
@@ -2045,7 +2045,8 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                                                         ? null
                                                         : () async {
                                                             setState(() {
-                                                              _showResults = true;
+                                                              _showResults =
+                                                                  true;
                                                             });
                                                             await _runSearch();
                                                           },

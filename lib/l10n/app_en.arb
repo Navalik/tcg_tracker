@@ -35,7 +35,7 @@
   "allLanguagesAdded": "All languages are already added.",
   "languageAddedDownloadAgain": "Language added. Download again to import the cards.",
   "cardDatabase": "Card database",
-  "cardDatabaseSubtitle": "Configure local databases: Magic from Scryfall, Pokemon from the hosted bundle.",
+  "cardDatabaseSubtitle": "Configure local databases: Magic from the hosted Scryfall-based catalog, Pokemon from the hosted bundle.",
   "selectedType": "Selected type",
   "change": "Change",
   "changeDatabaseTitle": "Change database?",
@@ -586,7 +586,7 @@
   "scryfallProviderLabel": "Scryfall",
   "currencyEurCode": "EUR",
   "currencyUsdCode": "USD",
-  "limitedCoverageTapAllArtworks": "Limited local coverage\nTap \"Search online\" to see more cards",
+  "limitedCoverageTapAllArtworks": "Local catalog installed\nSearch uses the downloaded database",
   "planSelectedPreview": "{plan} plan selected. Billing will be enabled in a next step.",
   "@planSelectedPreview": {
     "placeholders": {

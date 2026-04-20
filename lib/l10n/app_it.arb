@@ -18,7 +18,7 @@
     "searchHint":  "Cerca",
     "loadMore":  "Carica altri risultati",
     "cardDatabase":  "Database carte",
-    "cardDatabaseSubtitle":  "Configura i database locali: Magic da Scryfall, Pokemon dal bundle pubblicato.",
+    "cardDatabaseSubtitle":  "Configura i database locali: Magic dal catalogo pubblicato basato su Scryfall, Pokemon dal bundle pubblicato.",
     "change":  "Cambia",
     "changeDatabaseTitle":  "Cambiare database?",
     "changeDatabaseBody":  "Il database attuale verra rimosso e dovrai scaricare di nuovo le carte.",
@@ -639,7 +639,7 @@
     "scryfallProviderLabel":  "Scryfall",
     "currencyEurCode":  "EUR",
     "currencyUsdCode":  "USD",
-    "limitedCoverageTapAllArtworks":  "Copertura locale ridotta\nTocca \"Interroga online\" per vedere più carte",
+    "limitedCoverageTapAllArtworks":  "Catalogo locale installato\nLa ricerca usa il database scaricato",
     "planSelectedPreview":  "Piano {plan} selezionato. La fatturazione verra abilitata nel prossimo step.",
     "@planSelectedPreview":  {
         "placeholders":  {

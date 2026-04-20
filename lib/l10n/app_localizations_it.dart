@@ -108,7 +108,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get cardDatabaseSubtitle =>
-      'Configura i database locali: Magic da Scryfall, Pokemon dal bundle pubblicato.';
+      'Configura i database locali: Magic dal catalogo pubblicato basato su Scryfall, Pokemon dal bundle pubblicato.';
 
   @override
   String get selectedType => 'Tipo selezionato';
@@ -1294,7 +1294,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get limitedCoverageTapAllArtworks =>
-      'Copertura locale ridotta\nTocca \"Interroga online\" per vedere più carte';
+      'Catalogo locale installato\nLa ricerca usa il database scaricato';
 
   @override
   String planSelectedPreview(Object plan) {
