@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
@@ -680,12 +681,7 @@ class PokemonBulkService {
     if (batch.cards.isEmpty || batch.printings.isEmpty) {
       throw const FormatException('pokemon_canonical_cache_invalid');
     }
-    final store = await CanonicalCatalogStore.openDefault();
-    try {
-      store.replacePokemonCatalog(batch);
-    } finally {
-      store.dispose();
-    }
+    await _replacePokemonCatalogInBackground(batch);
     onProgress(1);
   }
 
@@ -1338,12 +1334,21 @@ class PokemonBulkService {
     if (batch.cards.isEmpty || batch.printings.isEmpty) {
       throw const FormatException('pokemon_canonical_cache_invalid');
     }
-    final store = await CanonicalCatalogStore.openDefault();
-    try {
-      store.replacePokemonCatalog(batch);
-    } finally {
-      store.dispose();
-    }
+    await _replacePokemonCatalogInBackground(batch);
+  }
+
+  Future<void> _replacePokemonCatalogInBackground(
+    CanonicalCatalogImportBatch batch,
+  ) async {
+    final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+    await Isolate.run(() async {
+      final store = await CanonicalCatalogStore.openAtPath(databasePath);
+      try {
+        store.replacePokemonCatalog(batch);
+      } finally {
+        store.dispose();
+      }
+    });
   }
 
   List<dynamic> _extractDatasetRows(dynamic parsed) {

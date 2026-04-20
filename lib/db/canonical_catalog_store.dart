@@ -702,13 +702,16 @@ class CanonicalCatalogStore {
   final String databasePath;
 
   static Future<CanonicalCatalogStore> openDefault() async {
-    final path = debugDefaultPathOverride == null
+    return openAtPath(await defaultDatabasePath());
+  }
+
+  static Future<String> defaultDatabasePath() async {
+    return debugDefaultPathOverride == null
         ? p.join(
             (await getApplicationDocumentsDirectory()).path,
             defaultFileName,
           )
         : debugDefaultPathOverride!;
-    return openAtPath(path);
   }
 
   static Future<CanonicalCatalogStore> openAtPath(String path) async {

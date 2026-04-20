@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -322,6 +323,39 @@ void main() {
       expect(filteredCount, equals(1));
     },
   );
+
+  test('Pokemon catalog replacement works on a background isolate', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'canonical_store_isolate_test_',
+    );
+    addTearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+    final path =
+        '${tempDir.path}${Platform.pathSeparator}${CanonicalCatalogStore.defaultFileName}';
+    final batch = _promoRegressionBatch();
+
+    await Isolate.run(() async {
+      final store = await CanonicalCatalogStore.openAtPath(path);
+      try {
+        store.replacePokemonCatalog(batch);
+      } finally {
+        store.dispose();
+      }
+    });
+
+    final store = await CanonicalCatalogStore.openAtPath(path);
+    addTearDown(store.dispose);
+    expect(store.countTableRows('card_printings'), equals(1));
+    expect(
+      store.searchPokemonCards(
+        filter: const CollectionFilter(collectorNumber: 'sv-p001'),
+      ),
+      hasLength(1),
+    );
+  });
 }
 
 CanonicalCatalogImportBatch _promoRegressionBatch() {
