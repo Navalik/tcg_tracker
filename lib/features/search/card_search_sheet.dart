@@ -104,7 +104,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
   Map<String, int> _ownedQuantitiesByCardId = const {};
   Map<String, int> _missingCollectionQuantitiesByCardId = const {};
   bool _galleryView = false;
-  bool _artworkSearchEnabled = false;
   bool _ownedOnlyFilter = false;
   bool _hideNotLegalFilter = false;
   bool _onlineArtworkLoading = false;
@@ -432,78 +431,7 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
     List<CardSearchResult> page;
     var hasMorePages = true;
     final hasAdvancedFilters = _hasActiveAdvancedFilters();
-    if (!widget.selectionEnabled &&
-        _artworkSearchEnabled &&
-        query.isNotEmpty &&
-        !hasAdvancedFilters) {
-      final localResults = await appRepositories.search.searchCardsByName(
-        query,
-        languages: _effectiveLanguages(),
-        limit: 400,
-        offset: 0,
-      );
-      final trimmedLocalQuery = query.trim();
-      var filteredLocal = localResults;
-      if (trimmedLocalQuery.isNotEmpty) {
-        filteredLocal = _applyPrefixWordFilter(localResults, trimmedLocalQuery);
-      }
-
-      final ownershipCollectionId = widget.ownershipCollectionId;
-      Map<String, int> localOwnedQuantities = const {};
-      Map<String, int> localMissingQuantities = const {};
-      Map<String, bool> localDeckLegality = const {};
-      if (!_isDeckContext &&
-          ownershipCollectionId != null &&
-          filteredLocal.isNotEmpty) {
-        localOwnedQuantities = await ScryfallDatabase.instance
-            .fetchCollectionQuantities(
-              ownershipCollectionId,
-              filteredLocal.map((card) => card.id).toList(growable: false),
-            );
-        if (_ownedOnlyFilter) {
-          filteredLocal = filteredLocal
-              .where((card) => (localOwnedQuantities[card.id] ?? 0) > 0)
-              .toList(growable: false);
-        }
-      }
-      if (!_isDeckContext && filteredLocal.isNotEmpty) {
-        localMissingQuantities = await _fetchMissingCollectionQuantities(
-          filteredLocal,
-        );
-        filteredLocal = _excludeAlreadyMissingCards(
-          filteredLocal,
-          localMissingQuantities,
-        );
-      }
-      final deckFormat = _deckFormatConstraint;
-      if (deckFormat != null && filteredLocal.isNotEmpty) {
-        localDeckLegality = await ScryfallDatabase.instance
-            .fetchCardLegalityForFormat(
-              filteredLocal.map((card) => card.id).toList(growable: false),
-              format: deckFormat,
-            );
-        if (_hideNotLegalFilter) {
-          filteredLocal = filteredLocal
-              .where((card) => localDeckLegality[card.id] ?? false)
-              .toList(growable: false);
-        }
-      }
-      if (!mounted || query != _query) {
-        return;
-      }
-      setState(() {
-        _results = filteredLocal;
-        _ownedQuantitiesByCardId = localOwnedQuantities;
-        _missingCollectionQuantitiesByCardId = localMissingQuantities;
-        _deckLegalityByCardId = localDeckLegality;
-        _loading = false;
-        _loadingMore = false;
-        _onlineArtworkLoading = false;
-        _hasMore = false;
-      });
-      page = filteredLocal;
-      hasMorePages = false;
-    } else if (hasAdvancedFilters) {
+    if (hasAdvancedFilters) {
       final filter = _effectiveAdvancedFilter();
       page = await appRepositories.search.fetchCardsForAdvancedFilters(
         filter,
@@ -1767,24 +1695,6 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              if (!_isPokemonSearch)
-                                FilterChip(
-                                  selected: _artworkSearchEnabled,
-                                  onSelected: (value) async {
-                                    setState(() {
-                                      _artworkSearchEnabled = value;
-                                    });
-                                    if (_query.trim().isNotEmpty) {
-                                      await _runSearch(forceRefresh: true);
-                                    }
-                                  },
-                                  avatar: const Icon(
-                                    Icons.star_outline_rounded,
-                                    size: 18,
-                                  ),
-                                  label: Text(l10n.allArtworks),
-                                ),
-                              if (!_isPokemonSearch) const SizedBox(width: 10),
                               if (widget.ownershipCollectionId != null &&
                                   !_isDeckSearch)
                                 FilterChip(
