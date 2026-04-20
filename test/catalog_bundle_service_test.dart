@@ -1,4 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:tcg_tracker/services/catalog_bundle_service.dart';
 
 void main() {
@@ -174,5 +180,116 @@ void main() {
     );
 
     expect(selected, isNull);
+  });
+
+  test('downloads artifact bytes when sha256 matches', () async {
+    final bytes = utf8.encode('pokemon catalog payload');
+    final client = MockClient((request) async {
+      expect(request.url.toString(), contains('catalog%2Fpokemon%2F'));
+      return http.Response.bytes(bytes, 200);
+    });
+
+    final downloaded = await CatalogBundleService.downloadArtifactBytes(
+      artifact: CatalogBundleArtifact(
+        name: 'canonical_catalog_snapshot_en.json.gz',
+        path:
+            'catalog/pokemon/releases/v/canonical_catalog_snapshot_en.json.gz',
+        sizeBytes: bytes.length,
+        sha256: sha256.convert(bytes).toString(),
+      ),
+      bucket: CatalogBundleService.defaultFirebaseBucket,
+      game: 'pokemon',
+      client: client,
+      onProgress: (_) {},
+    );
+
+    expect(downloaded, bytes);
+  });
+
+  test('rejects artifact bytes when sha256 mismatches', () async {
+    final bytes = utf8.encode('pokemon catalog payload');
+    final client = MockClient((request) async {
+      return http.Response.bytes(bytes, 200);
+    });
+
+    expect(
+      () => CatalogBundleService.downloadArtifactBytes(
+        artifact: CatalogBundleArtifact(
+          name: 'canonical_catalog_snapshot_en.json.gz',
+          path:
+              'catalog/pokemon/releases/v/canonical_catalog_snapshot_en.json.gz',
+          sizeBytes: bytes.length,
+          sha256: ''.padLeft(64, '0'),
+        ),
+        bucket: CatalogBundleService.defaultFirebaseBucket,
+        game: 'pokemon',
+        client: client,
+        onProgress: (_) {},
+      ),
+      throwsA(
+        isA<HttpException>().having(
+          (error) => error.message,
+          'message',
+          'catalog_artifact_sha256_mismatch',
+        ),
+      ),
+    );
+  });
+
+  test('rejects artifact bytes when size_bytes mismatches', () async {
+    final bytes = utf8.encode('pokemon catalog payload');
+    final client = MockClient((request) async {
+      return http.Response.bytes(bytes, 200);
+    });
+
+    expect(
+      () => CatalogBundleService.downloadArtifactBytes(
+        artifact: CatalogBundleArtifact(
+          name: 'canonical_catalog_snapshot_en.json.gz',
+          path:
+              'catalog/pokemon/releases/v/canonical_catalog_snapshot_en.json.gz',
+          sizeBytes: bytes.length + 1,
+          sha256: sha256.convert(bytes).toString(),
+        ),
+        bucket: CatalogBundleService.defaultFirebaseBucket,
+        game: 'pokemon',
+        client: client,
+        onProgress: (_) {},
+      ),
+      throwsA(
+        isA<HttpException>().having(
+          (error) => error.message,
+          'message',
+          'catalog_artifact_size_mismatch',
+        ),
+      ),
+    );
+  });
+
+  test('rejects artifact URLs outside catalog game prefix', () async {
+    final client = MockClient((request) async {
+      fail('Downloader should reject the URL before sending a request');
+    });
+
+    expect(
+      () => CatalogBundleService.downloadArtifactBytes(
+        artifact: const CatalogBundleArtifact(
+          name: 'backup.json.gz',
+          downloadUrl:
+              'https://firebasestorage.googleapis.com/v0/b/bindervault.firebasestorage.app/o/users%2Fabc%2Fbackup.json.gz?alt=media',
+        ),
+        bucket: CatalogBundleService.defaultFirebaseBucket,
+        game: 'pokemon',
+        client: client,
+        onProgress: (_) {},
+      ),
+      throwsA(
+        isA<HttpException>().having(
+          (error) => error.message,
+          'message',
+          'catalog_artifact_url_not_allowed',
+        ),
+      ),
+    );
   });
 }

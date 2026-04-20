@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 
 class CatalogBundleService {
@@ -39,10 +41,9 @@ class CatalogBundleService {
         'Must start with $prefix',
       );
     }
-    return Uri.https(
-      firebaseStorageHost,
-      '/v0/b/$bucket/o/${Uri.encodeComponent(normalized)}',
-      const <String, String>{'alt': 'media'},
+    return Uri.parse(
+      'https://$firebaseStorageHost/v0/b/$bucket/o/'
+      '${Uri.encodeComponent(normalized)}?alt=media',
     );
   }
 
@@ -163,6 +164,102 @@ class CatalogBundleService {
           throw HttpException('${errorPrefix}_http_${response.statusCode}');
         }
         lastError = HttpException('${errorPrefix}_http_${response.statusCode}');
+      } on TimeoutException catch (error) {
+        lastError = error;
+      } on SocketException catch (error) {
+        lastError = error;
+      } on http.ClientException catch (error) {
+        lastError = error;
+      }
+      if (attempt < retryAttempts) {
+        await Future<void>.delayed(_retryDelay(attempt));
+      }
+    }
+    if (lastError is HttpException) {
+      throw lastError;
+    }
+    if (lastError is TimeoutException) {
+      throw SocketException('${errorPrefix}_timeout');
+    }
+    if (lastError is SocketException) {
+      throw SocketException('${errorPrefix}_unreachable');
+    }
+    if (lastError is http.ClientException) {
+      throw HttpException('${errorPrefix}_client_error');
+    }
+    throw HttpException('${errorPrefix}_failed');
+  }
+
+  static Future<Uint8List> downloadArtifactBytes({
+    required CatalogBundleArtifact artifact,
+    required String bucket,
+    required String game,
+    required http.Client client,
+    required void Function(double fraction) onProgress,
+    String errorPrefix = 'catalog_artifact',
+    int retryAttempts = 4,
+    Duration requestTimeout = const Duration(seconds: 90),
+    int assumedStreamLengthBytes = 600 * 1024 * 1024,
+  }) async {
+    final uri = resolveArtifactUri(artifact, bucket: bucket, game: game);
+    if (uri == null ||
+        !isAllowedFirebaseCatalogUri(
+          uri.toString(),
+          bucket: bucket,
+          game: game,
+        )) {
+      throw HttpException('${errorPrefix}_url_not_allowed');
+    }
+
+    Object? lastError;
+    for (var attempt = 1; attempt <= retryAttempts; attempt++) {
+      try {
+        final request = http.Request('GET', uri)
+          ..headers.addAll(const <String, String>{
+            'user-agent': 'bindervault/1.0',
+          });
+        final streamed = await client.send(request).timeout(requestTimeout);
+        if (streamed.statusCode != 200) {
+          final retryable =
+              streamed.statusCode == 429 || streamed.statusCode >= 500;
+          if (!retryable || attempt == retryAttempts) {
+            throw HttpException('${errorPrefix}_http_${streamed.statusCode}');
+          }
+          lastError = HttpException(
+            '${errorPrefix}_http_${streamed.statusCode}',
+          );
+        } else {
+          final expected = streamed.contentLength ?? 0;
+          var received = 0;
+          final builder = BytesBuilder(copy: false);
+          await for (final chunk in streamed.stream) {
+            builder.add(chunk);
+            received += chunk.length;
+            if (expected > 0) {
+              onProgress((received / expected).clamp(0.0, 1.0));
+            } else {
+              final estimated = (received / assumedStreamLengthBytes).clamp(
+                0.0,
+                0.98,
+              );
+              onProgress(estimated);
+            }
+          }
+          final bytes = builder.takeBytes();
+          final expectedSize = artifact.sizeBytes;
+          if (expectedSize != null && bytes.length != expectedSize) {
+            throw HttpException('${errorPrefix}_size_mismatch');
+          }
+          final expectedSha256 = artifact.sha256;
+          if (expectedSha256 != null && expectedSha256.isNotEmpty) {
+            final actualSha256 = sha256.convert(bytes).toString();
+            if (actualSha256.toLowerCase() != expectedSha256.toLowerCase()) {
+              throw HttpException('${errorPrefix}_sha256_mismatch');
+            }
+          }
+          onProgress(1);
+          return bytes;
+        }
       } on TimeoutException catch (error) {
         lastError = error;
       } on SocketException catch (error) {

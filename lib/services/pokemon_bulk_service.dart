@@ -417,16 +417,21 @@ class PokemonBulkService {
               ((bundle['id'] as String?)?.trim().toLowerCase() ?? '').isEmpty
               ? 'bundle_$i'
               : (bundle['id'] as String).trim().toLowerCase();
-          final assetUri = _resolveCanonicalSnapshotAssetUriFromBundle(bundle);
-          if (assetUri == null || !_isAllowedDownloadUri(assetUri.toString())) {
+          final assetArtifact = _canonicalSnapshotArtifactFromBundle(bundle);
+          final assetUri = assetArtifact == null
+              ? null
+              : _resolveHostedArtifactUri(assetArtifact);
+          if (assetArtifact == null ||
+              assetUri == null ||
+              !_isAllowedDownloadUri(assetUri.toString())) {
             return null;
           }
           stage = 'asset_download:$bundleId';
           _logHostedBundleDownload('asset $bundleId $assetUri');
           onStatus?.call('Downloading hosted Pokemon snapshot');
-          final gzipBytes = await _fetchBytesWithRetry(
+          final gzipBytes = await _downloadHostedArtifactBytes(
             client: client,
-            uri: assetUri,
+            artifact: assetArtifact,
             onProgress: (value) => onProgress(
               ((i + value) / selectedBundles.length).clamp(0.08, 0.98),
             ),
@@ -513,7 +518,7 @@ class PokemonBulkService {
         return mergedBatch;
       }
 
-      Uri? assetUri;
+      CatalogBundleArtifact? assetArtifact;
       final manifestProfile =
           (manifestParsed['profile'] as String?)?.trim().toLowerCase() ?? '';
       if (manifestProfile.isNotEmpty && manifestProfile != profile) {
@@ -544,22 +549,24 @@ class PokemonBulkService {
         final path = (artifact['path'] as String?)?.trim() ?? '';
         if (name == _hostedCanonicalSnapshotAssetName ||
             path == _hostedCanonicalSnapshotAssetName) {
-          assetUri = _resolveHostedArtifactUri(artifact);
+          assetArtifact = CatalogBundleArtifact.fromJson(artifact);
           break;
         }
       }
-      assetUri ??= _firebaseDownloadUriForObjectPath(
-        '$_firebaseCatalogObjectPrefix$_hostedCanonicalSnapshotAssetName',
+      assetArtifact ??= const CatalogBundleArtifact(
+        name: _hostedCanonicalSnapshotAssetName,
+        path: '$_firebaseCatalogObjectPrefix$_hostedCanonicalSnapshotAssetName',
       );
+      final assetUri = _resolveHostedArtifactUri(assetArtifact);
       if (assetUri == null || !_isAllowedDownloadUri(assetUri.toString())) {
         return null;
       }
       stage = 'asset_download:canonical_catalog_snapshot';
       _logHostedBundleDownload('asset canonical_catalog_snapshot $assetUri');
       onStatus?.call('Downloading hosted Pokemon snapshot');
-      final gzipBytes = await _fetchBytesWithRetry(
+      final gzipBytes = await _downloadHostedArtifactBytes(
         client: client,
-        uri: assetUri,
+        artifact: assetArtifact,
         onProgress: (value) => onProgress((0.08 + (value * 0.90)).clamp(0, 1)),
       );
       stage = 'gzip_decode:canonical_catalog_snapshot';
@@ -646,73 +653,21 @@ class PokemonBulkService {
     }
   }
 
-  Future<Uint8List> _fetchBytesWithRetry({
+  Future<List<int>> _downloadHostedArtifactBytes({
     required http.Client client,
-    required Uri uri,
+    required CatalogBundleArtifact artifact,
     required void Function(double fraction) onProgress,
   }) async {
-    const assumedStreamLengthBytes = 600 * 1024 * 1024;
-    Object? lastError;
-    for (var attempt = 1; attempt <= _maxAttemptsPerPage; attempt++) {
-      try {
-        final request = http.Request('GET', uri)
-          ..headers.addAll(const <String, String>{
-            'user-agent': 'bindervault/1.0',
-          });
-        final streamed = await client
-            .send(request)
-            .timeout(const Duration(seconds: 90));
-        if (streamed.statusCode != 200) {
-          final retryable =
-              streamed.statusCode == 429 || streamed.statusCode >= 500;
-          if (!retryable || attempt == _maxAttemptsPerPage) {
-            throw HttpException('pokemon_api_http_${streamed.statusCode}');
-          }
-          lastError = HttpException('pokemon_api_http_${streamed.statusCode}');
-        } else {
-          final expected = streamed.contentLength ?? 0;
-          var received = 0;
-          final chunks = <int>[];
-          await for (final chunk in streamed.stream) {
-            chunks.addAll(chunk);
-            received += chunk.length;
-            if (expected > 0) {
-              onProgress((received / expected).clamp(0.0, 1.0));
-            } else {
-              final estimated = (received / assumedStreamLengthBytes).clamp(
-                0.0,
-                0.98,
-              );
-              onProgress(estimated);
-            }
-          }
-          onProgress(1);
-          return Uint8List.fromList(chunks);
-        }
-      } on TimeoutException catch (error) {
-        lastError = error;
-      } on SocketException catch (error) {
-        lastError = error;
-      } on http.ClientException catch (error) {
-        lastError = error;
-      }
-      if (attempt < _maxAttemptsPerPage) {
-        await Future<void>.delayed(_retryDelay(attempt));
-      }
-    }
-    if (lastError is HttpException) {
-      throw lastError;
-    }
-    if (lastError is TimeoutException) {
-      throw const SocketException('pokemon_api_timeout');
-    }
-    if (lastError is SocketException) {
-      throw const SocketException('pokemon_api_unreachable');
-    }
-    if (lastError is http.ClientException) {
-      throw HttpException('pokemon_api_client_error');
-    }
-    throw const HttpException('pokemon_api_failed');
+    return CatalogBundleService.downloadArtifactBytes(
+      artifact: artifact,
+      bucket: _firebaseCatalogBucket,
+      game: 'pokemon',
+      client: client,
+      onProgress: onProgress,
+      errorPrefix: 'pokemon_api',
+      retryAttempts: _maxAttemptsPerPage,
+      requestTimeout: const Duration(seconds: 90),
+    );
   }
 
   Future<void> _importCanonicalCatalogBatch(
@@ -1154,7 +1109,8 @@ class PokemonBulkService {
   Uri? resolveCanonicalSnapshotAssetUriFromBundleForTesting(
     Map<String, dynamic> bundle,
   ) {
-    return _resolveCanonicalSnapshotAssetUriFromBundle(bundle);
+    final artifact = _canonicalSnapshotArtifactFromBundle(bundle);
+    return artifact == null ? null : _resolveHostedArtifactUri(artifact);
   }
 
   bool isAllowedDownloadUriForTesting(String rawUri) {
@@ -1168,7 +1124,7 @@ class PokemonBulkService {
     }());
   }
 
-  Uri? _resolveCanonicalSnapshotAssetUriFromBundle(
+  CatalogBundleArtifact? _canonicalSnapshotArtifactFromBundle(
     Map<String, dynamic> bundle,
   ) {
     final artifacts =
@@ -1190,30 +1146,17 @@ class PokemonBulkService {
           normalizedCandidate.endsWith('.json.gz') ||
           normalizedDownloadUrl.contains('.json.gz');
       if (hasCanonicalSnapshotName && hasJsonGzipName) {
-        return _resolveHostedArtifactUri(artifact);
+        return CatalogBundleArtifact.fromJson(artifact);
       }
     }
     return null;
   }
 
-  Uri? _resolveHostedArtifactUri(Map<String, dynamic> artifact) {
+  Uri? _resolveHostedArtifactUri(CatalogBundleArtifact artifact) {
     return CatalogBundleService.resolveArtifactUri(
-      CatalogBundleArtifact.fromJson(artifact),
+      artifact,
       bucket: _firebaseCatalogBucket,
       game: 'pokemon',
-    );
-  }
-
-  Uri? _firebaseDownloadUriForObjectPath(String objectPath) {
-    final normalized = CatalogBundleService.normalizeObjectPath(objectPath);
-    if (normalized.isEmpty ||
-        !normalized.startsWith(_firebaseCatalogObjectPrefix)) {
-      return null;
-    }
-    return CatalogBundleService.firebaseDownloadUriForObjectPath(
-      bucket: _firebaseCatalogBucket,
-      game: 'pokemon',
-      objectPath: normalized,
     );
   }
 
@@ -2121,17 +2064,6 @@ class PokemonBulkService {
     await prefs.remove(_prefsKeyLastError);
     await prefs.remove(_prefsKeyLastErrorStage);
     await prefs.remove(_prefsKeyLastErrorDetail);
-  }
-
-  Duration _retryDelay(int attempt) {
-    switch (attempt) {
-      case 1:
-        return const Duration(milliseconds: 600);
-      case 2:
-        return const Duration(milliseconds: 1300);
-      default:
-        return const Duration(seconds: 2);
-    }
   }
 
   String _stripUtf8Bom(String value) {
