@@ -49,10 +49,6 @@ class PurchaseManager extends ChangeNotifier {
         defaultValue: true,
       );
   static const bool _serverEntitlementVerificationAvailable = true;
-  static const bool _enableDebugBilling = bool.fromEnvironment(
-    'ENABLE_DEBUG_BILLING',
-    defaultValue: false,
-  );
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
@@ -825,9 +821,7 @@ class PurchaseManager extends ChangeNotifier {
     });
   }
 
-  bool _supportsStore() =>
-      (Platform.isAndroid || Platform.isIOS) &&
-      (!kDebugMode || _enableDebugBilling);
+  bool _supportsStore() => Platform.isAndroid || Platform.isIOS;
 
   void _ensurePurchaseStreamListener() {
     _purchaseSubscription ??= _inAppPurchase.purchaseStream.listen(
