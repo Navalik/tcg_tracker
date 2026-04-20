@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import '../db/canonical_catalog_store.dart';
 import '../domain/domain_models.dart';
 import '../models.dart';
@@ -8,13 +10,146 @@ import 'repository_registry.dart';
 import 'search_repository.dart';
 import 'set_repository.dart';
 
+class _CanonicalSetsRequest {
+  const _CanonicalSetsRequest({
+    required this.databasePath,
+    required this.gameId,
+    required this.preferredLanguages,
+  });
+
+  final String databasePath;
+  final TcgGameId gameId;
+  final List<String> preferredLanguages;
+}
+
+class _CanonicalSetNamesRequest {
+  const _CanonicalSetNamesRequest({
+    required this.databasePath,
+    required this.gameId,
+    required this.setCodes,
+    required this.preferredLanguages,
+  });
+
+  final String databasePath;
+  final TcgGameId gameId;
+  final List<String> setCodes;
+  final List<String> preferredLanguages;
+}
+
+class _CanonicalSearchRequest {
+  const _CanonicalSearchRequest({
+    required this.databasePath,
+    required this.gameId,
+    required this.filter,
+    required this.searchQuery,
+    required this.preferredLanguages,
+    required this.limit,
+    required this.offset,
+  });
+
+  final String databasePath;
+  final TcgGameId gameId;
+  final CollectionFilter filter;
+  final String? searchQuery;
+  final List<String> preferredLanguages;
+  final int limit;
+  final int? offset;
+}
+
+class _CanonicalCountRequest {
+  const _CanonicalCountRequest({
+    required this.databasePath,
+    required this.gameId,
+    required this.filter,
+    required this.searchQuery,
+    required this.preferredLanguages,
+  });
+
+  final String databasePath;
+  final TcgGameId gameId;
+  final CollectionFilter filter;
+  final String? searchQuery;
+  final List<String> preferredLanguages;
+}
+
+Future<T?> _withCanonicalStoreInBackground<T>(
+  String databasePath,
+  TcgGameId gameId,
+  T Function(CanonicalCatalogStore store) action,
+) async {
+  final store = await CanonicalCatalogStore.openAtPath(databasePath);
+  try {
+    if (!store.hasCatalogForGame(gameId)) {
+      return null;
+    }
+    return action(store);
+  } finally {
+    store.dispose();
+  }
+}
+
+Future<List<SetInfo>?> _fetchCanonicalSetsInBackground(
+  _CanonicalSetsRequest request,
+) {
+  return _withCanonicalStoreInBackground(
+    request.databasePath,
+    request.gameId,
+    (store) => store.fetchSetsForGame(
+      gameId: request.gameId,
+      preferredLanguages: request.preferredLanguages,
+    ),
+  );
+}
+
+Future<Map<String, String>?> _fetchCanonicalSetNamesInBackground(
+  _CanonicalSetNamesRequest request,
+) {
+  return _withCanonicalStoreInBackground(
+    request.databasePath,
+    request.gameId,
+    (store) => store.fetchSetNamesForCodesForGame(
+      request.gameId,
+      request.setCodes,
+      preferredLanguages: request.preferredLanguages,
+    ),
+  );
+}
+
+Future<List<CardSearchResult>?> _searchCanonicalCardsInBackground(
+  _CanonicalSearchRequest request,
+) {
+  return _withCanonicalStoreInBackground(
+    request.databasePath,
+    request.gameId,
+    (store) => store.searchCardsForGame(
+      gameId: request.gameId,
+      filter: request.filter,
+      searchQuery: request.searchQuery,
+      preferredLanguages: request.preferredLanguages,
+      limit: request.limit,
+      offset: request.offset,
+    ),
+  );
+}
+
+Future<int?> _countCanonicalCardsInBackground(_CanonicalCountRequest request) {
+  return _withCanonicalStoreInBackground(
+    request.databasePath,
+    request.gameId,
+    (store) => store.countCardsForGame(
+      gameId: request.gameId,
+      filter: request.filter,
+      searchQuery: request.searchQuery,
+      preferredLanguages: request.preferredLanguages,
+    ),
+  );
+}
+
 class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
   GameAwareRepositoryAdapter({LegacyScryfallRepositoryAdapter? legacy})
     : _legacy = legacy ?? LegacyScryfallRepositoryAdapter();
 
   final LegacyScryfallRepositoryAdapter _legacy;
-  CanonicalCatalogStore? _canonicalStore;
-  Future<CanonicalCatalogStore>? _canonicalStoreTask;
 
   static RepositoryRegistry createRegistry({
     LegacyScryfallRepositoryAdapter? legacy,
@@ -36,20 +171,28 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     List<String> preferredLanguages = const [],
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.fetchAvailableSets(
-          gameId: resolvedGame,
-          preferredLanguages: preferredLanguages,
-        );
-      }
-      return store.fetchSetsForGame(
-        gameId: resolvedGame,
-        preferredLanguages: preferredLanguages.isNotEmpty
-            ? _normalizedLanguages(preferredLanguages)
-            : await _uiPreferredLanguagesForGame(resolvedGame),
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = preferredLanguages.isNotEmpty
+          ? _normalizedLanguages(preferredLanguages)
+          : await _uiPreferredLanguagesForGame(resolvedGame);
+      final canonical = await Isolate.run(
+        () => _fetchCanonicalSetsInBackground(
+          _CanonicalSetsRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            preferredLanguages: resolvedLanguages,
+          ),
+        ),
       );
-    });
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.fetchAvailableSets(
+      gameId: resolvedGame,
+      preferredLanguages: preferredLanguages,
+    );
   }
 
   @override
@@ -59,22 +202,30 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     List<String> preferredLanguages = const [],
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.fetchSetNamesForCodes(
-          setCodes,
-          gameId: resolvedGame,
-          preferredLanguages: preferredLanguages,
-        );
-      }
-      return store.fetchSetNamesForCodesForGame(
-        resolvedGame,
-        setCodes,
-        preferredLanguages: preferredLanguages.isNotEmpty
-            ? _normalizedLanguages(preferredLanguages)
-            : await _uiPreferredLanguagesForGame(resolvedGame),
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = preferredLanguages.isNotEmpty
+          ? _normalizedLanguages(preferredLanguages)
+          : await _uiPreferredLanguagesForGame(resolvedGame);
+      final canonical = await Isolate.run(
+        () => _fetchCanonicalSetNamesInBackground(
+          _CanonicalSetNamesRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            setCodes: setCodes,
+            preferredLanguages: resolvedLanguages,
+          ),
+        ),
       );
-    });
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.fetchSetNamesForCodes(
+      setCodes,
+      gameId: resolvedGame,
+      preferredLanguages: preferredLanguages,
+    );
   }
 
   @override
@@ -88,26 +239,51 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.fetchCardsForFilters(
-          gameId: resolvedGame,
-          setCodes: setCodes,
-          rarities: rarities,
-          types: types,
-          languages: languages,
-          limit: limit,
-          offset: offset,
-        );
-      }
-      return fetchCardsForAdvancedFilters(
+    if (resolvedGame == TcgGameId.pokemon) {
+      return _legacy.fetchCardsForAdvancedFilters(
         CollectionFilter(sets: setCodes, rarities: rarities, types: types),
         gameId: resolvedGame,
         languages: languages,
         limit: limit,
         offset: offset,
       );
-    });
+    }
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = await _effectiveLanguages(
+        languages,
+        resolvedGame,
+      );
+      final canonical = await Isolate.run(
+        () => _searchCanonicalCardsInBackground(
+          _CanonicalSearchRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            filter: CollectionFilter(
+              sets: setCodes,
+              rarities: rarities,
+              types: types,
+            ),
+            searchQuery: null,
+            preferredLanguages: resolvedLanguages,
+            limit: limit,
+            offset: offset,
+          ),
+        ),
+      );
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.fetchCardsForFilters(
+      gameId: resolvedGame,
+      setCodes: setCodes,
+      rarities: rarities,
+      types: types,
+      languages: languages,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   @override
@@ -119,25 +295,36 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     int? offset,
   }) async {
     final resolvedGame = _resolvedGameId(gameId);
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.searchCardsByName(
-          query,
-          gameId: resolvedGame,
-          languages: languages,
-          limit: limit,
-          offset: offset,
-        );
-      }
-      return store.searchCardsForGame(
-        gameId: resolvedGame,
-        filter: const CollectionFilter(),
-        searchQuery: query,
-        preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
-        limit: limit,
-        offset: offset,
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = await _effectiveLanguages(
+        languages,
+        resolvedGame,
       );
-    });
+      final canonical = await Isolate.run(
+        () => _searchCanonicalCardsInBackground(
+          _CanonicalSearchRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            filter: const CollectionFilter(),
+            searchQuery: query,
+            preferredLanguages: resolvedLanguages,
+            limit: limit,
+            offset: offset,
+          ),
+        ),
+      );
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.searchCardsByName(
+      query,
+      gameId: resolvedGame,
+      languages: languages,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   @override
@@ -160,26 +347,37 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
         offset: offset,
       );
     }
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.fetchCardsForAdvancedFilters(
-          filter,
-          gameId: resolvedGame,
-          searchQuery: searchQuery,
-          languages: languages,
-          limit: limit,
-          offset: offset,
-        );
-      }
-      return store.searchCardsForGame(
-        gameId: resolvedGame,
-        filter: filter,
-        searchQuery: searchQuery,
-        preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
-        limit: limit,
-        offset: offset,
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = await _effectiveLanguages(
+        languages,
+        resolvedGame,
       );
-    });
+      final canonical = await Isolate.run(
+        () => _searchCanonicalCardsInBackground(
+          _CanonicalSearchRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            filter: filter,
+            searchQuery: searchQuery,
+            preferredLanguages: resolvedLanguages,
+            limit: limit,
+            offset: offset,
+          ),
+        ),
+      );
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.fetchCardsForAdvancedFilters(
+      filter,
+      gameId: resolvedGame,
+      searchQuery: searchQuery,
+      languages: languages,
+      limit: limit,
+      offset: offset,
+    );
   }
 
   @override
@@ -191,16 +389,25 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
     if (resolvedGame == TcgGameId.pokemon) {
       return _legacy.countCardsForFilter(filter, gameId: resolvedGame);
     }
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.countCardsForFilter(filter, gameId: resolvedGame);
-      }
-      return store.countCardsForGame(
-        gameId: resolvedGame,
-        filter: filter,
-        preferredLanguages: await _preferredLanguagesForGame(resolvedGame),
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = await _preferredLanguagesForGame(resolvedGame);
+      final canonical = await Isolate.run(
+        () => _countCanonicalCardsInBackground(
+          _CanonicalCountRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            filter: filter,
+            searchQuery: null,
+            preferredLanguages: resolvedLanguages,
+          ),
+        ),
       );
-    });
+      if (canonical != null) {
+        return canonical;
+      }
+    }
+    return _legacy.countCardsForFilter(filter, gameId: resolvedGame);
   }
 
   @override
@@ -219,76 +426,37 @@ class GameAwareRepositoryAdapter implements SearchRepository, SetRepository {
         languages: languages,
       );
     }
-    return _withCanonicalStore((store) async {
-      if (!_shouldUseCanonicalRuntime(store, resolvedGame)) {
-        return _legacy.countCardsForFilterWithSearch(
-          filter,
-          gameId: resolvedGame,
-          searchQuery: searchQuery,
-          languages: languages,
-        );
-      }
-      return store.countCardsForGame(
-        gameId: resolvedGame,
-        filter: filter,
-        searchQuery: searchQuery,
-        preferredLanguages: await _effectiveLanguages(languages, resolvedGame),
+    if (resolvedGame != TcgGameId.onePiece) {
+      final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
+      final resolvedLanguages = await _effectiveLanguages(
+        languages,
+        resolvedGame,
       );
-    });
-  }
-
-  Future<T> _withCanonicalStore<T>(
-    Future<T> Function(CanonicalCatalogStore store) action,
-  ) async {
-    if (CanonicalCatalogStore.debugDefaultPathOverride != null) {
-      final store = await CanonicalCatalogStore.openDefault();
-      try {
-        return await action(store);
-      } finally {
-        store.dispose();
+      final canonical = await Isolate.run(
+        () => _countCanonicalCardsInBackground(
+          _CanonicalCountRequest(
+            databasePath: databasePath,
+            gameId: resolvedGame,
+            filter: filter,
+            searchQuery: searchQuery,
+            preferredLanguages: resolvedLanguages,
+          ),
+        ),
+      );
+      if (canonical != null) {
+        return canonical;
       }
     }
-    final store = await _openCanonicalStore();
-    return action(store);
-  }
-
-  Future<CanonicalCatalogStore> _openCanonicalStore() async {
-    final existing = _canonicalStore;
-    if (existing != null) {
-      return existing;
-    }
-    final pending = _canonicalStoreTask;
-    if (pending != null) {
-      return pending;
-    }
-    final task = CanonicalCatalogStore.openDefault();
-    _canonicalStoreTask = task;
-    try {
-      final store = await task;
-      _canonicalStore = store;
-      return store;
-    } catch (_) {
-      _canonicalStoreTask = null;
-      rethrow;
-    } finally {
-      if (_canonicalStore != null) {
-        _canonicalStoreTask = null;
-      }
-    }
+    return _legacy.countCardsForFilterWithSearch(
+      filter,
+      gameId: resolvedGame,
+      searchQuery: searchQuery,
+      languages: languages,
+    );
   }
 
   TcgGameId _resolvedGameId(TcgGameId? gameId) {
     return gameId ?? TcgEnvironmentController.instance.currentGameId;
-  }
-
-  bool _shouldUseCanonicalRuntime(
-    CanonicalCatalogStore store,
-    TcgGameId gameId,
-  ) {
-    if (gameId == TcgGameId.onePiece) {
-      return false;
-    }
-    return store.hasCatalogForGame(gameId);
   }
 
   Future<List<String>> _preferredLanguagesForGame(TcgGameId gameId) async {

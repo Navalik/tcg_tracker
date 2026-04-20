@@ -77,20 +77,19 @@ class CollectionCards extends Table {
 
 String? debugAppDatabaseDirectoryOverride;
 
+void _setupAppDatabase(dynamic db) {
+  db.execute('PRAGMA journal_mode=WAL');
+  db.execute('PRAGMA synchronous=NORMAL');
+  db.execute('PRAGMA busy_timeout=5000');
+}
+
 LazyDatabase _openConnection(String fileName) {
   return LazyDatabase(() async {
     final directory = debugAppDatabaseDirectoryOverride == null
         ? await getApplicationDocumentsDirectory()
         : Directory(debugAppDatabaseDirectoryOverride!);
     final dbFile = File(path.join(directory.path, fileName));
-    return NativeDatabase(
-      dbFile,
-      setup: (db) {
-        db.execute('PRAGMA journal_mode=WAL');
-        db.execute('PRAGMA synchronous=NORMAL');
-        db.execute('PRAGMA busy_timeout=5000');
-      },
-    );
+    return NativeDatabase.createInBackground(dbFile, setup: _setupAppDatabase);
   });
 }
 
