@@ -2118,7 +2118,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get whatsNewButtonLabel => 'Novita';
 
   @override
-  String get whatsNewDialogTitle => 'Novita versione 0.5.5';
+  String get whatsNewDialogTitle => 'Novita versione 0.5.6';
 
   @override
   String get whatsNewFeaturesTitle => 'Novita principali';
@@ -2128,35 +2128,34 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get whatsNewLine1 =>
-      'Risolti problemi nella protezione del cloud backup e nei controlli di accesso Plus.';
+      'Fix tecnici sul download e sulla verifica dei cataloghi.';
 
   @override
   String get whatsNewLine2 =>
-      'Migliorato il flusso di avvio e la stabilita generale dell\'app.';
+      'Migliorata la stabilita del flusso di installazione e aggiornamento dei dati.';
 
   @override
-  String get whatsNewLine3 => 'Aggiunto l\'accesso con email e password.';
+  String get whatsNewLine3 => 'Nuovo flusso di download catalogo per Pokemon.';
 
   @override
-  String get whatsNewLine4 => 'Aggiunto il cloud sync per BinderVault Plus.';
+  String get whatsNewLine4 => 'Nuovo flusso di download catalogo per Magic.';
 
   @override
-  String get whatsNewLine5 => 'Nuovo splash screen.';
+  String get whatsNewLine5 =>
+      'Controlli piu solidi su manifest, dimensione file e integrita dei pacchetti.';
 
   @override
-  String get whatsNewLine6 =>
-      'Migliorato il flusso scanner e l\'usabilita generale.';
+  String get whatsNewLine6 => '';
 
   @override
-  String get whatsNewLine7 => 'Aggiornate le basi tecniche e le librerie.';
+  String get whatsNewLine7 => '';
 
   @override
   String get whatsNewLine8 =>
-      'Corretti problemi nella UI del backup e alcuni casi limite del ripristino cloud.';
+      'Incluse correzioni minori e rifiniture tecniche.';
 
   @override
-  String get whatsNewLine9 =>
-      'Incluse anche ulteriori correzioni minori e rifiniture generali.';
+  String get whatsNewLine9 => '';
 
   @override
   String get createSmartCollectionTitle => 'Crea una smart collection';

@@ -2094,7 +2094,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatsNewButtonLabel => 'What\'s new';
 
   @override
-  String get whatsNewDialogTitle => 'What\'s new in 0.5.5';
+  String get whatsNewDialogTitle => 'What\'s new in 0.5.6';
 
   @override
   String get whatsNewFeaturesTitle => 'Main updates';
@@ -2104,36 +2104,33 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get whatsNewLine1 =>
-      'Fixed issues around cloud backup protection and Plus access checks.';
+      'Technical fixes for catalog downloads and verification.';
 
   @override
   String get whatsNewLine2 =>
-      'Improved startup flow and overall app stability.';
+      'Improved stability for data install and update flows.';
 
   @override
-  String get whatsNewLine3 => 'Added email and password sign-in.';
+  String get whatsNewLine3 => 'New catalog download flow for Pokemon.';
 
   @override
-  String get whatsNewLine4 => 'Added cloud sync for BinderVault Plus.';
+  String get whatsNewLine4 => 'New catalog download flow for Magic.';
 
   @override
-  String get whatsNewLine5 => 'Refreshed the splash screen.';
+  String get whatsNewLine5 =>
+      'Stronger checks for manifests, file sizes, and package integrity.';
 
   @override
-  String get whatsNewLine6 =>
-      'Improved the scanner flow and overall usability.';
+  String get whatsNewLine6 => '';
 
   @override
-  String get whatsNewLine7 =>
-      'Updated technical foundations and upgraded libraries.';
+  String get whatsNewLine7 => '';
 
   @override
-  String get whatsNewLine8 =>
-      'Fixed backup UI inconsistencies and cloud restore edge cases.';
+  String get whatsNewLine8 => 'Also includes minor fixes and technical polish.';
 
   @override
-  String get whatsNewLine9 =>
-      'Also includes additional minor bug fixes and polish across the app.';
+  String get whatsNewLine9 => '';
 
   @override
   String get createSmartCollectionTitle => 'Create your smart collection';

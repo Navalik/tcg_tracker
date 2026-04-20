@@ -3749,7 +3749,7 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewDialogTitle.
   ///
   /// In en, this message translates to:
-  /// **'What\'s new in 0.5.5'**
+  /// **'What\'s new in 0.5.6'**
   String get whatsNewDialogTitle;
 
   /// No description provided for @whatsNewFeaturesTitle.
@@ -3767,55 +3767,55 @@ abstract class AppLocalizations {
   /// No description provided for @whatsNewLine1.
   ///
   /// In en, this message translates to:
-  /// **'Fixed issues around cloud backup protection and Plus access checks.'**
+  /// **'Technical fixes for catalog downloads and verification.'**
   String get whatsNewLine1;
 
   /// No description provided for @whatsNewLine2.
   ///
   /// In en, this message translates to:
-  /// **'Improved startup flow and overall app stability.'**
+  /// **'Improved stability for data install and update flows.'**
   String get whatsNewLine2;
 
   /// No description provided for @whatsNewLine3.
   ///
   /// In en, this message translates to:
-  /// **'Added email and password sign-in.'**
+  /// **'New catalog download flow for Pokemon.'**
   String get whatsNewLine3;
 
   /// No description provided for @whatsNewLine4.
   ///
   /// In en, this message translates to:
-  /// **'Added cloud sync for BinderVault Plus.'**
+  /// **'New catalog download flow for Magic.'**
   String get whatsNewLine4;
 
   /// No description provided for @whatsNewLine5.
   ///
   /// In en, this message translates to:
-  /// **'Refreshed the splash screen.'**
+  /// **'Stronger checks for manifests, file sizes, and package integrity.'**
   String get whatsNewLine5;
 
   /// No description provided for @whatsNewLine6.
   ///
   /// In en, this message translates to:
-  /// **'Improved the scanner flow and overall usability.'**
+  /// **''**
   String get whatsNewLine6;
 
   /// No description provided for @whatsNewLine7.
   ///
   /// In en, this message translates to:
-  /// **'Updated technical foundations and upgraded libraries.'**
+  /// **''**
   String get whatsNewLine7;
 
   /// No description provided for @whatsNewLine8.
   ///
   /// In en, this message translates to:
-  /// **'Fixed backup UI inconsistencies and cloud restore edge cases.'**
+  /// **'Also includes minor fixes and technical polish.'**
   String get whatsNewLine8;
 
   /// No description provided for @whatsNewLine9.
   ///
   /// In en, this message translates to:
-  /// **'Also includes additional minor bug fixes and polish across the app.'**
+  /// **''**
   String get whatsNewLine9;
 
   /// No description provided for @createSmartCollectionTitle.
