@@ -498,15 +498,10 @@ class _CardSearchSheetState extends State<_CardSearchSheet>
         _deckLegalityByCardId = localDeckLegality;
         _loading = false;
         _loadingMore = false;
-        _onlineArtworkLoading = true;
+        _onlineArtworkLoading = false;
         _hasMore = false;
       });
-
-      final onlineResults = await _fetchOnlinePrintings(query);
-      if (!mounted || query != _query) {
-        return;
-      }
-      page = _mergeUniquePrintings(localResults, onlineResults);
+      page = filteredLocal;
       hasMorePages = false;
     } else if (hasAdvancedFilters) {
       final filter = _effectiveAdvancedFilter();

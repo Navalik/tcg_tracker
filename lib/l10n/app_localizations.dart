@@ -1949,7 +1949,7 @@ abstract class AppLocalizations {
   /// No description provided for @allArtworks.
   ///
   /// In en, this message translates to:
-  /// **'Search online'**
+  /// **'All printings'**
   String get allArtworks;
 
   /// No description provided for @ownedLabel.
@@ -1961,7 +1961,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchingOnlinePrintings.
   ///
   /// In en, this message translates to:
-  /// **'Searching online printings...'**
+  /// **'Searching printings...'**
   String get searchingOnlinePrintings;
 
   /// No description provided for @addToCollection.

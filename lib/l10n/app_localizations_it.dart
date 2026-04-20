@@ -1066,13 +1066,13 @@ class AppLocalizationsIt extends AppLocalizations {
       'Il piano Free consente 20 scansioni al giorno. Passa a Plus per scansioni illimitate.';
 
   @override
-  String get allArtworks => 'Interroga online';
+  String get allArtworks => 'Tutte le stampe';
 
   @override
   String get ownedLabel => 'Possedute';
 
   @override
-  String get searchingOnlinePrintings => 'Ricerca stampe online...';
+  String get searchingOnlinePrintings => 'Ricerca stampe...';
 
   @override
   String get addToCollection => 'Aggiungi alla collezione';

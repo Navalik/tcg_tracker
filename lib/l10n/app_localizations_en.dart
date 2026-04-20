@@ -1047,13 +1047,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Free plan allows 20 scans per day. Upgrade to Plus for unlimited scans.';
 
   @override
-  String get allArtworks => 'Search online';
+  String get allArtworks => 'All printings';
 
   @override
   String get ownedLabel => 'Owned';
 
   @override
-  String get searchingOnlinePrintings => 'Searching online printings...';
+  String get searchingOnlinePrintings => 'Searching printings...';
 
   @override
   String get addToCollection => 'Add to collection';
