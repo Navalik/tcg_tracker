@@ -439,25 +439,24 @@ class PokemonBulkService {
           );
           stage = 'gzip_decode:$bundleId';
           onStatus?.call('Preparing hosted Pokemon snapshot');
-          final jsonBytes = GZipDecoder().decodeBytes(gzipBytes);
-          stage = 'utf8_decode:$bundleId';
-          final jsonText = utf8.decode(jsonBytes, allowMalformed: true);
-          stage = 'json_decode:$bundleId';
-          final parsed = jsonDecode(jsonText);
-          if (parsed is! Map<String, dynamic>) {
+          final bundleLanguages = _bundleLanguageSet(
+            bundle,
+          ).toList(growable: false);
+          final decoded = await _decodeHostedCanonicalSnapshotInBackground(
+            gzipBytes,
+            profile: profile,
+            fallbackLanguageSignature: _normalizeLanguageSignature(
+              bundleLanguages,
+            ),
+            upgradeLanguageCode: bundleLanguages.length == 1
+                ? bundleLanguages.first
+                : null,
+          );
+          if (decoded == null) {
             return null;
           }
           stage = 'validate_payload:$bundleId';
-          final downloadedProfile =
-              (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
-          if (downloadedProfile.isNotEmpty && downloadedProfile != profile) {
-            return null;
-          }
-          final downloadedSignature =
-              (parsed['languages_signature'] as String?)
-                  ?.trim()
-                  .toLowerCase() ??
-              '';
+          final downloadedSignature = decoded.languageSignature;
           if (downloadedSignature.isNotEmpty) {
             downloadedLanguages.addAll(
               _languageCodeSetFromSignature(downloadedSignature),
@@ -465,33 +464,8 @@ class PokemonBulkService {
           } else {
             downloadedLanguages.addAll(_bundleLanguageSet(bundle));
           }
-          final batchJson = parsed['batch'];
-          if (batchJson is! Map) {
-            return null;
-          }
           stage = 'batch_parse:$bundleId';
-          var batch = canonicalCatalogBatchFromJson(
-            Map<String, dynamic>.from(batchJson),
-          );
-          final snapshotSchemaVersion =
-              (parsed['schema_version'] as num?)?.toInt() ?? 1;
-          final snapshotCompatibilityVersion =
-              (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
-          if (!_isSupportedHostedCompatibilityVersion(
-            snapshotCompatibilityVersion,
-          )) {
-            return null;
-          }
-          final bundleLanguages = _bundleLanguageSet(
-            bundle,
-          ).toList(growable: false);
-          if (snapshotSchemaVersion < _canonicalSnapshotSchemaVersion &&
-              bundleLanguages.length == 1) {
-            batch = _upgradeHostedSnapshotBatchForLanguage(
-              batch,
-              languageCode: bundleLanguages.first,
-            );
-          }
+          final batch = decoded.batch;
           if (batch.cards.isEmpty || batch.printings.isEmpty) {
             return null;
           }
@@ -572,30 +546,22 @@ class PokemonBulkService {
       );
       stage = 'gzip_decode:canonical_catalog_snapshot';
       onStatus?.call('Preparing hosted Pokemon snapshot');
-      final jsonBytes = GZipDecoder().decodeBytes(gzipBytes);
-      stage = 'utf8_decode:canonical_catalog_snapshot';
-      final jsonText = utf8.decode(jsonBytes, allowMalformed: true);
-      stage = 'json_decode:canonical_catalog_snapshot';
-      final parsed = jsonDecode(jsonText);
-      if (parsed is! Map<String, dynamic>) {
+      final downloadedLanguageCodes = _languageCodeSetFromSignature(
+        expectedLanguageSignature,
+      ).toList(growable: false);
+      final decoded = await _decodeHostedCanonicalSnapshotInBackground(
+        gzipBytes,
+        profile: profile,
+        fallbackLanguageSignature: expectedLanguageSignature,
+        upgradeLanguageCode: downloadedLanguageCodes.length == 1
+            ? downloadedLanguageCodes.first
+            : null,
+      );
+      if (decoded == null) {
         return null;
       }
       stage = 'validate_payload:canonical_catalog_snapshot';
-      final downloadedProfile =
-          (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
-      if (downloadedProfile.isNotEmpty && downloadedProfile != profile) {
-        return null;
-      }
-      final downloadedSignature =
-          (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
-          '';
-      final snapshotCompatibilityVersion =
-          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
-      if (!_isSupportedHostedCompatibilityVersion(
-        snapshotCompatibilityVersion,
-      )) {
-        return null;
-      }
+      final downloadedSignature = decoded.languageSignature;
       if (downloadedSignature.isNotEmpty &&
           !_signatureContainsRequiredLanguages(
             availableSignature: downloadedSignature,
@@ -603,28 +569,8 @@ class PokemonBulkService {
           )) {
         return null;
       }
-      final batchJson = parsed['batch'];
-      if (batchJson is! Map) {
-        return null;
-      }
       stage = 'batch_parse:canonical_catalog_snapshot';
-      var batch = canonicalCatalogBatchFromJson(
-        Map<String, dynamic>.from(batchJson),
-      );
-      final snapshotSchemaVersion =
-          (parsed['schema_version'] as num?)?.toInt() ?? 1;
-      final downloadedLanguageCodes = _languageCodeSetFromSignature(
-        downloadedSignature.isNotEmpty
-            ? downloadedSignature
-            : expectedLanguageSignature,
-      ).toList(growable: false);
-      if (snapshotSchemaVersion < _canonicalSnapshotSchemaVersion &&
-          downloadedLanguageCodes.length == 1) {
-        batch = _upgradeHostedSnapshotBatchForLanguage(
-          batch,
-          languageCode: downloadedLanguageCodes.first,
-        );
-      }
+      final batch = decoded.batch;
       if (batch.cards.isEmpty || batch.printings.isEmpty) {
         return null;
       }
@@ -975,48 +921,40 @@ class PokemonBulkService {
     required String languageSignature,
   }) async {
     final file = await _canonicalSnapshotFile();
-    final payload = <String, Object?>{
-      'schema_version': _canonicalSnapshotSchemaVersion,
-      'compatibility_version': _hostedBundleCompatibilityVersion,
-      'profile': profile,
-      'languages_signature': languageSignature,
-      'generated_at': DateTime.now().toUtc().toIso8601String(),
-      'batch': canonicalCatalogBatchToJson(batch),
-    };
-    await file.writeAsString(jsonEncode(payload));
+    await Isolate.run(() {
+      final payload = <String, Object?>{
+        'schema_version': _canonicalSnapshotSchemaVersion,
+        'compatibility_version': _hostedBundleCompatibilityVersion,
+        'profile': profile,
+        'languages_signature': languageSignature,
+        'generated_at': DateTime.now().toUtc().toIso8601String(),
+        'batch': canonicalCatalogBatchToJson(batch),
+      };
+      File(file.path).writeAsStringSync(jsonEncode(payload));
+    });
   }
 
   Future<bool> _isCanonicalSnapshotCompatible({
     required String expectedProfile,
     required String expectedLanguageSignature,
   }) async {
-    final snapshotFile = await _canonicalSnapshotFile();
-    if (!await snapshotFile.exists()) {
-      return false;
-    }
     try {
-      final raw = await snapshotFile.readAsString();
-      final parsed = jsonDecode(raw);
-      if (parsed is! Map<String, dynamic>) {
+      final snapshot = await _readCanonicalSnapshotPayload();
+      if (snapshot == null) {
         return false;
       }
-      final profile =
-          (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
-      if (profile != expectedProfile.trim().toLowerCase()) {
+      if (snapshot.profile != expectedProfile.trim().toLowerCase()) {
         return false;
       }
-      final schemaVersion = (parsed['schema_version'] as num?)?.toInt() ?? 1;
-      if (schemaVersion < _canonicalSnapshotSchemaVersion) {
+      if (snapshot.schemaVersion < _canonicalSnapshotSchemaVersion) {
         return false;
       }
-      final compatibilityVersion =
-          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
-      if (!_isSupportedHostedCompatibilityVersion(compatibilityVersion)) {
+      if (!_isSupportedHostedCompatibilityVersion(
+        snapshot.compatibilityVersion,
+      )) {
         return false;
       }
-      final languageSignature =
-          (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
-          '';
+      final languageSignature = snapshot.languageSignature;
       if (languageSignature.isNotEmpty) {
         return _signatureContainsRequiredLanguages(
           availableSignature: languageSignature,
@@ -1036,32 +974,8 @@ class PokemonBulkService {
       return null;
     }
     try {
-      final raw = await snapshotFile.readAsString();
-      final parsed = jsonDecode(raw);
-      if (parsed is! Map<String, dynamic>) {
-        return null;
-      }
-      final profile =
-          (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
-      final languageSignature =
-          (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
-          'en';
-      final schemaVersion = (parsed['schema_version'] as num?)?.toInt() ?? 1;
-      final compatibilityVersion =
-          (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
-      final batchJson = parsed['batch'];
-      if (batchJson is! Map) {
-        return null;
-      }
-      final batch = canonicalCatalogBatchFromJson(
-        Map<String, dynamic>.from(batchJson),
-      );
-      return _CanonicalSnapshotPayload(
-        profile: profile,
-        languageSignature: languageSignature,
-        schemaVersion: schemaVersion,
-        compatibilityVersion: compatibilityVersion,
-        batch: batch,
+      return await Isolate.run(
+        () => _readCanonicalSnapshotPayloadFromPath(snapshotFile.path),
       );
     } catch (_) {
       return null;
@@ -1319,18 +1233,13 @@ class PokemonBulkService {
   }
 
   Future<void> _restoreCanonicalCatalogSnapshot(File snapshotFile) async {
-    final raw = await snapshotFile.readAsString();
-    final parsed = jsonDecode(raw);
-    if (parsed is! Map<String, dynamic>) {
-      throw const FormatException('pokemon_canonical_cache_invalid');
-    }
-    final batchJson = parsed['batch'];
-    if (batchJson is! Map) {
-      throw const FormatException('pokemon_canonical_cache_invalid');
-    }
-    final batch = canonicalCatalogBatchFromJson(
-      Map<String, dynamic>.from(batchJson),
+    final snapshot = await Isolate.run(
+      () => _readCanonicalSnapshotPayloadFromPath(snapshotFile.path),
     );
+    final batch = snapshot?.batch;
+    if (batch == null) {
+      throw const FormatException('pokemon_canonical_cache_invalid');
+    }
     if (batch.cards.isEmpty || batch.printings.isEmpty) {
       throw const FormatException('pokemon_canonical_cache_invalid');
     }
@@ -1349,6 +1258,25 @@ class PokemonBulkService {
         store.dispose();
       }
     });
+  }
+
+  Future<_DecodedHostedCanonicalSnapshot?>
+  _decodeHostedCanonicalSnapshotInBackground(
+    List<int> gzipBytes, {
+    required String profile,
+    required String fallbackLanguageSignature,
+    String? upgradeLanguageCode,
+  }) async {
+    return Isolate.run(
+      () => _decodeHostedCanonicalSnapshot(
+        gzipBytes,
+        profile: profile,
+        fallbackLanguageSignature: fallbackLanguageSignature,
+        upgradeLanguageCode: upgradeLanguageCode,
+        minCompatibilityVersion: _hostedBundleCompatibilityVersion,
+        canonicalSnapshotSchemaVersion: _canonicalSnapshotSchemaVersion,
+      ),
+    );
   }
 
   List<dynamic> _extractDatasetRows(dynamic parsed) {
@@ -1670,114 +1598,6 @@ class PokemonBulkService {
     }
     final separator = fallback.lastIndexOf(':');
     return separator >= 0 ? fallback.substring(separator + 1) : fallback;
-  }
-
-  CanonicalCatalogImportBatch _upgradeHostedSnapshotBatchForLanguage(
-    CanonicalCatalogImportBatch batch, {
-    required String languageCode,
-  }) {
-    final normalizedLanguage = languageCode.trim().toLowerCase();
-    if (normalizedLanguage.isEmpty) {
-      return batch;
-    }
-
-    String localizedPrintingId(String printingId) {
-      final normalizedPrintingId = printingId.trim();
-      if (normalizedPrintingId.isEmpty ||
-          normalizedPrintingId.endsWith(':$normalizedLanguage')) {
-        return normalizedPrintingId;
-      }
-      return '$normalizedPrintingId:$normalizedLanguage';
-    }
-
-    ProviderMapping localizedMapping(ProviderMapping mapping) {
-      final objectType = mapping.objectType.trim().toLowerCase();
-      final objectId = mapping.providerObjectId.trim();
-      if (objectId.isEmpty) {
-        return mapping;
-      }
-      if (mapping.providerId == CatalogProviderId.tcgdex &&
-          objectType == 'printing') {
-        return ProviderMapping(
-          providerId: mapping.providerId,
-          objectType: 'printing_localized',
-          providerObjectId: '$objectId:$normalizedLanguage',
-          providerObjectVersion: mapping.providerObjectVersion,
-          mappingConfidence: mapping.mappingConfidence,
-        );
-      }
-      if (objectType == 'legacy_printing') {
-        return ProviderMapping(
-          providerId: mapping.providerId,
-          objectType: mapping.objectType,
-          providerObjectId: '$objectId:$normalizedLanguage',
-          providerObjectVersion: mapping.providerObjectVersion,
-          mappingConfidence: mapping.mappingConfidence,
-        );
-      }
-      return mapping;
-    }
-
-    final printings = batch.printings
-        .map(
-          (printing) => CardPrintingRef(
-            printingId: localizedPrintingId(printing.printingId),
-            cardId: printing.cardId,
-            setId: printing.setId,
-            gameId: printing.gameId,
-            collectorNumber: printing.collectorNumber,
-            languageCode: normalizedLanguage,
-            providerMappings: [
-              for (final mapping in printing.providerMappings)
-                localizedMapping(mapping),
-            ],
-            rarity: printing.rarity,
-            releaseDate: printing.releaseDate,
-            imageUris: printing.imageUris,
-            finishKeys: printing.finishKeys,
-            metadata: <String, Object?>{
-              ...printing.metadata,
-              'base_printing_id': printing.printingId,
-            },
-          ),
-        )
-        .toList(growable: false);
-
-    final providerMappings = batch.providerMappings
-        .map(
-          (record) => ProviderMappingRecord(
-            mapping: localizedMapping(record.mapping),
-            cardId: record.cardId,
-            printingId: record.printingId == null
-                ? null
-                : localizedPrintingId(record.printingId!),
-            setId: record.setId,
-          ),
-        )
-        .toList(growable: false);
-
-    final priceSnapshots = batch.priceSnapshots
-        .map(
-          (snapshot) => PriceSnapshot(
-            printingId: localizedPrintingId(snapshot.printingId),
-            sourceId: snapshot.sourceId,
-            currencyCode: snapshot.currencyCode,
-            amount: snapshot.amount,
-            capturedAt: snapshot.capturedAt,
-            finishKey: snapshot.finishKey,
-          ),
-        )
-        .toList(growable: false);
-
-    return CanonicalCatalogImportBatch(
-      cards: batch.cards,
-      sets: batch.sets,
-      printings: printings,
-      cardLocalizations: batch.cardLocalizations,
-      setLocalizations: batch.setLocalizations,
-      providerMappings: providerMappings,
-      priceSnapshots: priceSnapshots,
-    );
   }
 
   String _pokemonTypeLineFromMetadata(PokemonCardMetadata? metadata) {
@@ -2130,6 +1950,196 @@ class _CanonicalSnapshotPayload {
   final int schemaVersion;
   final int compatibilityVersion;
   final CanonicalCatalogImportBatch batch;
+}
+
+class _DecodedHostedCanonicalSnapshot {
+  const _DecodedHostedCanonicalSnapshot({
+    required this.languageSignature,
+    required this.batch,
+  });
+
+  final String languageSignature;
+  final CanonicalCatalogImportBatch batch;
+}
+
+_CanonicalSnapshotPayload? _readCanonicalSnapshotPayloadFromPath(String path) {
+  final raw = File(path).readAsStringSync();
+  final parsed = jsonDecode(raw);
+  if (parsed is! Map<String, dynamic>) {
+    return null;
+  }
+  final batchJson = parsed['batch'];
+  if (batchJson is! Map) {
+    return null;
+  }
+  return _CanonicalSnapshotPayload(
+    profile: (parsed['profile'] as String?)?.trim().toLowerCase() ?? '',
+    languageSignature:
+        (parsed['languages_signature'] as String?)?.trim().toLowerCase() ??
+        'en',
+    schemaVersion: (parsed['schema_version'] as num?)?.toInt() ?? 1,
+    compatibilityVersion:
+        (parsed['compatibility_version'] as num?)?.toInt() ?? 1,
+    batch: canonicalCatalogBatchFromJson(Map<String, dynamic>.from(batchJson)),
+  );
+}
+
+_DecodedHostedCanonicalSnapshot? _decodeHostedCanonicalSnapshot(
+  List<int> gzipBytes, {
+  required String profile,
+  required String fallbackLanguageSignature,
+  required String? upgradeLanguageCode,
+  required int minCompatibilityVersion,
+  required int canonicalSnapshotSchemaVersion,
+}) {
+  final jsonBytes = GZipDecoder().decodeBytes(gzipBytes);
+  final jsonText = utf8.decode(jsonBytes, allowMalformed: true);
+  final parsed = jsonDecode(jsonText);
+  if (parsed is! Map<String, dynamic>) {
+    return null;
+  }
+  final downloadedProfile =
+      (parsed['profile'] as String?)?.trim().toLowerCase() ?? '';
+  if (downloadedProfile.isNotEmpty && downloadedProfile != profile) {
+    return null;
+  }
+  final compatibilityVersion =
+      (parsed['compatibility_version'] as num?)?.toInt() ?? 1;
+  if (compatibilityVersion < minCompatibilityVersion) {
+    return null;
+  }
+  final batchJson = parsed['batch'];
+  if (batchJson is! Map) {
+    return null;
+  }
+  final schemaVersion = (parsed['schema_version'] as num?)?.toInt() ?? 1;
+  final languageSignature =
+      (parsed['languages_signature'] as String?)?.trim().toLowerCase() ?? '';
+  var batch = canonicalCatalogBatchFromJson(
+    Map<String, dynamic>.from(batchJson),
+  );
+  if (schemaVersion < canonicalSnapshotSchemaVersion &&
+      upgradeLanguageCode != null &&
+      upgradeLanguageCode.trim().isNotEmpty) {
+    batch = _upgradeHostedSnapshotBatchForLanguage(
+      batch,
+      languageCode: upgradeLanguageCode,
+    );
+  }
+  return _DecodedHostedCanonicalSnapshot(
+    languageSignature: languageSignature.isNotEmpty
+        ? languageSignature
+        : fallbackLanguageSignature.trim().toLowerCase(),
+    batch: batch,
+  );
+}
+
+CanonicalCatalogImportBatch _upgradeHostedSnapshotBatchForLanguage(
+  CanonicalCatalogImportBatch batch, {
+  required String languageCode,
+}) {
+  final normalizedLanguage = languageCode.trim().toLowerCase();
+  if (normalizedLanguage.isEmpty) {
+    return batch;
+  }
+
+  String localizedPrintingId(String printingId) {
+    final normalizedPrintingId = printingId.trim();
+    if (normalizedPrintingId.isEmpty ||
+        normalizedPrintingId.endsWith(':$normalizedLanguage')) {
+      return normalizedPrintingId;
+    }
+    return '$normalizedPrintingId:$normalizedLanguage';
+  }
+
+  ProviderMapping localizedMapping(ProviderMapping mapping) {
+    final objectType = mapping.objectType.trim().toLowerCase();
+    final objectId = mapping.providerObjectId.trim();
+    if (objectId.isEmpty) {
+      return mapping;
+    }
+    if (mapping.providerId == CatalogProviderId.tcgdex &&
+        objectType == 'printing') {
+      return ProviderMapping(
+        providerId: mapping.providerId,
+        objectType: 'printing_localized',
+        providerObjectId: '$objectId:$normalizedLanguage',
+        providerObjectVersion: mapping.providerObjectVersion,
+        mappingConfidence: mapping.mappingConfidence,
+      );
+    }
+    if (objectType == 'legacy_printing') {
+      return ProviderMapping(
+        providerId: mapping.providerId,
+        objectType: mapping.objectType,
+        providerObjectId: '$objectId:$normalizedLanguage',
+        providerObjectVersion: mapping.providerObjectVersion,
+        mappingConfidence: mapping.mappingConfidence,
+      );
+    }
+    return mapping;
+  }
+
+  final printings = batch.printings
+      .map(
+        (printing) => CardPrintingRef(
+          printingId: localizedPrintingId(printing.printingId),
+          cardId: printing.cardId,
+          setId: printing.setId,
+          gameId: printing.gameId,
+          collectorNumber: printing.collectorNumber,
+          languageCode: normalizedLanguage,
+          providerMappings: [
+            for (final mapping in printing.providerMappings)
+              localizedMapping(mapping),
+          ],
+          rarity: printing.rarity,
+          releaseDate: printing.releaseDate,
+          imageUris: printing.imageUris,
+          finishKeys: printing.finishKeys,
+          metadata: <String, Object?>{
+            ...printing.metadata,
+            'base_printing_id': printing.printingId,
+          },
+        ),
+      )
+      .toList(growable: false);
+
+  final providerMappings = batch.providerMappings
+      .map(
+        (record) => ProviderMappingRecord(
+          mapping: localizedMapping(record.mapping),
+          cardId: record.cardId,
+          printingId: record.printingId == null
+              ? null
+              : localizedPrintingId(record.printingId!),
+          setId: record.setId,
+        ),
+      )
+      .toList(growable: false);
+
+  final priceSnapshots = batch.priceSnapshots
+      .map(
+        (snapshot) => PriceSnapshot(
+          printingId: localizedPrintingId(snapshot.printingId),
+          sourceId: snapshot.sourceId,
+          currencyCode: snapshot.currencyCode,
+          amount: snapshot.amount,
+          capturedAt: snapshot.capturedAt,
+          finishKey: snapshot.finishKey,
+        ),
+      )
+      .toList(growable: false);
+
+  return CanonicalCatalogImportBatch(
+    cards: batch.cards,
+    sets: batch.sets,
+    printings: printings,
+    cardLocalizations: batch.cardLocalizations,
+    setLocalizations: batch.setLocalizations,
+    providerMappings: providerMappings,
+    priceSnapshots: priceSnapshots,
+  );
 }
 
 Map<String, dynamic>? _mapPokemonCardPayload(Map<String, dynamic> card) {
