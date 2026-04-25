@@ -61,8 +61,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   TcgGame _selectedHomeGame = TcgGame.mtg;
   _HomeCollectionsMenu _activeCollectionsMenu = _HomeCollectionsMenu.home;
   bool get _hasProAccess => _purchaseManager.isPro || _isProUnlocked;
-  bool get _useMtgCanonicalCatalogTestMode =>
-      kDebugMode && _enableMtgCanonicalCatalogTest;
+  bool get _preferMtgCanonicalCatalog => true;
 
   void _onCollectionsRefreshRequested() {
     unawaited(_loadCollections());
@@ -2912,7 +2911,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       final languages = (await AppSettings.loadCardLanguagesForGame(
         _activeSettingsGame,
       )).toSet();
-      if (_useMtgCanonicalCatalogTestMode) {
+      if (_preferMtgCanonicalCatalog) {
         final result = await MtgCanonicalBundleService().checkForUpdate(
           languages: languages,
         );
@@ -2974,6 +2973,43 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         );
       }
     } catch (error) {
+      if (_preferMtgCanonicalCatalog) {
+        debugPrint('[mtg-canonical] update check failed, falling back: $error');
+        try {
+          final languages = (await AppSettings.loadCardLanguagesForGame(
+            _activeSettingsGame,
+          )).toSet();
+          final result = await MtgHostedBundleService().checkForUpdate(
+            languages: languages,
+          );
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _checkingBulk = false;
+            _bulkUpdateAvailable = result.updateAvailable;
+            _bulkDownloadUri = MtgHostedBundleService.manifestUrl;
+            _bulkUpdatedAt = result.updatedAt;
+            _bulkUpdatedAtRaw = result.updatedAtRaw;
+            _bulkExpectedSizeBytes = result.sizeBytes;
+            _mtgHostedBundleResult = result;
+            _mtgCanonicalBundleResult = null;
+          });
+          if (result.updateAvailable) {
+            showAppSnackBar(
+              context,
+              AppLocalizations.of(context)!.scryfallBulkUpdateAvailable,
+            );
+          }
+          if (forceDownload || _cardsMissing) {
+            await _maybeStartBulkDownload(
+              forceDownload: forceDownload || _cardsMissing,
+              restartAfterImport: restartAfterImport,
+            );
+          }
+          return;
+        } catch (_) {}
+      }
       if (!mounted) {
         return;
       }
@@ -2985,46 +3021,6 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   }
 
   Future<void> _checkCardsInstalled() async {
-    if (_isMtgActiveGame && _useMtgCanonicalCatalogTestMode) {
-      final installed = await MtgCanonicalBundleService.hasInstalledCatalog();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _cardsMissing = !installed;
-      });
-      try {
-        final languages = (await AppSettings.loadCardLanguagesForGame(
-          _activeSettingsGame,
-        )).toSet();
-        final result = await MtgCanonicalBundleService().checkForUpdate(
-          languages: languages,
-        );
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _bulkDownloadUri = result.manifestUri.toString();
-          _bulkUpdatedAt = result.updatedAt;
-          _bulkUpdatedAtRaw = result.updatedAtRaw;
-          _bulkUpdateAvailable = result.updateAvailable || _cardsMissing;
-          _bulkExpectedSizeBytes = result.sizeBytes;
-          _mtgHostedBundleResult = null;
-          _mtgCanonicalBundleResult = result;
-        });
-        if (!_cardsMissing) {
-          await _maybeStartBulkDownload();
-        }
-      } catch (error) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          _bulkDownloadError = error.toString();
-        });
-      }
-      return;
-    }
     final count = await ScryfallDatabase.instance.countCards();
     final owned = await ScryfallDatabase.instance.countOwnedCards();
     if (!mounted) {
@@ -3063,6 +3059,32 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         final languages = (await AppSettings.loadCardLanguagesForGame(
           _activeSettingsGame,
         )).toSet();
+        final canonicalInstalled = _preferMtgCanonicalCatalog
+            ? await MtgCanonicalBundleService.hasInstalledCatalog()
+            : false;
+        if (_preferMtgCanonicalCatalog) {
+          final result = await MtgCanonicalBundleService().checkForUpdate(
+            languages: languages,
+          );
+          if (!mounted) {
+            return;
+          }
+          final cardsMissing = canonicalInstalled ? false : _cardsMissing;
+          setState(() {
+            _cardsMissing = cardsMissing;
+            _bulkDownloadUri = result.manifestUri.toString();
+            _bulkUpdatedAt = result.updatedAt;
+            _bulkUpdatedAtRaw = result.updatedAtRaw;
+            _bulkUpdateAvailable = result.updateAvailable || cardsMissing;
+            _bulkExpectedSizeBytes = result.sizeBytes;
+            _mtgHostedBundleResult = null;
+            _mtgCanonicalBundleResult = result;
+          });
+          if (!cardsMissing) {
+            await _maybeStartBulkDownload();
+          }
+          return;
+        }
         final result = await MtgHostedBundleService().checkForUpdate(
           languages: languages,
         );
@@ -3076,11 +3098,39 @@ class _CollectionHomePageState extends State<CollectionHomePage>
           _bulkUpdateAvailable = result.updateAvailable || _cardsMissing;
           _bulkExpectedSizeBytes = result.sizeBytes;
           _mtgHostedBundleResult = result;
+          _mtgCanonicalBundleResult = null;
         });
         if (!_cardsMissing) {
           await _maybeStartBulkDownload();
         }
       } catch (error) {
+        if (_preferMtgCanonicalCatalog) {
+          debugPrint('[mtg-canonical] install check failed, falling back: $error');
+          try {
+            final languages = (await AppSettings.loadCardLanguagesForGame(
+              _activeSettingsGame,
+            )).toSet();
+            final result = await MtgHostedBundleService().checkForUpdate(
+              languages: languages,
+            );
+            if (!mounted) {
+              return;
+            }
+            setState(() {
+              _bulkDownloadUri = MtgHostedBundleService.manifestUrl;
+              _bulkUpdatedAt = result.updatedAt;
+              _bulkUpdatedAtRaw = result.updatedAtRaw;
+              _bulkUpdateAvailable = result.updateAvailable || _cardsMissing;
+              _bulkExpectedSizeBytes = result.sizeBytes;
+              _mtgHostedBundleResult = result;
+              _mtgCanonicalBundleResult = null;
+            });
+            if (!_cardsMissing) {
+              await _maybeStartBulkDownload();
+            }
+            return;
+          } catch (_) {}
+        }
         if (!mounted) {
           return;
         }
@@ -3117,19 +3167,21 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       return;
     }
     if (_isMtgActiveGame) {
-      if (_useMtgCanonicalCatalogTestMode) {
-        final canonicalBundle = _mtgCanonicalBundleResult;
-        if (canonicalBundle == null) {
-          return;
-        }
+      final canonicalBundle = _mtgCanonicalBundleResult;
+      if (canonicalBundle != null) {
         if (!forceDownload && !_cardsMissing && !_bulkUpdateAvailable) {
           return;
         }
-        await _downloadMtgCanonicalBundle(
-          canonicalBundle,
-          restartAfterImport: restartAfterImport,
-        );
-        return;
+        try {
+          await _downloadMtgCanonicalBundle(
+            canonicalBundle,
+            restartAfterImport: restartAfterImport,
+            rethrowOnError: true,
+          );
+          return;
+        } catch (error) {
+          debugPrint('[mtg-canonical] download failed, falling back: $error');
+        }
       }
       final hostedBundle = _mtgHostedBundleResult;
       if (hostedBundle == null) {
@@ -6815,6 +6867,7 @@ class _CollectionHomePageState extends State<CollectionHomePage>
   Future<void> _downloadMtgCanonicalBundle(
     MtgCanonicalBundleCheckResult bundle, {
     bool restartAfterImport = false,
+    bool rethrowOnError = false,
   }) async {
     setState(() {
       _bulkDownloading = true;
@@ -6909,6 +6962,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
       }
     } catch (error) {
       if (!mounted) {
+        if (rethrowOnError) {
+          rethrow;
+        }
         return;
       }
       final l10n = AppLocalizations.of(context)!;
@@ -6924,6 +6980,9 @@ class _CollectionHomePageState extends State<CollectionHomePage>
         _mtgSyncStatus = null;
       });
       showAppSnackBar(context, message);
+      if (rethrowOnError) {
+        rethrow;
+      }
     } finally {
       service.dispose();
     }

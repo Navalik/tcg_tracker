@@ -83,10 +83,6 @@ const bool _enableDebugAppCheck = bool.fromEnvironment(
   'ENABLE_DEBUG_APP_CHECK',
   defaultValue: false,
 );
-const bool _enableMtgCanonicalCatalogTest = bool.fromEnvironment(
-  'ENABLE_MTG_CANONICAL_CATALOG_TEST',
-  defaultValue: false,
-);
 final GlobalKey<ScaffoldMessengerState> _rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
