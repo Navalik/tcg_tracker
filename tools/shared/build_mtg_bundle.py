@@ -27,6 +27,9 @@ DEFAULT_OUTPUT_DIR = "dist/mtg_bundle_firebase"
 DEFAULT_CACHE_DIR = "dist/mtg_bulk_cache"
 SCHEMA_VERSION = 1
 COMPATIBILITY_VERSION = 1
+CANONICAL_SCHEMA_VERSION = 2
+CANONICAL_COMPATIBILITY_VERSION = 2
+CANONICAL_PROFILE = "full"
 
 
 def safe_version_token(value: str) -> str:
@@ -134,6 +137,300 @@ def compact_scryfall_card(card: dict[str, Any]) -> dict[str, Any]:
         compact["legalities"] = dict(legalities)
 
     return compact
+
+
+def slugify_token(value: str) -> str:
+    normalized = []
+    previous_dash = False
+    for char in value.strip().lower():
+      if char.isalnum():
+          normalized.append(char)
+          previous_dash = False
+      else:
+          if not previous_dash:
+              normalized.append("-")
+              previous_dash = True
+    return "".join(normalized).strip("-")
+
+
+def canonical_card_id(card: dict[str, Any]) -> str:
+    oracle_id = str(card.get("oracle_id") or "").strip().lower()
+    if oracle_id:
+        return f"mtg:card:scryfall_oracle:{oracle_id}"
+    fallback = str(card.get("id") or "").strip().lower()
+    if fallback:
+        return f"mtg:card:scryfall:{fallback}"
+    name = slugify_token(str(card.get("name") or "").strip())
+    if name:
+        return f"mtg:card:name:{name}"
+    return "mtg:card:unknown"
+
+
+def canonical_set_id(card: dict[str, Any]) -> str:
+    set_code = str(card.get("set") or "").strip().lower()
+    return f"mtg:set:{set_code}" if set_code else "mtg:set:unknown"
+
+
+def canonical_printing_id(card: dict[str, Any]) -> str:
+    printing_id = str(card.get("id") or "").strip().lower()
+    return f"mtg:printing:scryfall:{printing_id}" if printing_id else "mtg:printing:unknown"
+
+
+def localized_card_data(card: dict[str, Any], *, card_id: str, language: str) -> dict[str, Any]:
+    name = str(card.get("printed_name") or card.get("name") or "").strip()
+    subtype_line = str(card.get("printed_type_line") or card.get("type_line") or "").strip()
+    rules_text = str(card.get("printed_text") or card.get("oracle_text") or "").strip()
+    flavor_text = str(card.get("flavor_text") or "").strip()
+    search_aliases = []
+    canonical_name = str(card.get("name") or "").strip()
+    if canonical_name and canonical_name.lower() != name.lower():
+        search_aliases.append(canonical_name)
+    return {
+        "card_id": card_id,
+        "language": language,
+        "name": name or canonical_name,
+        "subtype_line": subtype_line or None,
+        "rules_text": rules_text or None,
+        "flavor_text": flavor_text or None,
+        "search_aliases": search_aliases,
+    }
+
+
+def localized_set_data(card: dict[str, Any], *, set_id: str, language: str) -> dict[str, Any]:
+    set_name = str(card.get("set_name") or "").strip()
+    return {
+        "set_id": set_id,
+        "language": language,
+        "name": set_name,
+        "series_name": None,
+    }
+
+
+def card_metadata(card: dict[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    for key in [
+        "mana_cost",
+        "type_line",
+        "colors",
+        "color_identity",
+        "artist",
+        "power",
+        "toughness",
+        "loyalty",
+        "layout",
+    ]:
+        value = card.get(key)
+        if value is not None:
+            metadata[key] = value
+    legalities = card.get("legalities")
+    if isinstance(legalities, dict):
+        metadata["legalities"] = legalities
+    return metadata
+
+
+def set_metadata(card: dict[str, Any]) -> dict[str, Any]:
+    metadata: dict[str, Any] = {}
+    set_type = card.get("set_type")
+    if set_type is not None:
+        metadata["set_type"] = set_type
+    card_count = card.get("printed_size") or card.get("card_count")
+    if card_count is not None:
+        metadata["card_count"] = card_count
+    return metadata
+
+
+def printing_metadata(card: dict[str, Any], *, language: str) -> dict[str, Any]:
+    metadata: dict[str, Any] = {"lang": language}
+    scryfall_uri = card.get("scryfall_uri")
+    if scryfall_uri is not None:
+        metadata["scryfall_uri"] = scryfall_uri
+    layout = card.get("layout")
+    if layout is not None:
+        metadata["layout"] = layout
+    return metadata
+
+
+def image_uris(card: dict[str, Any]) -> dict[str, str]:
+    raw = card.get("image_uris")
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, str] = {}
+    for key, value in raw.items():
+        key_text = str(key).strip()
+        value_text = str(value or "").strip()
+        if key_text and value_text:
+            result[key_text] = value_text
+    return result
+
+
+def finish_keys(card: dict[str, Any]) -> list[str]:
+    raw = card.get("finishes")
+    if not isinstance(raw, list):
+        return []
+    result = sorted(
+        {
+            str(item).strip().lower()
+            for item in raw
+            if str(item).strip()
+        }
+    )
+    return result
+
+
+def provider_mapping(provider_object_id: str, *, object_type: str) -> dict[str, Any]:
+    return {
+        "provider_id": "scryfall",
+        "object_type": object_type,
+        "provider_object_id": provider_object_id,
+        "provider_object_version": None,
+        "mapping_confidence": 1.0,
+    }
+
+
+def add_price_snapshots(
+    snapshots: dict[tuple[str, str, str | None], dict[str, Any]],
+    *,
+    card: dict[str, Any],
+    printing_id: str,
+    captured_at: str,
+) -> None:
+    prices = card.get("prices")
+    if not isinstance(prices, dict):
+        return
+    entries = [
+        ("usd", None),
+        ("usd_foil", "foil"),
+        ("usd_etched", "etched"),
+        ("eur", None),
+        ("eur_foil", "foil"),
+        ("tix", None),
+    ]
+    for price_key, finish_key in entries:
+        raw_amount = prices.get(price_key)
+        amount_text = str(raw_amount or "").strip()
+        if not amount_text:
+            continue
+        try:
+            amount = float(amount_text)
+        except ValueError:
+            continue
+        currency = "tix" if price_key == "tix" else price_key.split("_", 1)[0]
+        snapshots[(printing_id, currency, finish_key)] = {
+            "printing_id": printing_id,
+            "source_id": "scryfall",
+            "currency_code": currency,
+            "amount": amount,
+            "captured_at": captured_at,
+            "finish_key": finish_key,
+        }
+
+
+def build_canonical_batch(cards: list[dict[str, Any]], *, language: str, captured_at: str) -> dict[str, Any]:
+    cards_by_id: dict[str, dict[str, Any]] = {}
+    sets_by_id: dict[str, dict[str, Any]] = {}
+    printings_by_id: dict[str, dict[str, Any]] = {}
+    card_localizations: dict[tuple[str, str], dict[str, Any]] = {}
+    set_localizations: dict[tuple[str, str], dict[str, Any]] = {}
+    provider_mappings: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    price_snapshots: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+
+    for card in cards:
+        card_id = canonical_card_id(card)
+        set_id = canonical_set_id(card)
+        printing_id = canonical_printing_id(card)
+        provider_object_id = str(card.get("id") or "").strip().lower()
+        oracle_id = str(card.get("oracle_id") or "").strip().lower()
+        set_code = str(card.get("set") or "").strip().lower()
+        card_name = str(card.get("name") or "").strip()
+        set_name = str(card.get("set_name") or "").strip()
+        collector_number = str(card.get("collector_number") or "").strip()
+        released_at = str(card.get("released_at") or "").strip() or None
+
+        localized_card = localized_card_data(card, card_id=card_id, language=language)
+        localized_set = localized_set_data(card, set_id=set_id, language=language)
+
+        cards_by_id[card_id] = {
+            "card_id": card_id,
+            "game_id": "mtg",
+            "canonical_name": card_name or localized_card["name"],
+            "sort_name": None,
+            "default_localized_data": localized_card,
+            "localized_data": [localized_card],
+            "metadata": card_metadata(card),
+            "pokemon": None,
+        }
+        sets_by_id[set_id] = {
+            "set_id": set_id,
+            "game_id": "mtg",
+            "code": set_code,
+            "canonical_name": set_name,
+            "series_id": None,
+            "release_date": released_at,
+            "default_localized_data": localized_set,
+            "localized_data": [localized_set],
+            "metadata": set_metadata(card),
+        }
+        printings_by_id[printing_id] = {
+            "printing_id": printing_id,
+            "card_id": card_id,
+            "set_id": set_id,
+            "game_id": "mtg",
+            "collector_number": collector_number,
+            "language_code": language,
+            "provider_mappings": [provider_mapping(provider_object_id, object_type="printing")],
+            "rarity": str(card.get("rarity") or "").strip() or None,
+            "release_date": released_at,
+            "image_uris": image_uris(card),
+            "finish_keys": finish_keys(card),
+            "metadata": printing_metadata(card, language=language),
+        }
+        card_localizations[(card_id, language)] = localized_card
+        set_localizations[(set_id, language)] = localized_set
+
+        if oracle_id:
+            provider_mappings[("scryfall", "card", oracle_id, card_id)] = {
+                "mapping": provider_mapping(oracle_id, object_type="card"),
+                "card_id": card_id,
+                "printing_id": None,
+                "set_id": None,
+            }
+        if set_code:
+            provider_mappings[("scryfall", "set", set_code, set_id)] = {
+                "mapping": provider_mapping(set_code, object_type="set"),
+                "card_id": None,
+                "printing_id": None,
+                "set_id": set_id,
+            }
+        if provider_object_id:
+            provider_mappings[("scryfall", "printing", provider_object_id, printing_id)] = {
+                "mapping": provider_mapping(provider_object_id, object_type="printing"),
+                "card_id": card_id,
+                "printing_id": printing_id,
+                "set_id": set_id,
+            }
+
+        add_price_snapshots(
+            price_snapshots,
+            card=card,
+            printing_id=printing_id,
+            captured_at=captured_at,
+        )
+
+    return {
+        "cards": list(cards_by_id.values()),
+        "sets": list(sets_by_id.values()),
+        "printings": list(printings_by_id.values()),
+        "card_localizations": list(card_localizations.values()),
+        "set_localizations": list(set_localizations.values()),
+        "provider_mappings": list(provider_mappings.values()),
+        "price_snapshots": list(price_snapshots.values()),
+    }
+
+
+def write_json_gzip(payload: dict[str, Any], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8", newline="") as output:
+        json.dump(payload, output, ensure_ascii=False, separators=(",", ":"))
 
 
 def fetch_json(url: str) -> dict[str, Any]:
@@ -284,6 +581,21 @@ def artifact_entry(path: Path) -> dict[str, Any]:
     }
 
 
+def canonical_artifact_payload(
+    batch: dict[str, Any],
+    *,
+    language_signature: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "compatibility_version": CANONICAL_COMPATIBILITY_VERSION,
+        "profile": CANONICAL_PROFILE,
+        "languages_signature": language_signature,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "batch": batch,
+    }
+
+
 def build_bundle(
     *,
     source_path: Path,
@@ -307,6 +619,10 @@ def build_bundle(
 
     bundles: list[dict[str, Any]] = []
     all_artifacts: list[dict[str, Any]] = []
+    canonical_bundles: list[dict[str, Any]] = []
+    canonical_artifacts: list[dict[str, Any]] = []
+    canonical_counts: dict[str, dict[str, int]] = {}
+    captured_at = str(bulk_entry.get("updated_at") or datetime.now(timezone.utc).isoformat())
     for index, language in enumerate(languages):
         kind = "base" if language == "en" else "delta"
         bundle_id = f"{kind}_{language}"
@@ -328,6 +644,50 @@ def build_bundle(
             }
         )
         print(f"[mtg] wrote {artifact_name}: {counts[language]} cards")
+
+        canonical_batch = build_canonical_batch(
+            language_sets[language],
+            language=language,
+            captured_at=captured_at,
+        )
+        canonical_payload = canonical_artifact_payload(
+            canonical_batch,
+            language_signature=language,
+        )
+        canonical_artifact_name = f"canonical_catalog_snapshot_{language}.json.gz"
+        canonical_artifact_path = output_dir / canonical_artifact_name
+        write_json_gzip(canonical_payload, canonical_artifact_path)
+        canonical_artifact = artifact_entry(canonical_artifact_path)
+        canonical_artifacts.append(canonical_artifact)
+        canonical_bundle_id = f"canonical_{kind}_{language}"
+        canonical_bundles.append(
+            {
+                "id": canonical_bundle_id,
+                "kind": kind,
+                "schema_version": CANONICAL_SCHEMA_VERSION,
+                "compatibility_version": CANONICAL_COMPATIBILITY_VERSION,
+                "profile": CANONICAL_PROFILE,
+                "languages": [language],
+                "requires": [] if index == 0 else ["canonical_base_en"],
+                "counts": {
+                    "cards": len(canonical_batch["cards"]),
+                    "sets": len(canonical_batch["sets"]),
+                    "printings": len(canonical_batch["printings"]),
+                    "card_localizations": len(canonical_batch["card_localizations"]),
+                    "set_localizations": len(canonical_batch["set_localizations"]),
+                    "provider_mappings": len(canonical_batch["provider_mappings"]),
+                    "price_snapshots": len(canonical_batch["price_snapshots"]),
+                },
+                "artifacts": [canonical_artifact],
+            }
+        )
+        canonical_counts[language] = canonical_bundles[-1]["counts"]
+        print(
+            "[mtg] wrote "
+            f"{canonical_artifact_name}: "
+            f"{len(canonical_batch['cards'])} cards, "
+            f"{len(canonical_batch['printings'])} printings"
+        )
 
     manifest = {
         "bundle": "mtg",
@@ -353,6 +713,32 @@ def build_bundle(
         encoding="utf-8",
     )
     print(f"[mtg] wrote manifest.json version={version}")
+
+    canonical_manifest = {
+        "bundle": "mtg",
+        "version": version,
+        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "compatibility_version": CANONICAL_COMPATIBILITY_VERSION,
+        "profile": CANONICAL_PROFILE,
+        "mode": "canonical_base_plus_delta",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": {
+            "kind": "scryfall_bulk",
+            "bulk_type": bulk_type,
+            "updated_at": bulk_entry.get("updated_at"),
+            "download_uri": bulk_entry.get("download_uri"),
+            "size_bytes": bulk_entry.get("size"),
+        },
+        "languages": languages,
+        "counts": canonical_counts,
+        "artifacts": canonical_artifacts,
+        "bundles": canonical_bundles,
+    }
+    (output_dir / "manifest_canonical.json").write_text(
+        json.dumps(canonical_manifest, ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+    )
+    print(f"[mtg] wrote manifest_canonical.json version={version}")
 
 
 def parse_args() -> argparse.Namespace:

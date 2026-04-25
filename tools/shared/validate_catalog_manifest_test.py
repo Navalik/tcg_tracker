@@ -63,6 +63,50 @@ class CatalogManifestValidatorTest(unittest.TestCase):
                 verify_local_artifacts=True,
             )
 
+    def test_validates_local_canonical_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            base = root / "canonical_catalog_snapshot_en.json.gz"
+            delta = root / "canonical_catalog_snapshot_it.json.gz"
+            base.write_bytes(b"canonical-en")
+            delta.write_bytes(b"canonical-it")
+
+            manifest = {
+                "bundle": "mtg",
+                "version": "20260417T0920027840000-full-base-delta-compat2",
+                "schema_version": 2,
+                "compatibility_version": 2,
+                "profile": "full",
+                "languages": ["en", "it"],
+                "bundles": [
+                    {
+                        "id": "canonical_base_en",
+                        "kind": "base",
+                        "schema_version": 2,
+                        "compatibility_version": 2,
+                        "languages": ["en"],
+                        "requires": [],
+                        "artifacts": [_artifact(base)],
+                    },
+                    {
+                        "id": "canonical_delta_it",
+                        "kind": "delta",
+                        "schema_version": 2,
+                        "compatibility_version": 2,
+                        "languages": ["it"],
+                        "requires": ["canonical_base_en"],
+                        "artifacts": [_artifact(delta)],
+                    },
+                ],
+            }
+
+            validate_manifest(
+                manifest,
+                game="mtg",
+                manifest_dir=root,
+                verify_local_artifacts=True,
+            )
+
     def test_rejects_unknown_required_bundle(self) -> None:
         manifest = {
             "bundle": "pokemon",

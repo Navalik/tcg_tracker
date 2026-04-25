@@ -38,7 +38,9 @@ import 'services/auth_email_support.dart';
 import 'services/cloud_backup_scheduler.dart';
 import 'services/cloud_backup_service.dart';
 import 'services/catalog_bundle_service.dart';
+import 'services/game_registry.dart';
 import 'services/local_backup_service.dart';
+import 'services/mtg_canonical_bundle_service.dart';
 import 'services/price_repository.dart';
 import 'services/inventory_service.dart';
 import 'services/pokemon_bulk_service.dart';
@@ -79,6 +81,10 @@ final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
 Future<void>? _googleSignInInitialization;
 const bool _enableDebugAppCheck = bool.fromEnvironment(
   'ENABLE_DEBUG_APP_CHECK',
+  defaultValue: false,
+);
+const bool _enableMtgCanonicalCatalogTest = bool.fromEnvironment(
+  'ENABLE_MTG_CANONICAL_CATALOG_TEST',
   defaultValue: false,
 );
 final GlobalKey<ScaffoldMessengerState> _rootScaffoldMessengerKey =

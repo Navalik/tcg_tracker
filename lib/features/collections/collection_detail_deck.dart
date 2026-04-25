@@ -218,7 +218,7 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
     return hasNotLegalCard ? const Color(0xFFD06D5F) : const Color(0xFFBFAE95);
   }
 
-  Future<void> _loadSideboardCards() async {
+  Future<void> _loadSideboardCards({int? requestId}) async {
     if (!widget.isDeckCollection) {
       return;
     }
@@ -245,7 +245,8 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
       }
       offset += page.length;
     }
-    if (!mounted) {
+    if (!mounted ||
+        (requestId != null && requestId != _activeLoadRequestId)) {
       return;
     }
     // ignore: invalid_use_of_protected_member
@@ -254,6 +255,9 @@ extension _CollectionDetailDeckStateX on _CollectionDetailPageState {
         ..clear()
         ..addAll(all);
     });
+    if (requestId != null && requestId != _activeLoadRequestId) {
+      return;
+    }
     await _refreshDeckLegalityForLoadedCards();
   }
 

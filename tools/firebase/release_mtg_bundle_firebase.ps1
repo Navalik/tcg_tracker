@@ -90,23 +90,25 @@ Invoke-Step "Build MTG Firebase bundle" {
 
 if (-not $SkipPublish) {
   Invoke-Step "Publish MTG Firebase bundle" {
-    $publishArgs = @(
-      "-ExecutionPolicy", "Bypass",
-      "-File", (Join-Path $PSScriptRoot "publish_catalog_bundle_firebase.ps1"),
-      "-ProjectId", $ProjectId,
-      "-Bucket", $Bucket,
-      "-Game", "mtg",
-      "-BundleDir", $resolvedOutputDir,
-      "-ArtifactPatterns", "mtg_*.json.gz"
-    )
-    if (-not [string]::IsNullOrWhiteSpace($Version)) {
-      $publishArgs += @("-Version", $Version)
+    $publishParams = @{
+      Game = "mtg"
+      BundleDir = $resolvedOutputDir
+      ArtifactPatterns = @("mtg_*.json.gz", "canonical_catalog_snapshot*.json.gz")
     }
-    if ($ForcePublish) { $publishArgs += "-Force" }
-    if ($SkipLatest) { $publishArgs += "-SkipLatest" }
-    if ($DryRunPublish) { $publishArgs += "-DryRun" }
+    if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
+      $publishParams.ProjectId = $ProjectId
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Bucket)) {
+      $publishParams.Bucket = $Bucket
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Version)) {
+      $publishParams.Version = $Version
+    }
+    if ($ForcePublish) { $publishParams.Force = $true }
+    if ($SkipLatest) { $publishParams.SkipLatest = $true }
+    if ($DryRunPublish) { $publishParams.DryRun = $true }
 
-    & powershell @publishArgs
+    & (Join-Path $PSScriptRoot "publish_catalog_bundle_firebase.ps1") @publishParams
     if ($LASTEXITCODE -ne 0) {
       throw "MTG Firebase publish failed with exit code $LASTEXITCODE"
     }

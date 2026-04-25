@@ -4,6 +4,9 @@ Questa pipeline prepara un bundle Magic intermedio su Firebase Storage.
 Non sostituisce ancora un database centralizzato: sposta solo il download
 runtime da Scryfall al nostro catalogo versionato.
 
+La release ora produce anche artefatti canonici BinderVault in parallelo, ma
+senza cambiare il manifest legacy consumato dai client vecchi.
+
 ## Obiettivo
 
 Scaricare il bulk Scryfall `all_cards` solo quando cambia, filtrare le lingue
@@ -45,6 +48,7 @@ gli artifact locali:
 
 ```powershell
 python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\mtg_bundle_firebase\manifest.json --game mtg --verify-local-artifacts
+python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\mtg_bundle_firebase\manifest_canonical.json --game mtg --verify-local-artifacts
 ```
 
 ## Verifica Post-Pubblicazione
@@ -62,7 +66,10 @@ referenziati siano scaricabili e coerenti con `size_bytes` e `sha256`:
 dist/mtg_bundle_firebase/
   mtg_base_en.json.gz
   mtg_delta_it.json.gz
+  canonical_catalog_snapshot_en.json.gz
+  canonical_catalog_snapshot_it.json.gz
   manifest.json
+  manifest_canonical.json
 ```
 
 Pubblicazione Firebase:
@@ -81,3 +88,8 @@ Il client usa `catalog/mtg/latest/manifest.json` come fonte del download
 runtime. Il bundle viene ricombinato localmente e importato nel database
 legacy, quindi la pipeline Firebase sostituisce il download diretto da
 Scryfall ma non ancora lo storage locale dell'app.
+
+Gli snapshot `canonical_catalog_snapshot_*.json.gz` e `manifest_canonical.json`
+sono additive-only: vengono pubblicati nella stessa release per preparare la
+migrazione al catalogo canonico, ma `latest/manifest.json` continua a puntare
+al contratto legacy finche il client nuovo non e pronto.

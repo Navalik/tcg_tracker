@@ -673,10 +673,20 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
   }
 
   Widget _buildSearchHeader({required bool showOwnedMissing}) {
-    final ownedCount =
-        _ownedCount ?? _cards.where((entry) => entry.quantity > 0).length;
-    final missingCount =
-        _missingCount ?? (_cards.length - ownedCount).clamp(0, _cards.length);
+    final l10n = AppLocalizations.of(context)!;
+    final canUsePagedFallback = !showOwnedMissing;
+    final ownedCount = canUsePagedFallback
+        ? (_ownedCount ?? _cards.where((entry) => entry.quantity > 0).length)
+        : _ownedCount;
+    final missingCount = canUsePagedFallback
+        ? (_missingCount ?? (_cards.length - (ownedCount ?? 0)).clamp(0, _cards.length))
+        : _missingCount;
+    final ownedLabel = ownedCount == null
+        ? '${l10n.ownedLabel} (...)'
+        : l10n.ownedCount(ownedCount);
+    final missingLabel = missingCount == null
+        ? '${l10n.missingLabel} (...)'
+        : l10n.missingCount(missingCount);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Column(
@@ -684,7 +694,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
         children: [
           TextField(
             decoration: InputDecoration(
-              hintText: AppLocalizations.of(context)!.searchCardsHint,
+              hintText: l10n.searchCardsHint,
               prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (value) {
@@ -707,9 +717,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
               spacing: 10,
               children: [
                 FilterChip(
-                  label: Text(
-                    AppLocalizations.of(context)!.ownedCount(ownedCount),
-                  ),
+                  label: Text(ownedLabel),
                   selected: _showOwned,
                   onSelected: (value) {
                     setState(() {
@@ -719,9 +727,7 @@ extension _CollectionDetailFilterStateX on _CollectionDetailPageState {
                   },
                 ),
                 FilterChip(
-                  label: Text(
-                    AppLocalizations.of(context)!.missingCount(missingCount),
-                  ),
+                  label: Text(missingLabel),
                   selected: _showMissing,
                   onSelected: (value) {
                     setState(() {

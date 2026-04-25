@@ -39,4 +39,5 @@ Valida un manifest generato localmente, senza accesso rete:
 
 ```powershell
 python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\mtg_bundle_firebase\manifest.json --game mtg --verify-local-artifacts
+python .\tools\shared\validate_catalog_manifest.py --manifest .\dist\mtg_bundle_firebase\manifest_canonical.json --game mtg --verify-local-artifacts
 ```

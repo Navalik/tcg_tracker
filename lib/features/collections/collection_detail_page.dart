@@ -93,6 +93,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   bool _showPrices = true;
   bool _showOfflineLanguageDbWarning = false;
   CollectionFilter? _collectionFilterOverride;
+  int _activeLoadRequestId = 0;
   static const List<String> _basicLandManaOrder = ['W', 'U', 'B', 'R', 'G'];
   InventoryService get _inventoryService => InventoryService.instance;
 
@@ -223,6 +224,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
   }
 
   Future<void> _loadCards() async {
+    final requestId = ++_activeLoadRequestId;
     if (!mounted) {
       return;
     }
@@ -238,13 +240,18 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       _selectionMode = false;
       _selectedCardIds.clear();
       _deckLegalityByCardId = const {};
+      _ownedCount = null;
+      _missingCount = null;
     });
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
-    await _refreshCounts();
     await _loadMoreCards(initial: true);
-    await _loadSideboardCards();
+    if (!mounted || requestId != _activeLoadRequestId) {
+      return;
+    }
+    unawaited(_refreshCounts(requestId: requestId));
+    unawaited(_loadSideboardCards(requestId: requestId));
   }
 
   CollectionFilter? _effectiveFilter() {
@@ -440,7 +447,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     await _applySetCollectionLanguage(picked);
   }
 
-  Future<void> _refreshCounts() async {
+  Future<void> _refreshCounts({int? requestId}) async {
     if (!mounted) {
       return;
     }
@@ -449,7 +456,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
         widget.collectionId,
         searchQuery: _searchQuery,
       );
-      if (!mounted) {
+      if (!mounted || (requestId != null && requestId != _activeLoadRequestId)) {
         return;
       }
       setState(() {
@@ -468,7 +475,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
               widget.collectionId,
               searchQuery: _searchQuery,
             );
-      if (!mounted) {
+      if (!mounted || (requestId != null && requestId != _activeLoadRequestId)) {
         return;
       }
       setState(() {
@@ -479,7 +486,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
     }
     final filter = _effectiveFilter();
     if (filter == null) {
-      if (!mounted) {
+      if (!mounted || (requestId != null && requestId != _activeLoadRequestId)) {
         return;
       }
       setState(() {
@@ -494,7 +501,7 @@ class _CollectionDetailPageState extends State<CollectionDetailPage> {
       filter,
       searchQuery: _searchQuery,
     );
-    if (!mounted) {
+    if (!mounted || (requestId != null && requestId != _activeLoadRequestId)) {
       return;
     }
     setState(() {

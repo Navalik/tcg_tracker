@@ -877,6 +877,11 @@ class CanonicalCatalogStore {
           id, game_id, card_id, set_id, collector_number, language_code, rarity, release_date, image_uris_json, finish_keys_json, metadata_json, created_at_ms, updated_at_ms
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''');
+      final pokemonByCardId = gameId == TcgGameId.pokemon
+          ? <String, PokemonCardMetadata?>{
+              for (final card in batch.cards) card.cardId: card.pokemon,
+            }
+          : const <String, PokemonCardMetadata?>{};
       final insertPokemonMetadata = gameId == TcgGameId.pokemon
           ? _database.prepare('''
               INSERT OR REPLACE INTO pokemon_printing_metadata (
@@ -900,9 +905,7 @@ class CanonicalCatalogStore {
           nowMs,
           nowMs,
         ]);
-        final pokemon = batch.cards
-            .firstWhere((card) => card.cardId == printing.cardId)
-            .pokemon;
+        final pokemon = pokemonByCardId[printing.cardId];
         if (pokemon != null && insertPokemonMetadata != null) {
           insertPokemonMetadata.execute([
             printing.printingId,
@@ -1887,6 +1890,7 @@ class CanonicalCatalogStore {
         ...cardNameParams,
         ...setNameParams,
         ...subtypeParams,
+        ...normalizedLanguages,
         ownedCollectionId,
         gameId.value,
         ...params,
@@ -2255,10 +2259,19 @@ class CanonicalCatalogStore {
       'CREATE INDEX IF NOT EXISTS idx_catalog_card_localizations_language_name ON catalog_card_localizations(language_code, name COLLATE NOCASE)',
     );
     _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_catalog_card_localizations_card_language ON catalog_card_localizations(card_id, language_code)',
+    );
+    _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_catalog_set_localizations_language_name ON catalog_set_localizations(language_code, name COLLATE NOCASE)',
     );
     _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_catalog_set_localizations_set_language ON catalog_set_localizations(set_id, language_code)',
+    );
+    _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_provider_mappings_lookup ON provider_mappings(game_id, provider_id, object_type, provider_object_id)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_provider_mappings_printing_type ON provider_mappings(printing_id, object_type)',
     );
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_pokemon_metadata_core ON pokemon_printing_metadata(category, stage, regulation_mark, hp)',
