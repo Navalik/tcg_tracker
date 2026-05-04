@@ -3,6 +3,117 @@
 part of 'package:tcg_tracker/main.dart';
 
 extension _SettingsOperationsSection on _SettingsPageState {
+  TcgGame _uiGameFromSettingsGame(AppTcgGame game) =>
+      game == AppTcgGame.pokemon ? TcgGame.pokemon : TcgGame.mtg;
+
+  String _gameLabel(TcgGame game) =>
+      game == TcgGame.pokemon ? 'Pokemon' : 'Magic';
+
+  Future<SettingsPostAction?>
+  _catalogDownloadActionForImportedLanguages() async {
+    final gamesToRefresh = <TcgGame>[];
+    final previousDbFileName = ScryfallDatabase.instance.databaseFileName;
+    try {
+      for (final definition in GameRegistry.instance.enabledDefinitions) {
+        final appGame = definition.appSettingsGame;
+        if (appGame == null) {
+          continue;
+        }
+        final counts = await ScryfallDatabase.instance.runWithDatabaseFileName(
+          definition.dbFileName,
+          () => ScryfallDatabase.instance.fetchCardCountsByLanguage(),
+        );
+        final importedAdditionalLanguages = counts.entries
+            .where((entry) => entry.value > 0)
+            .map((entry) => entry.key.trim().toLowerCase())
+            .where((code) => code.isNotEmpty && code != 'en')
+            .where(AppSettings.languageCodes.contains)
+            .toSet();
+        if (importedAdditionalLanguages.isEmpty) {
+          continue;
+        }
+
+        final configuredLanguages = (await AppSettings.loadCardLanguagesForGame(
+          appGame,
+        )).toSet();
+        var needsCatalogDownload = false;
+        if (!configuredLanguages.containsAll(importedAdditionalLanguages)) {
+          await AppSettings.saveCardLanguagesForGame(appGame, {
+            ...configuredLanguages,
+            ...importedAdditionalLanguages,
+          });
+          needsCatalogDownload = true;
+        }
+
+        if (appGame == AppTcgGame.mtg &&
+            importedAdditionalLanguages.contains('it')) {
+          final bulkType =
+              (await AppSettings.loadBulkTypeForGame(AppTcgGame.mtg) ?? '')
+                  .trim()
+                  .toLowerCase();
+          if (bulkType != 'all_cards') {
+            await AppSettings.saveBulkTypeForGame(AppTcgGame.mtg, 'all_cards');
+            needsCatalogDownload = true;
+          }
+        }
+
+        if (needsCatalogDownload) {
+          gamesToRefresh.add(_uiGameFromSettingsGame(appGame));
+        }
+      }
+    } finally {
+      await ScryfallDatabase.instance.setDatabaseFileName(previousDbFileName);
+    }
+
+    if (gamesToRefresh.isEmpty) {
+      return null;
+    }
+    final deduped = <TcgGame>[];
+    for (final game in gamesToRefresh) {
+      if (!deduped.contains(game)) {
+        deduped.add(game);
+      }
+    }
+    return SettingsPostAction.startCatalogDownloads(games: deduped);
+  }
+
+  Future<void> _offerCatalogDownloadForImportedLanguages(
+    SettingsPostAction? action,
+  ) async {
+    if (action == null || !mounted) {
+      return;
+    }
+    final labels = action.games.map(_gameLabel).join(', ');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        final title = _isItalianUi
+            ? 'Carte italiane importate'
+            : 'Italian cards imported';
+        final body = _isItalianUi
+            ? 'L\'import contiene carte in italiano per $labels. Scarica ora il bundle Firebase adatto per allineare database e ricerca.'
+            : 'The import contains Italian cards for $labels. Download the matching Firebase bundle now to align the database and search.';
+        return AlertDialog(
+          title: Text(title),
+          content: Text(body),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(AppLocalizations.of(context)!.notNow),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(_isItalianUi ? 'Scarica' : 'Download'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == true && mounted) {
+      Navigator.of(context).pop(action);
+    }
+  }
+
   Future<void> _refreshCloudBackupStatus({bool busy = false}) async {
     if (mounted) {
       setState(() {
@@ -211,6 +322,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       _backupBusy = true;
       _cloudBackupStatusBusy = true;
     });
+    SettingsPostAction? postImportAction;
     try {
       final result = await CloudBackupService.instance.restoreLatestBackup(
         allowDestructive: true,
@@ -227,6 +339,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       );
       _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
       await _refreshCloudBackupStatus();
+      postImportAction = await _catalogDownloadActionForImportedLanguages();
     } catch (error) {
       await CloudBackupService.instance.saveLastError(error);
       if (!mounted) {
@@ -247,6 +360,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
         });
       }
     }
+    await _offerCatalogDownloadForImportedLanguages(postImportAction);
   }
 
   Future<void> _reportIssueFromSettings() async {
@@ -477,6 +591,12 @@ extension _SettingsOperationsSection on _SettingsPageState {
         );
       },
     );
+    if (shouldReimportNow == true && mounted && game == TcgGame.mtg) {
+      Navigator.of(
+        context,
+      ).pop(SettingsPostAction.startMtgDownload(bulkType: 'all_cards'));
+      return;
+    }
     if (shouldReimportNow == true && mounted) {
       await _reimportDatabaseForGame(game, skipConfirmation: true);
     }
@@ -939,6 +1059,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
     setState(() {
       _backupBusy = true;
     });
+    SettingsPostAction? postImportAction;
     try {
       final stats = await LocalBackupService.instance
           .importCollectionsBackupFromFile(selectedFile);
@@ -959,6 +1080,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       );
       await _refreshLatestPokemonAutomaticBackup();
       _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
+      postImportAction = await _catalogDownloadActionForImportedLanguages();
     } catch (error) {
       if (!mounted) {
         return;
@@ -974,6 +1096,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
         });
       }
     }
+    await _offerCatalogDownloadForImportedLanguages(postImportAction);
   }
 
   Future<void> _shareBackupFile(File file) async {
@@ -1067,6 +1190,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
     setState(() {
       _backupBusy = true;
     });
+    SettingsPostAction? postImportAction;
     try {
       final stats = await LocalBackupService.instance
           .importCollectionsBackupFromFile(latest);
@@ -1081,6 +1205,7 @@ extension _SettingsOperationsSection on _SettingsPageState {
       );
       _collectionsRefreshNotifier.value = _collectionsRefreshNotifier.value + 1;
       await _refreshLatestPokemonAutomaticBackup();
+      postImportAction = await _catalogDownloadActionForImportedLanguages();
     } catch (error) {
       if (!mounted) {
         return;
@@ -1096,5 +1221,6 @@ extension _SettingsOperationsSection on _SettingsPageState {
         });
       }
     }
+    await _offerCatalogDownloadForImportedLanguages(postImportAction);
   }
 }

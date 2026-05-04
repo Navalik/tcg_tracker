@@ -51,7 +51,8 @@ function Assert-File {
 }
 
 function Get-DefaultFirebaseProjectId {
-  $firebaseRcPath = Join-Path (Get-Location) ".firebaserc"
+  $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+  $firebaseRcPath = Join-Path $repoRoot ".firebaserc"
   if (-not (Test-Path -LiteralPath $firebaseRcPath -PathType Leaf)) {
     return ""
   }

@@ -1,13 +1,23 @@
 part of 'package:tcg_tracker/main.dart';
 
 class SettingsPostAction {
-  const SettingsPostAction._({required this.game, this.mtgBulkType});
+  const SettingsPostAction._({required this.games, this.mtgBulkType});
 
-  final TcgGame game;
+  final List<TcgGame> games;
   final String? mtgBulkType;
 
+  TcgGame get game => games.first;
+
   factory SettingsPostAction.startMtgDownload({required String bulkType}) =>
-      SettingsPostAction._(game: TcgGame.mtg, mtgBulkType: bulkType);
+      SettingsPostAction._(games: const [TcgGame.mtg], mtgBulkType: bulkType);
+
+  factory SettingsPostAction.startPokemonDownload() =>
+      const SettingsPostAction._(games: [TcgGame.pokemon]);
+
+  factory SettingsPostAction.startCatalogDownloads({
+    required List<TcgGame> games,
+    String mtgBulkType = 'all_cards',
+  }) => SettingsPostAction._(games: games, mtgBulkType: mtgBulkType);
 }
 
 class SettingsPage extends StatefulWidget {

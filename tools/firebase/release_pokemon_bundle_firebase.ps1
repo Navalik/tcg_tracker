@@ -156,12 +156,16 @@ if (-not $SkipPublish) {
     $publishArgs = @(
       "-ExecutionPolicy", "Bypass",
       "-File", (Join-Path $PSScriptRoot "publish_catalog_bundle_firebase.ps1"),
-      "-ProjectId", $ProjectId,
-      "-Bucket", $Bucket,
       "-Game", $Game,
       "-BundleDir", $resolvedOutputDir,
       "-Version", $Version
     )
+    if (-not [string]::IsNullOrWhiteSpace($ProjectId)) {
+      $publishArgs += @("-ProjectId", $ProjectId)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Bucket)) {
+      $publishArgs += @("-Bucket", $Bucket)
+    }
     if ($ForcePublish) { $publishArgs += "-Force" }
     if ($SkipLatest) { $publishArgs += "-SkipLatest" }
     if ($DryRunPublish) { $publishArgs += "-DryRun" }

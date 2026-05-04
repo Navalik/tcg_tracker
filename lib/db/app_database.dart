@@ -4360,10 +4360,14 @@ class ScryfallDatabase {
     String? printingId,
     int? collectionId,
   }) async {
-    final normalizedPrintingId = printingId?.trim();
+    final normalizedCardId = cardId.trim();
+    final normalizedPrintingId = await _resolveCanonicalPrintingIdForCollectionWrite(
+      normalizedCardId,
+      printingId: printingId,
+    );
     if (normalizedPrintingId != null && normalizedPrintingId.isNotEmpty) {
       final canonical = await _tryFetchCanonicalCardEntryByPrintingId(
-        cardId: cardId,
+        cardId: normalizedCardId,
         printingId: normalizedPrintingId,
         collectionId: collectionId,
       );
@@ -4416,7 +4420,7 @@ class ScryfallDatabase {
       ''',
           variables: [
             Variable.withInt(collectionId ?? -1),
-            Variable.withString(cardId),
+            Variable.withString(normalizedCardId),
           ],
         )
         .get();
@@ -4482,6 +4486,31 @@ class ScryfallDatabase {
           variables: [Variable.withString(normalizedId)],
         )
         .getSingleOrNull();
+    if (row == null &&
+        _dbFileName.trim().toLowerCase() == _defaultDbFileName.toLowerCase()) {
+      try {
+        final store = await CanonicalCatalogStore.openDefault();
+        try {
+          if (store.hasCatalogForGame(TcgGameId.mtg)) {
+            final printingId = store.resolvePrintingIdForLegacyCardId(
+              normalizedId,
+            );
+            final pricesUpdatedAt = printingId == null
+                ? null
+                : store.fetchLatestPriceTimestampForPrinting(printingId);
+            if (printingId != null) {
+              return CardPriceSnapshot(
+                cardId: normalizedId,
+                pricesUpdatedAt: pricesUpdatedAt,
+              );
+            }
+          }
+        } finally {
+          store.dispose();
+        }
+      } catch (_) {}
+      return null;
+    }
     if (row == null) {
       return null;
     }
@@ -4668,6 +4697,27 @@ class ScryfallDatabase {
           variables: [Variable.withString(normalizedId)],
         )
         .getSingleOrNull();
+    if (row == null &&
+        _dbFileName.trim().toLowerCase() == _defaultDbFileName.toLowerCase()) {
+      final resolvedPrintingId = await _resolveCanonicalPrintingIdForCollectionWrite(
+        normalizedId,
+      );
+      if (resolvedPrintingId != null && resolvedPrintingId.isNotEmpty) {
+        final store = await CanonicalCatalogStore.openDefault();
+        try {
+          if (store.hasCatalogForGame(TcgGameId.mtg)) {
+            final legalFormats = store.fetchLegalFormatsForPrinting(
+              resolvedPrintingId,
+            );
+            if (legalFormats.isNotEmpty) {
+              return legalFormats;
+            }
+          }
+        } finally {
+          store.dispose();
+        }
+      }
+    }
     if (row == null) {
       return const [];
     }
@@ -4717,6 +4767,39 @@ class ScryfallDatabase {
         .toList(growable: false);
     if (uniqueIds.isEmpty) {
       return const {};
+    }
+    if (_dbFileName.trim().toLowerCase() == _defaultDbFileName.toLowerCase()) {
+      final store = await CanonicalCatalogStore.openDefault();
+      try {
+        if (store.hasCatalogForGame(TcgGameId.mtg)) {
+          final resolvedPrintingIds = uniqueIds
+              .map(store.resolvePrintingIdForLegacyCardId)
+              .whereType<String>()
+              .where((value) => value.trim().isNotEmpty)
+              .toSet()
+              .toList(growable: false);
+          if (resolvedPrintingIds.isNotEmpty) {
+            final legalityByPrinting = store.fetchLegalityForPrintings(
+              resolvedPrintingIds,
+              format: normalizedFormat,
+            );
+            return {
+              for (final cardId in uniqueIds)
+                cardId: (() {
+                  final printingId = store.resolvePrintingIdForLegacyCardId(
+                    cardId,
+                  );
+                  if (printingId == null || printingId.trim().isEmpty) {
+                    return false;
+                  }
+                  return legalityByPrinting[printingId.trim()] ?? false;
+                })(),
+            };
+          }
+        }
+      } finally {
+        store.dispose();
+      }
     }
     final db = await open();
     final path = r'$.legalities.' + normalizedFormat;
@@ -5139,7 +5222,9 @@ class ScryfallDatabase {
     required int? collectionId,
   }) async {
     final preferredLanguages = await AppSettings.loadCardLanguagesForGame(
-      AppTcgGame.pokemon,
+      _dbFileName.trim().toLowerCase() == _defaultDbFileName.toLowerCase()
+          ? AppTcgGame.mtg
+          : AppTcgGame.pokemon,
     );
     final databasePath = await CanonicalCatalogStore.defaultDatabasePath();
     final view = await Isolate.run(
@@ -5210,6 +5295,13 @@ class ScryfallDatabase {
       quantity: quantity,
       foil: foil,
       altArt: altArt,
+      priceUsd: view.priceUsd,
+      priceUsdFoil: view.priceUsdFoil,
+      priceUsdEtched: view.priceUsdEtched,
+      priceEur: view.priceEur,
+      priceEurFoil: view.priceEurFoil,
+      priceTix: view.priceTix,
+      pricesUpdatedAt: view.pricesUpdatedAt,
       imageUri: view.imageUri,
     );
   }

@@ -121,6 +121,13 @@ class CanonicalPrintingViewData {
     required this.colorIdentity,
     required this.releasedAt,
     required this.setTotal,
+    this.priceUsd,
+    this.priceUsdFoil,
+    this.priceUsdEtched,
+    this.priceEur,
+    this.priceEurFoil,
+    this.priceTix,
+    this.pricesUpdatedAt,
     required this.imageUri,
   });
 
@@ -143,6 +150,13 @@ class CanonicalPrintingViewData {
   final String colorIdentity;
   final String releasedAt;
   final int? setTotal;
+  final String? priceUsd;
+  final String? priceUsdFoil;
+  final String? priceUsdEtched;
+  final String? priceEur;
+  final String? priceEurFoil;
+  final String? priceTix;
+  final int? pricesUpdatedAt;
   final String? imageUri;
 }
 
@@ -1261,6 +1275,34 @@ class CanonicalCatalogStore {
           json_extract(cs.metadata_json, '\$.official_total'),
           json_extract(cs.metadata_json, '\$.total')
         ) AS set_total,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+        )} AS price_usd,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+          finishKey: 'foil',
+        )} AS price_usd_foil,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+          finishKey: 'etched',
+        )} AS price_usd_etched,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+        )} AS price_eur,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+          finishKey: 'foil',
+        )} AS price_eur_foil,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'tix',
+        )} AS price_tix,
+        ${_latestPriceUpdatedAtSql(printingIdSql: 'cp.id')} AS prices_updated_at,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
           json_extract(cp.image_uris_json, '\$.normal'),
@@ -1306,8 +1348,119 @@ class CanonicalCatalogStore {
           ),
           releasedAt: (row['released_at'] as String? ?? '').trim(),
           setTotal: (row['set_total'] as num?)?.toInt(),
+          priceUsd: (row['price_usd'] as String?)?.trim(),
+          priceUsdFoil: (row['price_usd_foil'] as String?)?.trim(),
+          priceUsdEtched: (row['price_usd_etched'] as String?)?.trim(),
+          priceEur: (row['price_eur'] as String?)?.trim(),
+          priceEurFoil: (row['price_eur_foil'] as String?)?.trim(),
+          priceTix: (row['price_tix'] as String?)?.trim(),
+          pricesUpdatedAt: (row['prices_updated_at'] as num?)?.toInt(),
           imageUri: (row['image_uri'] as String?)?.trim(),
         ),
+    };
+  }
+
+  int? fetchLatestPriceTimestampForPrinting(String printingId) {
+    final normalizedId = printingId.trim();
+    if (normalizedId.isEmpty) {
+      return null;
+    }
+    final rows = _database.select(
+      '''
+      SELECT MAX(captured_at_ms) AS captured_at_ms
+      FROM price_snapshots
+      WHERE printing_id = ?
+      ''',
+      <Object?>[normalizedId],
+    );
+    return (rows.firstOrNull?['captured_at_ms'] as num?)?.toInt();
+  }
+
+  List<String> fetchLegalFormatsForPrinting(String printingId) {
+    final normalizedId = printingId.trim();
+    if (normalizedId.isEmpty) {
+      return const <String>[];
+    }
+    final rows = _database.select(
+      '''
+      SELECT
+        COALESCE(
+          json_extract(cp.metadata_json, '\$.legalities'),
+          json_extract(cc.metadata_json, '\$.legalities')
+        ) AS legalities_json
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      WHERE cp.id = ?
+      LIMIT 1
+      ''',
+      <Object?>[normalizedId],
+    );
+    if (rows.isEmpty) {
+      return const <String>[];
+    }
+    final raw = (rows.first['legalities_json'] as String?)?.trim();
+    if (raw == null || raw.isEmpty) {
+      return const <String>[];
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return const <String>[];
+      }
+      final legalFormats = <String>[];
+      for (final entry in decoded.entries) {
+        final key = entry.key.toString().trim().toLowerCase();
+        final value = entry.value?.toString().trim().toLowerCase() ?? '';
+        if (key.isEmpty) {
+          continue;
+        }
+        if (value == 'legal' || value == 'restricted') {
+          legalFormats.add(key);
+        }
+      }
+      legalFormats.sort();
+      return legalFormats;
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  Map<String, bool> fetchLegalityForPrintings(
+    List<String> printingIds, {
+    required String format,
+  }) {
+    final normalizedFormat = format.trim().toLowerCase();
+    final normalizedIds = printingIds
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (normalizedFormat.isEmpty || normalizedIds.isEmpty) {
+      return const <String, bool>{};
+    }
+    final path = r'$.legalities.' + normalizedFormat;
+    final rows = _database.select(
+      '''
+      SELECT
+        cp.id AS printing_id,
+        LOWER(
+          COALESCE(
+            json_extract(cp.metadata_json, ?),
+            json_extract(cc.metadata_json, ?),
+            ''
+          )
+        ) AS legality
+      FROM card_printings cp
+      INNER JOIN catalog_cards cc ON cc.id = cp.card_id
+      WHERE cp.id IN (${_inClause(normalizedIds.length)})
+      ''',
+      <Object?>[path, path, ...normalizedIds],
+    );
+    return {
+      for (final row in rows)
+        (row['printing_id'] as String? ?? '').trim():
+            (((row['legality'] as String? ?? '').trim() == 'legal') ||
+                ((row['legality'] as String? ?? '').trim() == 'restricted')),
     };
   }
 
@@ -1514,6 +1667,24 @@ class CanonicalCatalogStore {
           json_extract(cs.metadata_json, '\$.official_total'),
           json_extract(cs.metadata_json, '\$.total')
         ) AS set_total,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+        )} AS price_usd,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+          finishKey: 'foil',
+        )} AS price_usd_foil,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+        )} AS price_eur,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+          finishKey: 'foil',
+        )} AS price_eur_foil,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
           json_extract(cp.image_uris_json, '\$.normal'),
@@ -1859,13 +2030,34 @@ class CanonicalCatalogStore {
           '[]'
         ) AS color_identity_json,
         COALESCE(cp.release_date, cs.release_date, '') AS released_at,
-        NULL AS price_usd,
-        NULL AS price_usd_foil,
-        NULL AS price_usd_etched,
-        NULL AS price_eur,
-        NULL AS price_eur_foil,
-        NULL AS price_tix,
-        NULL AS prices_updated_at,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+        )} AS price_usd,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+          finishKey: 'foil',
+        )} AS price_usd_foil,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'usd',
+          finishKey: 'etched',
+        )} AS price_usd_etched,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+        )} AS price_eur,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'eur',
+          finishKey: 'foil',
+        )} AS price_eur_foil,
+        ${_latestPriceAmountSql(
+          printingIdSql: 'cp.id',
+          currencyCode: 'tix',
+        )} AS price_tix,
+        ${_latestPriceUpdatedAtSql(printingIdSql: 'cp.id')} AS prices_updated_at,
         COALESCE(
           json_extract(cp.image_uris_json, '\$.high_res'),
           json_extract(cp.image_uris_json, '\$.normal'),
@@ -2281,6 +2473,9 @@ class CanonicalCatalogStore {
     );
     _database.execute(
       'CREATE INDEX IF NOT EXISTS idx_collection_cards_lookup ON collection_cards(collection_id, printing_id)',
+    );
+    _database.execute(
+      'CREATE INDEX IF NOT EXISTS idx_price_snapshots_lookup ON price_snapshots(printing_id, currency_code, finish_key, captured_at_ms DESC)',
     );
   }
 
@@ -2832,6 +3027,38 @@ class CanonicalCatalogStore {
 
   String _inClause(int count) => List<String>.filled(count, '?').join(', ');
 
+  String _latestPriceAmountSql({
+    required String printingIdSql,
+    required String currencyCode,
+    String? finishKey,
+  }) {
+    final normalizedCurrency = currencyCode.trim().toLowerCase();
+    final finishClause = finishKey == null
+        ? 'ps.finish_key IS NULL'
+        : "LOWER(COALESCE(ps.finish_key, '')) = '${finishKey.trim().toLowerCase()}'";
+    return '''
+      (
+        SELECT printf('%.2f', ps.amount)
+        FROM price_snapshots ps
+        WHERE ps.printing_id = $printingIdSql
+          AND LOWER(ps.currency_code) = '$normalizedCurrency'
+          AND $finishClause
+        ORDER BY ps.captured_at_ms DESC
+        LIMIT 1
+      )
+    ''';
+  }
+
+  String _latestPriceUpdatedAtSql({required String printingIdSql}) {
+    return '''
+      (
+        SELECT MAX(ps.captured_at_ms)
+        FROM price_snapshots ps
+        WHERE ps.printing_id = $printingIdSql
+      )
+    ''';
+  }
+
   List<String> _normalizedLanguageOrder(List<String> preferredLanguages) {
     final normalized = preferredLanguages
         .map((value) => value.trim().toLowerCase())
@@ -2945,6 +3172,10 @@ class CanonicalCatalogStore {
       typeLine: (row['type_line'] as String? ?? '').trim(),
       colors: colors.join(','),
       colorIdentity: colorIdentity.join(','),
+      priceUsd: (row['price_usd'] as String?)?.trim(),
+      priceUsdFoil: (row['price_usd_foil'] as String?)?.trim(),
+      priceEur: (row['price_eur'] as String?)?.trim(),
+      priceEurFoil: (row['price_eur_foil'] as String?)?.trim(),
       imageUri: (row['image_uri'] as String?)?.trim(),
     );
   }

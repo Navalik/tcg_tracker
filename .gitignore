@@ -73,3 +73,6 @@ functions/.env.*
 
 # Generated local bundle artifacts
 tools/dist/
+
+# Local bulk data dumps
+non/
